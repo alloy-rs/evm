@@ -9,3 +9,4 @@
 
 pub mod block;
 pub mod evm;
+pub use evm::{Evm, EvmFactory};
