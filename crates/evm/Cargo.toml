@@ -14,8 +14,9 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
+alloy-evm-spec = { workspace = true, features = ["revm-compat"] }
 alloy-consensus.workspace = true
-
+revm.workspace = true
 
 [features]
 default = ["std"]

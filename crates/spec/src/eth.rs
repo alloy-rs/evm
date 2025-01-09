@@ -421,3 +421,32 @@ impl EthereumHardfork {
         ]
     }
 }
+
+#[cfg(feature = "revm-compat")]
+impl From<EthereumHardfork> for revm_primitives::SpecId {
+    fn from(value: EthereumHardfork) -> Self {
+        match value {
+            EthereumHardfork::Frontier => revm_primitives::SpecId::FRONTIER,
+            EthereumHardfork::Homestead | EthereumHardfork::Dao => {
+                revm_primitives::SpecId::HOMESTEAD
+            }
+            EthereumHardfork::Tangerine => revm_primitives::SpecId::TANGERINE,
+            EthereumHardfork::SpuriousDragon => revm_primitives::SpecId::SPURIOUS_DRAGON,
+            EthereumHardfork::Byzantium => revm_primitives::SpecId::BYZANTIUM,
+            EthereumHardfork::Constantinople => revm_primitives::SpecId::CONSTANTINOPLE,
+            EthereumHardfork::Petersburg => revm_primitives::SpecId::PETERSBURG,
+            EthereumHardfork::Istanbul => revm_primitives::SpecId::ISTANBUL,
+            EthereumHardfork::MuirGlacier => revm_primitives::SpecId::MUIR_GLACIER,
+            EthereumHardfork::Berlin => revm_primitives::SpecId::BERLIN,
+            EthereumHardfork::London => revm_primitives::SpecId::LONDON,
+            EthereumHardfork::ArrowGlacier => revm_primitives::SpecId::ARROW_GLACIER,
+            EthereumHardfork::GrayGlacier | EthereumHardfork::Paris => {
+                revm_primitives::SpecId::GRAY_GLACIER
+            }
+            EthereumHardfork::Shanghai => revm_primitives::SpecId::SHANGHAI,
+            EthereumHardfork::Cancun => revm_primitives::SpecId::CANCUN,
+            EthereumHardfork::Prague => revm_primitives::SpecId::PRAGUE,
+            EthereumHardfork::Osaka => revm_primitives::SpecId::OSAKA,
+        }
+    }
+}
