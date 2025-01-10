@@ -32,24 +32,14 @@ pub trait Evm {
 }
 
 /// A type responsible for creating instances of an ethereum virtual machine given a certain input.
-pub trait EvmFactory {
-    /// General purpose input, that can be used to configure the EVM.
-    ///
-    /// TODO: this would encapsulate the blockenv, settings, and database, this can also easily
-    ///   restricted on the callsite if we expect this to be a generic helper struct with certain
-    /// settings
-    type Input;
+pub trait EvmFactory<Input> {
     /// The EVM type that this factory creates.
     // TODO: this doesn't quite work because this would force use to use an enum approach for trace
     // evm for example, unless we
     type Evm: Evm;
 
     /// Creates a new instance of an EVM.
-    fn create_evm<DB: Database<Error = Box<dyn core::error::Error>> + 'static>(
-        &self,
-        input: Self::Input,
-        database: DB,
-    ) -> Self::Evm;
+    fn create_evm(&self, input: Input) -> Self::Evm;
 }
 
 /// An evm that can be configured with a certain tracer.
@@ -89,26 +79,48 @@ mod tests {
         spec: HF,
     }
 
-    impl EvmFactory for EthEvmFactory {
-        type Input = BlockEnvWithSpec;
-        type Evm =
-            revm::Evm<'static, (), State<Box<dyn Database<Error = Box<dyn core::error::Error>>>>>;
+    trait GetDatabase {
+        type Database;
 
-        fn create_evm<DB: Database<Error = Box<dyn core::error::Error>> + 'static>(
-            &self,
-            input: Self::Input,
-            database: DB,
-        ) -> Self::Evm {
+        fn get_database(&self) -> Self::Database;
+    }
+
+    trait GetSpec {
+        type Spec;
+
+        fn get_spec(&self) -> Self::Spec;
+    }
+
+    trait GetBlockEnv {
+        type BlockEnv;
+
+        fn get_block_env(&self) -> Self::BlockEnv;
+    }
+
+    impl<'a, Input> EvmFactory<Input> for EthEvmFactory
+    where
+        Input: GetDatabase<Database: revm::Database + 'static>
+            + GetSpec<Spec = EthereumHardfork>
+            + GetBlockEnv<BlockEnv = BlockEnv>,
+    {
+        type Evm = revm::Evm<'static, (), State<Input::Database>>;
+
+        fn create_evm(&self, input: Input) -> Self::Evm {
             let database = State::builder()
-                .with_database(Box::new(database) as Box<_>)
+                .with_database(input.get_database())
                 .with_bundle_update()
                 .without_state_clear()
                 .build();
 
-            let env =
-                Box::new(Env { cfg: self.cfg.clone(), block: input.block, tx: Default::default() });
-            let env =
-                EnvWithHandlerCfg { env, handler_cfg: HandlerCfg { spec_id: input.spec.into() } };
+            let env = Box::new(Env {
+                cfg: self.cfg.clone(),
+                block: input.get_block_env(),
+                tx: Default::default(),
+            });
+            let env = EnvWithHandlerCfg {
+                env,
+                handler_cfg: HandlerCfg { spec_id: input.get_spec().into() },
+            };
 
             revm::Evm::builder().with_db(database).with_env_with_handler_cfg(env).build()
         }
@@ -157,10 +169,10 @@ mod tests {
         Prim: Primitives,
         // TODO: this could probably be simplified with a helper `Eth` trait
         E: EvmFactory<
-            Input: From<BlockInput<Prim::Header, StateProviderBox>>,
+            BlockInput<Prim::Header, StateProviderBox>,
             Evm: TraceEvm<AccessListInspector> + TraceEvm<TracingInspector>,
         >,
-        <<E as EvmFactory>::Evm as Evm>::Tx: From<Prim::Transaction>,
+        <E::Evm as Evm>::Tx: From<Prim::Transaction>,
     {
         fn create_access_list(&self) {
             let input = BlockInput {
@@ -170,7 +182,7 @@ mod tests {
             };
 
             let mut tracer = AccessListInspector;
-            let mut evm = self.factory.create_evm(input.into(), EmptyDBTyped::default());
+            let mut evm = self.factory.create_evm(input);
             let out = evm.trace(Prim::Transaction::default().into(), &mut tracer);
         }
     }
