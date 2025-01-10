@@ -46,7 +46,8 @@ alloy-consensus = { version = "0.8", default-features = false }
 alloy-primitives = { version = "0.8", default-features = false }
 
 # revm
-revm = { version = "18", default-features = false }
+revm = { git = "https://github.com/bluealloy/revm", branch = "main", default-features = false }
+revm-database = { git = "https://github.com/bluealloy/revm", branch = "main", default-features = false }
 revm-interpreter = { version = "14", default-features = false }
 revm-primitives = { version = "14", default-features = false }
 

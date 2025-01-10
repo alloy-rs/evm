@@ -17,6 +17,7 @@ workspace = true
 alloy-evm-spec = { workspace = true, features = ["revm-compat"] }
 alloy-consensus.workspace = true
 revm.workspace = true
+revm-database.workspace = true
 
 [features]
 default = ["std"]
