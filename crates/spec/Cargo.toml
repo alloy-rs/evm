@@ -18,7 +18,7 @@ alloy-eip2124.workspace = true
 alloy-chains.workspace = true
 alloy-primitives.workspace = true
 
-revm-primitives = { workspace = true, optional = true }
+revm-specification = { workspace = true, optional = true }
 
 derive_more.workspace = true
 serde = { workspace = true, optional = true }
@@ -26,10 +26,18 @@ serde = { workspace = true, optional = true }
 [features]
 default = ["std"]
 std = [
-	"alloy-primitives/std"
+	"alloy-primitives/std",
+	"alloy-chains/std",
+	"alloy-eip2124/std",
+	"derive_more/std",
+	"revm-specification?/std",
+	"serde?/std"
 ]
 serde = [
 	"dep:serde",
-	"alloy-primitives/serde"
+	"alloy-chains/serde",
+	"alloy-eip2124/serde",
+	"alloy-primitives/serde",
+	"revm-specification?/serde"
 ]
-revm-compat = ["dep:revm-primitives"]
+revm-compat = ["dep:revm-specification"]

@@ -57,14 +57,13 @@ pub trait TraceEvm<Tracer>: Evm {
 #[cfg(test)]
 mod tests {
     use revm::{
-        context::{BlockEnv, CfgEnv, TxEnv},
+        context::{BlockEnv, CfgEnv},
         context_interface::{
             result::{HaltReasonTrait, ResultAndState},
             DatabaseGetter,
         },
         handler::EthHandler,
-        handler_interface::{Handler, PostExecutionHandler},
-        Context, DatabaseCommit, EthContext, EvmCommit, EvmExec, MainEvm,
+        Context, DatabaseCommit, EthContext, EvmExec,
     };
     use revm_database::State;
 
@@ -74,53 +73,34 @@ mod tests {
     struct AccessListInspector;
     struct TracingInspector;
 
-    struct BlockEnvWithSpec<HF = EthereumHardfork> {
-        block: BlockEnv,
-        spec: HF,
-    }
-
-    trait GetDatabase {
-        type Database;
-
-        fn get_database(&self) -> Self::Database;
-    }
-
-    trait GetSpec {
-        type Spec;
-
-        fn get_spec(&self) -> Self::Spec;
-    }
-
-    trait GetBlockEnv {
-        type BlockEnv;
-
-        fn get_block_env(&self) -> Self::BlockEnv;
-    }
-
     struct EthEvmFactory {
         cfg: CfgEnv,
     }
 
-    impl<'a, Input> EvmFactory<Input> for EthEvmFactory
-    where
-        Input: GetDatabase<Database: revm::Database + 'static>
-            + GetSpec<Spec = EthereumHardfork>
-            + GetBlockEnv<BlockEnv = BlockEnv>,
-    {
-        type Evm =
-            revm::Evm<revm::Error<State<Input::Database>>, EthContext<State<Input::Database>>>;
+    struct BlockEnvWithSpecAndDB<DB, HF = EthereumHardfork> {
+        block: BlockEnv,
+        spec: HF,
+        db: DB,
+    }
 
-        fn create_evm(&self, input: Input) -> Self::Evm {
+    impl<'a, DB> EvmFactory<BlockEnvWithSpecAndDB<DB>> for EthEvmFactory
+    where
+        DB: revm::Database,
+    {
+        type Evm = revm::Evm<revm::Error<State<DB>>, EthContext<State<DB>>>;
+
+        fn create_evm(&self, input: BlockEnvWithSpecAndDB<DB>) -> Self::Evm {
             let db = State::builder()
-                .with_database(input.get_database())
+                .with_database(input.db)
                 .with_bundle_update()
                 .without_state_clear()
                 .build();
 
-            let ctx = Context::builder()
-                .with_cfg(self.cfg.clone())
-                .with_block(input.get_block_env())
-                .with_db(db);
+            let mut cfg = self.cfg.clone();
+            cfg.spec = input.spec.into();
+
+            let ctx =
+                Context::builder().with_cfg(self.cfg.clone()).with_block(input.block).with_db(db);
 
             revm::Evm::new(ctx, EthHandler::default())
         }
@@ -128,8 +108,8 @@ mod tests {
 
     impl<ERROR, CTX, HANDLER, Halt> Evm for revm::Evm<ERROR, CTX, HANDLER>
     where
-        Halt: HaltReasonTrait,
         Self: EvmExec<Output = Result<ResultAndState<Halt>, ERROR>>,
+        Halt: HaltReasonTrait,
         CTX: DatabaseGetter<Database: DatabaseCommit>,
         ERROR: From<<CTX::Database as Database>::Error>,
     {

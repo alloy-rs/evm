@@ -22,5 +22,8 @@ revm-database.workspace = true
 [features]
 default = ["std"]
 std = [
-	"alloy-consensus/std"
+	"alloy-consensus/std",
+	"alloy-evm-spec/std",
+	"revm/std",
+	"revm-database/std"
 ]
