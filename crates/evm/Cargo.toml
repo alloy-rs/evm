@@ -19,6 +19,8 @@ alloy-consensus.workspace = true
 revm.workspace = true
 revm-database.workspace = true
 
+derive_more.workspace = true
+
 [features]
 default = ["std"]
 std = [

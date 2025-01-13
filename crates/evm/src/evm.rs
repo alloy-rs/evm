@@ -56,6 +56,7 @@ pub trait TraceEvm<Tracer>: Evm {
 
 #[cfg(test)]
 mod tests {
+    use alloy_consensus::{transaction::Recovered, Transaction, TxEip1559, TxType, Typed2718};
     use revm::{
         context::{BlockEnv, CfgEnv},
         context_interface::{
@@ -73,6 +74,49 @@ mod tests {
     struct AccessListInspector;
     struct TracingInspector;
 
+    #[derive(Debug, Clone, derive_more::Deref, derive_more::From, derive_more::Into)]
+    struct TxEnv(pub revm::context::TxEnv);
+
+    impl From<Recovered<TxEip1559>> for TxEnv {
+        fn from(value: Recovered<TxEip1559>) -> Self {
+            let (
+                TxEip1559 {
+                    chain_id,
+                    nonce,
+                    gas_limit,
+                    max_fee_per_gas,
+                    max_priority_fee_per_gas,
+                    to,
+                    value,
+                    access_list,
+                    input,
+                },
+                signer,
+            ) = value.into_parts();
+
+            Self(revm::context::TxEnv {
+                tx_type: TxType::Eip1559 as u8,
+                caller: signer,
+                gas_limit,
+                gas_price: max_fee_per_gas,
+                gas_priority_fee: Some(max_priority_fee_per_gas),
+                kind: to,
+                value,
+                data: input.clone(),
+                nonce,
+                chain_id: Some(chain_id),
+                access_list: access_list
+                    .0
+                    .into_iter()
+                    .map(|item| (item.address, item.storage_keys))
+                    .collect(),
+                authorization_list: Default::default(),
+                max_fee_per_blob_gas: Default::default(),
+                blob_hashes: Default::default(),
+            })
+        }
+    }
+
     struct EthEvmFactory {
         cfg: CfgEnv,
     }
@@ -87,7 +131,7 @@ mod tests {
     where
         DB: revm::Database,
     {
-        type Evm = revm::Evm<revm::Error<State<DB>>, EthContext<State<DB>>>;
+        type Evm = EvmTxAdapter<revm::Evm<revm::Error<State<DB>>, EthContext<State<DB>>>, TxEnv>;
 
         fn create_evm(&self, input: BlockEnvWithSpecAndDB<DB>) -> Self::Evm {
             let db = State::builder()
@@ -102,7 +146,7 @@ mod tests {
             let ctx =
                 Context::builder().with_cfg(self.cfg.clone()).with_block(input.block).with_db(db);
 
-            revm::Evm::new(ctx, EthHandler::default())
+            EvmTxAdapter::new(revm::Evm::new(ctx, EthHandler::default()))
         }
     }
 
@@ -124,6 +168,39 @@ mod tests {
         fn commit(&mut self, state: &Self::Outcome) -> Result<(), Self::Error> {
             self.context.db().commit(state.state.clone());
             Ok(())
+        }
+    }
+
+    /// A layer that wraps an inner EVM and allows to transact with a different `Tx` type.
+    struct EvmTxAdapter<E, Tx> {
+        inner: E,
+        _pd: core::marker::PhantomData<Tx>,
+    }
+
+    impl<E, Tx> EvmTxAdapter<E, Tx> {
+        fn new(inner: E) -> Self {
+            Self { inner, _pd: core::marker::PhantomData }
+        }
+    }
+
+    impl<E, Tx> Evm for EvmTxAdapter<E, Tx>
+    where
+        E: Evm<Tx: From<Tx>>,
+    {
+        type Tx = Tx;
+        type Error = E::Error;
+        type Outcome = E::Outcome;
+
+        fn commit(&mut self, state: &Self::Outcome) -> Result<(), Self::Error> {
+            self.inner.commit(state)
+        }
+
+        fn transact(&mut self, tx: Self::Tx) -> Result<Self::Outcome, Self::Error> {
+            self.inner.transact(tx.into())
+        }
+
+        fn transact_commit(&mut self, tx: Self::Tx) -> Result<Self::Outcome, Self::Error> {
+            self.inner.transact_commit(tx.into())
         }
     }
 
