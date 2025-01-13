@@ -56,7 +56,7 @@ pub trait TraceEvm<Tracer>: Evm {
 
 #[cfg(test)]
 mod tests {
-    use alloy_consensus::{transaction::Recovered, Transaction, TxEip1559, TxType, Typed2718};
+    use alloy_consensus::{transaction::Recovered, TxEip1559, TxType};
     use revm::{
         context::{BlockEnv, CfgEnv},
         context_interface::{
@@ -66,7 +66,6 @@ mod tests {
         handler::EthHandler,
         Context, DatabaseCommit, EthContext, EvmExec,
     };
-    use revm_database::State;
 
     use super::*;
 
@@ -129,22 +128,18 @@ mod tests {
 
     impl<'a, DB> EvmFactory<BlockEnvWithSpecAndDB<DB>> for EthEvmFactory
     where
-        DB: revm::Database,
+        DB: revm::Database + revm::DatabaseCommit,
     {
-        type Evm = EvmTxAdapter<revm::Evm<revm::Error<State<DB>>, EthContext<State<DB>>>, TxEnv>;
+        type Evm = EvmTxAdapter<revm::Evm<revm::Error<DB>, EthContext<DB>>, TxEnv>;
 
         fn create_evm(&self, input: BlockEnvWithSpecAndDB<DB>) -> Self::Evm {
-            let db = State::builder()
-                .with_database(input.db)
-                .with_bundle_update()
-                .without_state_clear()
-                .build();
-
             let mut cfg = self.cfg.clone();
             cfg.spec = input.spec.into();
 
-            let ctx =
-                Context::builder().with_cfg(self.cfg.clone()).with_block(input.block).with_db(db);
+            let ctx = Context::builder()
+                .with_cfg(self.cfg.clone())
+                .with_block(input.block)
+                .with_db(input.db);
 
             EvmTxAdapter::new(revm::Evm::new(ctx, EthHandler::default()))
         }
