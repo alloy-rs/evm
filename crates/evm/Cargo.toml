@@ -14,7 +14,9 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
+alloy-primitives.workspace = true
 alloy-consensus.workspace = true
+revm.workspace = true
 
 
 [features]
