@@ -28,4 +28,3 @@ std = [
 	"revm/std",
 	"alloy-evm/std"
 ]
-optimism = ["revm/optimism"]

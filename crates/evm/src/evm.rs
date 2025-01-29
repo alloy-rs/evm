@@ -3,9 +3,13 @@
 use alloy_primitives::{Address, Bytes};
 use core::error::Error;
 use revm::{
-    primitives::{BlockEnv, ResultAndState},
-    DatabaseCommit, GetInspector,
+    context::BlockEnv,
+    context_interface::result::{HaltReason, ResultAndState},
+    handler::EthContext,
+    interpreter::interpreter::EthInterpreter,
+    DatabaseCommit,
 };
+use revm_inspector::{inspectors::NoOpInspector, journal::JournalExtGetter, Inspector};
 
 use crate::EvmError;
 
@@ -36,7 +40,7 @@ pub trait Evm {
     fn block(&self) -> &BlockEnv;
 
     /// Executes a transaction and returns the outcome.
-    fn transact(&mut self, tx: Self::Tx) -> Result<ResultAndState, Self::Error>;
+    fn transact(&mut self, tx: Self::Tx) -> Result<ResultAndState<HaltReason>, Self::Error>;
 
     /// Executes a system call.
     fn transact_system_call(
@@ -44,13 +48,16 @@ pub trait Evm {
         caller: Address,
         contract: Address,
         data: Bytes,
-    ) -> Result<ResultAndState, Self::Error>;
+    ) -> Result<ResultAndState<HaltReason>, Self::Error>;
 
     /// Returns a mutable reference to the underlying database.
     fn db_mut(&mut self) -> &mut Self::DB;
 
     /// Executes a transaction and commits the state changes to the underlying database.
-    fn transact_commit(&mut self, tx_env: Self::Tx) -> Result<ResultAndState, Self::Error>
+    fn transact_commit(
+        &mut self,
+        tx_env: Self::Tx,
+    ) -> Result<ResultAndState<HaltReason>, Self::Error>
     where
         Self::DB: DatabaseCommit,
     {
@@ -66,12 +73,15 @@ pub trait EvmFactory<Input> {
     /// The EVM type that this factory creates.
     // TODO: this doesn't quite work because this would force use to use an enum approach for trace
     // evm for example, unless we
-    type Evm<'a, DB: Database + 'a, I: 'a>: Evm<
+    type Evm<DB: Database, I: Inspector<Self::Context<DB>, EthInterpreter>>: Evm<
         DB = DB,
         Tx = Self::Tx,
         HaltReason = Self::HaltReason,
         Error = Self::Error<DB::Error>,
     >;
+
+    /// The EVM context for inspectors
+    type Context<DB: Database>: EthContext<Database = DB> + JournalExtGetter;
 
     /// Transaction environment.
     type Tx;
@@ -81,13 +91,20 @@ pub trait EvmFactory<Input> {
     type HaltReason: Send + Sync;
 
     /// Creates a new instance of an EVM.
-    fn create_evm<'a, DB: Database + 'a>(&self, db: DB, input: Input) -> Self::Evm<'a, DB, ()>;
+    fn create_evm<DB: Database>(
+        &self,
+        db: DB,
+        input: Input,
+    ) -> Self::Evm<DB, NoOpInspector>;
 
     /// Creates a new instance of an EVM with an inspector.
-    fn create_evm_with_inspector<'a, DB: Database + 'a, I: GetInspector<DB> + 'a>(
+    fn create_evm_with_inspector<
+        DB: Database,
+        I: Inspector<Self::Context<DB>, EthInterpreter>,
+    >(
         &self,
         db: DB,
         input: Input,
         inspector: I,
-    ) -> Self::Evm<'a, DB, I>;
+    ) -> Self::Evm<DB, I>;
 }

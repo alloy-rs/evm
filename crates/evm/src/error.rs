@@ -1,8 +1,7 @@
 //! Abstraction over EVM errors.
 
 use core::error::Error;
-
-use revm::primitives::{EVMError, InvalidTransaction};
+use revm::context_interface::result::{EVMError, InvalidTransaction};
 
 /// Abstraction over transaction validation error.
 pub trait InvalidTxError: Error + Send + Sync + 'static {

@@ -17,6 +17,7 @@ workspace = true
 alloy-primitives.workspace = true
 derive_more.workspace = true
 revm.workspace = true
+revm-inspector.workspace = true
 
 
 [features]
