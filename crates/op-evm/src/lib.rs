@@ -174,12 +174,12 @@ where
     }
 }
 
-/// Factory producing [`EthEvm`].
+/// Factory producing [`OpEvm`]s.
 #[derive(Debug, Default, Clone, Copy)]
 #[non_exhaustive]
-pub struct EthEvmFactory;
+pub struct OpEvmFactory;
 
-impl EvmFactory<EvmEnv<OpSpec>> for EthEvmFactory {
+impl EvmFactory<EvmEnv<OpSpec>> for OpEvmFactory {
     type Evm<DB: Database, I: Inspector<OpEvmContext<DB>, EthInterpreter>> = OpEvm<DB, I>;
     type Context<DB: Database> = OpEvmContext<DB>;
     type Tx = OpTransaction<TxEnv>;
