@@ -46,9 +46,9 @@ alloy-consensus = { version = "0.8", default-features = false }
 alloy-primitives = { version = "0.8", default-features = false }
 
 # revm
-revm = { version = "=19.2.0" }
-revm-inspector = { version = "1.0.0" }
-revm-optimism = { version = "1.0.0" }
+revm = { version = "=19.2.0", default-features = false }
+revm-inspector = { version = "1.0.0", default-features = false }
+revm-optimism = { version = "1.0.0", default-features = false }
 
 # misc
 derive_more = { version = "1", default-features = false, features = ["full"] }
