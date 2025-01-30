@@ -1,9 +1,6 @@
 //! Abstraction over EVM.
 
-<<<<<<< HEAD
-=======
 use crate::EvmError;
->>>>>>> 6625624 (wip)
 use alloy_primitives::{Address, Bytes};
 use core::error::Error;
 use revm::{
@@ -34,12 +31,18 @@ pub trait Evm {
     /// internal irrecoverable execution errors.
     type Error: EvmError;
 <<<<<<< HEAD
+<<<<<<< HEAD
     /// Halt reason. Enum over all possible reasons for halting the execution. When execution halts,
     /// it means that transaction is valid, however, it's execution was interrupted (e.g because of
     /// running out of gas or overflowing stack).
     type HaltReason: Send + Sync;
 =======
     /// Halt reason type.
+=======
+    /// Halt reason. Enum over all possible reasons for halting the execution. When execution halts,
+    /// it means that transaction is valid, however, it's execution was interrupted (e.g because of
+    /// running out of gas or overflowing stack).
+>>>>>>> 204abca (update docs)
     type HaltReason: HaltReasonTrait + Send + Sync;
 >>>>>>> 6625624 (wip)
 
@@ -92,9 +95,15 @@ pub trait EvmFactory<Input> {
     /// Transaction environment.
     type Tx;
     /// EVM error. See [`Evm::Error`].
+<<<<<<< HEAD
     type Error<DBError: Error + Send + Sync + 'static>: EvmError;
     /// Halt reason. See [`Evm::HaltReason`].
     type HaltReason: Send + Sync;
+=======
+    type Error<DBError: core::error::Error + Send + Sync + 'static>: EvmError;
+    /// Halt reason. See [`Evm::HaltReason`].
+    type HaltReason: HaltReasonTrait + Send + Sync;
+>>>>>>> 204abca (update docs)
 
     /// Creates a new instance of an EVM.
     fn create_evm<DB: Database>(&self, db: DB, input: Input) -> Self::Evm<DB, NoOpInspector>;
