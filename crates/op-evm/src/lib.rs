@@ -10,7 +10,7 @@
 #![cfg(feature = "optimism")]
 
 use alloc::vec::Vec;
-use alloy_evm::{evm::Database, Evm, EvmEnv, EvmFactory};
+use alloy_evm::{Database, Evm, EvmEnv, EvmFactory};
 use alloy_primitives::{Address, Bytes, TxKind, U256};
 use core::fmt::Debug;
 use revm::{
@@ -25,8 +25,7 @@ use revm::{
 extern crate alloc;
 
 /// OP EVM implementation.
-#[derive(derive_more::Debug, derive_more::Deref, derive_more::DerefMut, derive_more::From)]
-#[debug(bound(DB::Error: Debug))]
+#[derive(Debug, derive_more::Deref, derive_more::DerefMut, derive_more::From)]
 pub struct OpEvm<'a, EXT, DB: Database>(revm::Evm<'a, EXT, DB>);
 
 impl<EXT, DB: Database> Evm for OpEvm<'_, EXT, DB> {
