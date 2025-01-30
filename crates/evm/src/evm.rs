@@ -3,11 +3,8 @@
 use alloy_primitives::{Address, Bytes};
 use core::error::Error;
 use revm::{
-    context::BlockEnv,
-    context_interface::result::{HaltReason, ResultAndState},
-    handler::EthContext,
-    interpreter::interpreter::EthInterpreter,
-    DatabaseCommit,
+    context::BlockEnv, context_interface::result::ResultAndState, handler::EthContext,
+    interpreter::interpreter::EthInterpreter, DatabaseCommit,
 };
 use revm_inspector::{inspectors::NoOpInspector, journal::JournalExtGetter, Inspector};
 
@@ -40,7 +37,7 @@ pub trait Evm {
     fn block(&self) -> &BlockEnv;
 
     /// Executes a transaction and returns the outcome.
-    fn transact(&mut self, tx: Self::Tx) -> Result<ResultAndState<HaltReason>, Self::Error>;
+    fn transact(&mut self, tx: Self::Tx) -> Result<ResultAndState<Self::HaltReason>, Self::Error>;
 
     /// Executes a system call.
     fn transact_system_call(
@@ -48,7 +45,7 @@ pub trait Evm {
         caller: Address,
         contract: Address,
         data: Bytes,
-    ) -> Result<ResultAndState<HaltReason>, Self::Error>;
+    ) -> Result<ResultAndState<Self::HaltReason>, Self::Error>;
 
     /// Returns a mutable reference to the underlying database.
     fn db_mut(&mut self) -> &mut Self::DB;
@@ -57,7 +54,7 @@ pub trait Evm {
     fn transact_commit(
         &mut self,
         tx_env: Self::Tx,
-    ) -> Result<ResultAndState<HaltReason>, Self::Error>
+    ) -> Result<ResultAndState<Self::HaltReason>, Self::Error>
     where
         Self::DB: DatabaseCommit,
     {
@@ -82,7 +79,6 @@ pub trait EvmFactory<Input> {
 
     /// The EVM context for inspectors
     type Context<DB: Database>: EthContext<Database = DB> + JournalExtGetter;
-
     /// Transaction environment.
     type Tx;
     /// EVM error. See [`Evm::Error`].
@@ -91,17 +87,10 @@ pub trait EvmFactory<Input> {
     type HaltReason: Send + Sync;
 
     /// Creates a new instance of an EVM.
-    fn create_evm<DB: Database>(
-        &self,
-        db: DB,
-        input: Input,
-    ) -> Self::Evm<DB, NoOpInspector>;
+    fn create_evm<DB: Database>(&self, db: DB, input: Input) -> Self::Evm<DB, NoOpInspector>;
 
     /// Creates a new instance of an EVM with an inspector.
-    fn create_evm_with_inspector<
-        DB: Database,
-        I: Inspector<Self::Context<DB>, EthInterpreter>,
-    >(
+    fn create_evm_with_inspector<DB: Database, I: Inspector<Self::Context<DB>, EthInterpreter>>(
         &self,
         db: DB,
         input: Input,

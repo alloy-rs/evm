@@ -8,7 +8,7 @@ use core::{
 };
 use revm::{
     context::{BlockEnv, CfgEnv, TxEnv},
-    context_interface::result::{EVMError, HaltReason, InvalidTransaction, ResultAndState},
+    context_interface::result::{EVMError, HaltReason, ResultAndState},
     interpreter::interpreter::EthInterpreter,
     Context, ExecuteEvm,
 };
@@ -22,7 +22,9 @@ pub type EthEvmContext<DB> = Context<BlockEnv, TxEnv, CfgEnv, DB>;
 /// Ethereum EVM implementation.
 #[derive(Debug)]
 pub enum EthEvm<DB: Database, I> {
+    /// Simple EVM implementation.
     Simple(EthEvmContext<DB>),
+    /// EVM with an inspector.
     Inspector(InspectorContext<I, EthEvmContext<DB>>),
 }
 
@@ -63,10 +65,7 @@ where
     DB: Database,
     I: Inspector<EthEvmContext<DB>, EthInterpreter>,
 {
-    fn transact(
-        &mut self,
-        tx: TxEnv,
-    ) -> Result<ResultAndState<HaltReason>, EVMError<DB::Error, InvalidTransaction>> {
+    fn transact(&mut self, tx: TxEnv) -> Result<ResultAndState, EVMError<DB::Error>> {
         match self {
             Self::Simple(ctx) => ctx.exec(tx),
             Self::Inspector(ctx) => inspect_main(ctx),
@@ -81,14 +80,14 @@ where
 {
     type DB = DB;
     type Tx = TxEnv;
-    type Error = EVMError<DB::Error, InvalidTransaction>;
+    type Error = EVMError<DB::Error>;
     type HaltReason = HaltReason;
 
     fn block(&self) -> &BlockEnv {
         &self.block
     }
 
-    fn transact(&mut self, tx: Self::Tx) -> Result<ResultAndState<HaltReason>, Self::Error> {
+    fn transact(&mut self, tx: Self::Tx) -> Result<ResultAndState, Self::Error> {
         self.transact(tx)
     }
 
@@ -97,7 +96,7 @@ where
         caller: Address,
         contract: Address,
         data: Bytes,
-    ) -> Result<ResultAndState<HaltReason>, Self::Error> {
+    ) -> Result<ResultAndState, Self::Error> {
         #[allow(clippy::needless_update)] // side-effect of optimism fields
         let tx = TxEnv {
             caller,
