@@ -33,6 +33,7 @@ pub type OpEvmContext<DB> =
     revm_optimism::context::OpContext<BlockEnv, OpTransaction<TxEnv>, CfgEnv<OpSpec>, DB>;
 
 /// OP EVM implementation.
+#[allow(missing_debug_implementations)] // missing revm::OpContext Debug impl
 pub enum OpEvm<DB: Database, I> {
     /// Simple EVM implementation.
     Simple(OpEvmContext<DB>),
