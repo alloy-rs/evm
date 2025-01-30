@@ -16,7 +16,7 @@ use core::{
 };
 use revm::{
     context::{BlockEnv, CfgEnv, TxEnv},
-    context_interface::result::{EVMError, ResultAndState},
+    context_interface::{result::{EVMError, ResultAndState}, transaction::TransactionSetter},
     interpreter::interpreter::EthInterpreter,
     ExecuteEvm,
 };
@@ -84,7 +84,10 @@ where
     ) -> Result<ResultAndState<OptimismHaltReason>, EVMError<DB::Error, OpTransactionError>> {
         match self {
             Self::Simple(ctx) => ctx.exec(tx),
-            Self::Inspector(ctx) => inspect_op(ctx),
+            Self::Inspector(ctx) => {
+                ctx.inner.set_tx(tx);
+                inspect_op(ctx)
+            }
         }
     }
 }

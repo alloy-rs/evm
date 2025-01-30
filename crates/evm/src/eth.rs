@@ -8,7 +8,10 @@ use core::{
 };
 use revm::{
     context::{BlockEnv, CfgEnv, TxEnv},
-    context_interface::result::{EVMError, HaltReason, ResultAndState},
+    context_interface::{
+        result::{EVMError, HaltReason, ResultAndState},
+        transaction::TransactionSetter,
+    },
     interpreter::interpreter::EthInterpreter,
     Context, ExecuteEvm,
 };
@@ -68,7 +71,10 @@ where
     fn transact(&mut self, tx: TxEnv) -> Result<ResultAndState, EVMError<DB::Error>> {
         match self {
             Self::Simple(ctx) => ctx.exec(tx),
-            Self::Inspector(ctx) => inspect_main(ctx),
+            Self::Inspector(ctx) => {
+                ctx.inner.set_tx(tx);
+                inspect_main(ctx)
+            }
         }
     }
 }
