@@ -1,14 +1,19 @@
 //! Abstraction over EVM.
 
+<<<<<<< HEAD
+=======
+use crate::EvmError;
+>>>>>>> 6625624 (wip)
 use alloy_primitives::{Address, Bytes};
 use core::error::Error;
 use revm::{
-    context::BlockEnv, context_interface::result::ResultAndState, handler::EthContext,
-    interpreter::interpreter::EthInterpreter, DatabaseCommit,
+    context::BlockEnv,
+    context_interface::result::{HaltReasonTrait, ResultAndState},
+    handler::EthContext,
+    interpreter::interpreter::EthInterpreter,
+    DatabaseCommit,
 };
 use revm_inspector::{inspectors::NoOpInspector, journal::JournalExtGetter, Inspector};
-
-use crate::EvmError;
 
 /// Helper trait to bound [`revm::Database::Error`] with common requirements.
 pub trait Database: revm::Database<Error: Error + Send + Sync + 'static> {}
@@ -28,10 +33,15 @@ pub trait Evm {
     /// Error type returned by EVM. Contains either errors related to invalid transactions or
     /// internal irrecoverable execution errors.
     type Error: EvmError;
+<<<<<<< HEAD
     /// Halt reason. Enum over all possible reasons for halting the execution. When execution halts,
     /// it means that transaction is valid, however, it's execution was interrupted (e.g because of
     /// running out of gas or overflowing stack).
     type HaltReason: Send + Sync;
+=======
+    /// Halt reason type.
+    type HaltReason: HaltReasonTrait + Send + Sync;
+>>>>>>> 6625624 (wip)
 
     /// Reference to [`BlockEnv`].
     fn block(&self) -> &BlockEnv;

@@ -34,13 +34,15 @@ pub type OpEvmContext<DB> =
 
 /// OP EVM implementation.
 pub enum OpEvm<DB: Database, I> {
+    /// Simple EVM implementation.
     Simple(OpEvmContext<DB>),
+    /// EVM with an inspector.
     Inspector(InspectorContext<I, OpEvmContext<DB>>),
 }
 
 impl<DB: Database, I> OpEvm<DB, I> {
     /// Provides a reference to the EVM context.
-    pub fn ctx(&self) -> &OpEvmContext<DB> {
+    pub const fn ctx(&self) -> &OpEvmContext<DB> {
         match self {
             Self::Simple(ctx) => ctx,
             Self::Inspector(ctx) => &ctx.inner,

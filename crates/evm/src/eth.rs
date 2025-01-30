@@ -30,7 +30,7 @@ pub enum EthEvm<DB: Database, I> {
 
 impl<DB: Database, I> EthEvm<DB, I> {
     /// Provides a reference to the EVM context.
-    pub fn ctx(&self) -> &EthEvmContext<DB> {
+    pub const fn ctx(&self) -> &EthEvmContext<DB> {
         match self {
             Self::Simple(ctx) => ctx,
             Self::Inspector(ctx) => &ctx.inner,
