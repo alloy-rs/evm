@@ -16,7 +16,10 @@ use core::{
 };
 use revm::{
     context::{BlockEnv, CfgEnv, TxEnv},
-    context_interface::{result::{EVMError, ResultAndState}, transaction::TransactionSetter},
+    context_interface::{
+        result::{EVMError, ResultAndState},
+        transaction::TransactionSetter,
+    },
     interpreter::interpreter::EthInterpreter,
     ExecuteEvm,
 };

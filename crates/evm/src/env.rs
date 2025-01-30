@@ -41,8 +41,8 @@ impl<Spec> EvmEnv<Spec> {
     }
 }
 
-impl From<(CfgEnv, BlockEnv)> for EvmEnv {
-    fn from((cfg_env, block_env): (CfgEnv, BlockEnv)) -> Self {
+impl<Spec> From<(CfgEnv<Spec>, BlockEnv)> for EvmEnv<Spec> {
+    fn from((cfg_env, block_env): (CfgEnv<Spec>, BlockEnv)) -> Self {
         Self { cfg_env, block_env }
     }
 }
