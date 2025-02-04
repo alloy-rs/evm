@@ -66,16 +66,16 @@ impl<EXT, DB: Database> Evm for EthEvm<'_, EXT, DB> {
         let mut basefee = U256::ZERO;
 
         // ensure the block gas limit is >= the tx
-        std::mem::swap(&mut self.block_mut().gas_limit, &mut gas_limit);
+        core::mem::swap(&mut self.block_mut().gas_limit, &mut gas_limit);
         // disable the base fee check for this call by setting the base fee to zero
-        std::mem::swap(&mut self.block_mut().basefee, &mut basefee);
+        core::mem::swap(&mut self.block_mut().basefee, &mut basefee);
 
         let res = self.0.transact();
 
         // swap back to the previous gas limit
-        std::mem::swap(&mut self.block_mut().gas_limit, &mut gas_limit);
+        core::mem::swap(&mut self.block_mut().gas_limit, &mut gas_limit);
         // swap back to the previous base fee
-        std::mem::swap(&mut self.block_mut().basefee, &mut basefee);
+        core::mem::swap(&mut self.block_mut().basefee, &mut basefee);
 
         res
     }
