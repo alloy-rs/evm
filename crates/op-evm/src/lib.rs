@@ -82,18 +82,20 @@ impl<EXT, DB: Database> Evm for OpEvm<'_, EXT, DB> {
 
         *self.tx_mut() = tx_env;
 
-        let prev_block_env = self.block().clone();
+        let mut gas_limit = U256::from(self.tx().gas_limit);
+        let mut basefee = U256::ZERO;
 
         // ensure the block gas limit is >= the tx
-        self.block_mut().gas_limit = U256::from(self.tx().gas_limit);
-
+        core::mem::swap(&mut self.block_mut().gas_limit, &mut gas_limit);
         // disable the base fee check for this call by setting the base fee to zero
-        self.block_mut().basefee = U256::ZERO;
+        core::mem::swap(&mut self.block_mut().basefee, &mut basefee);
 
         let res = self.0.transact();
 
-        // re-set the block env
-        *self.block_mut() = prev_block_env;
+        // swap back to the previous gas limit
+        core::mem::swap(&mut self.block_mut().gas_limit, &mut gas_limit);
+        // swap back to the previous base fee
+        core::mem::swap(&mut self.block_mut().basefee, &mut basefee);
 
         res
     }
