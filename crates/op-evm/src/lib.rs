@@ -120,7 +120,7 @@ impl EvmFactory<EvmEnv> for OpEvmFactory {
     fn create_evm<'a, DB: Database + 'a>(&self, db: DB, input: EvmEnv) -> Self::Evm<'a, DB, ()> {
         let cfg_env_with_handler_cfg = CfgEnvWithHandlerCfg {
             cfg_env: input.cfg_env,
-            handler_cfg: HandlerCfg::new(input.spec),
+            handler_cfg: HandlerCfg { spec_id: input.spec, is_optimism: true },
         };
         OpEvm(
             revm::Evm::builder()
@@ -139,7 +139,7 @@ impl EvmFactory<EvmEnv> for OpEvmFactory {
     ) -> Self::Evm<'a, DB, I> {
         let cfg_env_with_handler_cfg = CfgEnvWithHandlerCfg {
             cfg_env: input.cfg_env,
-            handler_cfg: HandlerCfg::new(input.spec),
+            handler_cfg: HandlerCfg { spec_id: input.spec, is_optimism: true },
         };
         revm::Evm::builder()
             .with_db(db)

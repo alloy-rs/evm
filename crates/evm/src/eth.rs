@@ -1,6 +1,10 @@
 //! Ethereum EVM implementation.
 
-use crate::{env::EvmEnv, evm::{Database, EvmFactory}, Evm};
+use crate::{
+    env::EvmEnv,
+    evm::{Database, EvmFactory},
+    Evm,
+};
 use alloc::vec::Vec;
 use alloy_primitives::{Address, Bytes, TxKind, U256};
 use core::fmt::Debug;

@@ -1,7 +1,7 @@
 //! Abstraction over EVM.
 
-use core::error::Error;
 use alloy_primitives::{Address, Bytes};
+use core::error::Error;
 use revm::{
     primitives::{BlockEnv, ResultAndState},
     DatabaseCommit, GetInspector,
@@ -31,7 +31,6 @@ pub trait Evm {
     /// it means that transaction is valid, however, it's execution was interrupted (e.g because of
     /// running out of gas or overflowing stack).
     type HaltReason: Send + Sync;
-
 
     /// Reference to [`BlockEnv`].
     fn block(&self) -> &BlockEnv;
@@ -67,7 +66,12 @@ pub trait EvmFactory<Input> {
     /// The EVM type that this factory creates.
     // TODO: this doesn't quite work because this would force use to use an enum approach for trace
     // evm for example, unless we
-    type Evm<'a, DB: Database + 'a, I: 'a>: Evm<DB = DB, Tx = Self::Tx, HaltReason = Self::HaltReason, Error = Self::Error<DB::Error>>;
+    type Evm<'a, DB: Database + 'a, I: 'a>: Evm<
+        DB = DB,
+        Tx = Self::Tx,
+        HaltReason = Self::HaltReason,
+        Error = Self::Error<DB::Error>,
+    >;
 
     /// Transaction environment.
     type Tx;
