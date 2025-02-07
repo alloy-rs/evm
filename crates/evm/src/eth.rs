@@ -1,13 +1,13 @@
 //! Ethereum EVM implementation.
 
-use crate::{env::EvmEnv, evm::EvmFactory, Evm};
+use crate::{env::EvmEnv, evm::{Database, EvmFactory}, Evm};
 use alloc::vec::Vec;
 use alloy_primitives::{Address, Bytes, TxKind, U256};
 use core::fmt::Debug;
 use revm::{
     inspector_handle_register,
     primitives::{BlockEnv, CfgEnvWithHandlerCfg, EVMError, HandlerCfg, ResultAndState, TxEnv},
-    Database, GetInspector,
+    GetInspector,
 };
 
 /// Ethereum EVM implementation.
@@ -19,6 +19,7 @@ impl<EXT, DB: Database> Evm for EthEvm<'_, EXT, DB> {
     type DB = DB;
     type Tx = TxEnv;
     type Error = EVMError<DB::Error>;
+    type HaltReason = revm::primitives::HaltReason;
 
     fn block(&self) -> &BlockEnv {
         self.0.block()
@@ -92,6 +93,9 @@ pub struct EthEvmFactory;
 
 impl EvmFactory<EvmEnv> for EthEvmFactory {
     type Evm<'a, DB: Database + 'a, I: 'a> = EthEvm<'a, I, DB>;
+    type Tx = TxEnv;
+    type Error<DBError: core::error::Error + Send + Sync + 'static> = EVMError<DBError>;
+    type HaltReason = revm::primitives::HaltReason;
 
     fn create_evm<'a, DB: Database + 'a>(&self, db: DB, input: EvmEnv) -> Self::Evm<'a, DB, ()> {
         let cfg_env_with_handler_cfg = CfgEnvWithHandlerCfg {

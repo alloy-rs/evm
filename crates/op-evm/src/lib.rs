@@ -10,7 +10,7 @@
 #![cfg(feature = "optimism")]
 
 use alloc::vec::Vec;
-use alloy_evm::{Evm, EvmEnv, EvmFactory};
+use alloy_evm::{evm::Database, Evm, EvmEnv, EvmFactory};
 use alloy_primitives::{Address, Bytes, TxKind, U256};
 use core::fmt::Debug;
 use revm::{
@@ -18,7 +18,7 @@ use revm::{
     primitives::{
         BlockEnv, CfgEnvWithHandlerCfg, EVMError, HandlerCfg, OptimismFields, ResultAndState, TxEnv,
     },
-    Database, GetInspector,
+    GetInspector,
 };
 
 extern crate alloc;
@@ -32,6 +32,7 @@ impl<EXT, DB: Database> Evm for OpEvm<'_, EXT, DB> {
     type DB = DB;
     type Tx = TxEnv;
     type Error = EVMError<DB::Error>;
+    type HaltReason = revm::primitives::HaltReason;
 
     fn block(&self) -> &BlockEnv {
         self.0.block()
@@ -112,6 +113,9 @@ pub struct OpEvmFactory;
 
 impl EvmFactory<EvmEnv> for OpEvmFactory {
     type Evm<'a, DB: Database + 'a, I: 'a> = OpEvm<'a, I, DB>;
+    type Tx = TxEnv;
+    type Error<DBError: core::error::Error + Send + Sync + 'static> = EVMError<DBError>;
+    type HaltReason = revm::primitives::HaltReason;
 
     fn create_evm<'a, DB: Database + 'a>(&self, db: DB, input: EvmEnv) -> Self::Evm<'a, DB, ()> {
         let cfg_env_with_handler_cfg = CfgEnvWithHandlerCfg {

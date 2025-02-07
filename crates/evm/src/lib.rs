@@ -11,8 +11,10 @@ extern crate alloc;
 
 pub mod block;
 pub mod evm;
-pub use evm::{Evm, EvmFactory};
+pub use evm::{Database, Evm, EvmFactory};
 pub mod eth;
 pub use eth::{EthEvm, EthEvmFactory};
 pub mod env;
 pub use env::EvmEnv;
+pub mod error;
+pub use error::*;
