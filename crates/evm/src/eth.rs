@@ -4,7 +4,8 @@ use crate::{env::EvmEnv, evm::EvmFactory, Database, Evm};
 use alloc::vec::Vec;
 use alloy_primitives::{Address, Bytes, TxKind, U256};
 use core::{
-    fmt::Debug, ops::{Deref, DerefMut}
+    fmt::Debug,
+    ops::{Deref, DerefMut},
 };
 use revm::{
     context::{BlockEnv, CfgEnv, TxEnv},
