@@ -16,7 +16,8 @@ use core::fmt::Debug;
 use revm::{
     inspector_handle_register,
     primitives::{
-        BlockEnv, CfgEnvWithHandlerCfg, EVMError, HandlerCfg, OptimismFields, ResultAndState, TxEnv,
+        BlockEnv, CfgEnvWithHandlerCfg, EVMError, HaltReason, HandlerCfg, OptimismFields,
+        ResultAndState, TxEnv,
     },
     GetInspector,
 };
@@ -32,7 +33,7 @@ impl<EXT, DB: Database> Evm for OpEvm<'_, EXT, DB> {
     type DB = DB;
     type Tx = TxEnv;
     type Error = EVMError<DB::Error>;
-    type HaltReason = revm::primitives::HaltReason;
+    type HaltReason = HaltReason;
 
     fn block(&self) -> &BlockEnv {
         self.0.block()
@@ -115,7 +116,7 @@ impl EvmFactory<EvmEnv> for OpEvmFactory {
     type Evm<'a, DB: Database + 'a, I: 'a> = OpEvm<'a, I, DB>;
     type Tx = TxEnv;
     type Error<DBError: core::error::Error + Send + Sync + 'static> = EVMError<DBError>;
-    type HaltReason = revm::primitives::HaltReason;
+    type HaltReason = HaltReason;
 
     fn create_evm<'a, DB: Database + 'a>(&self, db: DB, input: EvmEnv) -> Self::Evm<'a, DB, ()> {
         let cfg_env_with_handler_cfg = CfgEnvWithHandlerCfg {
