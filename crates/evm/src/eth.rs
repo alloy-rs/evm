@@ -9,44 +9,28 @@ use core::{
 };
 use revm::{
     context::{BlockEnv, CfgEnv, TxEnv},
-    context_interface::{
-        result::{EVMError, HaltReason, ResultAndState},
-        transaction::TransactionSetter,
-    },
+    context_interface::result::{EVMError, HaltReason, ResultAndState},
+    handler::{Inspector, NoOpInspector},
     interpreter::interpreter::EthInterpreter,
-    Context, ExecuteEvm,
-};
-use revm_inspector::{
-    exec::inspect_main, inspector_context::InspectorContext, inspectors::NoOpInspector, Inspector,
+    Context, ExecuteEvm, InspectEvm, MainBuilder, MainContext, MainnetEvm,
 };
 
 /// The Ethereum EVM context type.
 pub type EthEvmContext<DB> = Context<BlockEnv, TxEnv, CfgEnv, DB>;
 
 /// Ethereum EVM implementation.
-#[derive(Debug)]
-pub enum EthEvm<DB: Database, I> {
-    /// Simple EVM implementation.
-    Raw(EthEvmContext<DB>),
-    /// EVM with an inspector.
-    Inspector(InspectorContext<I, EthEvmContext<DB>>),
-}
+#[expect(missing_debug_implementations)]
+pub struct EthEvm<DB: Database, I>(MainnetEvm<EthEvmContext<DB>, I>);
 
 impl<DB: Database, I> EthEvm<DB, I> {
     /// Provides a reference to the EVM context.
     pub const fn ctx(&self) -> &EthEvmContext<DB> {
-        match self {
-            Self::Raw(ctx) => ctx,
-            Self::Inspector(ctx) => &ctx.inner,
-        }
+        &self.0.data.ctx
     }
 
     /// Provides a mutable reference to the EVM context.
     pub fn ctx_mut(&mut self) -> &mut EthEvmContext<DB> {
-        match self {
-            Self::Raw(ctx) => ctx,
-            Self::Inspector(ctx) => &mut ctx.inner,
-        }
+        &mut self.0.data.ctx
     }
 }
 
@@ -72,12 +56,11 @@ where
     I: Inspector<EthEvmContext<DB>, EthInterpreter>,
 {
     fn transact(&mut self, tx: TxEnv) -> Result<ResultAndState, EVMError<DB::Error>> {
-        match self {
-            Self::Raw(ctx) => ctx.exec(tx),
-            Self::Inspector(ctx) => {
-                ctx.inner.set_tx(tx);
-                inspect_main(ctx)
-            }
+        if self.0.enabled_inspection {
+            self.tx = tx;
+            self.0.inspect_previous()
+        } else {
+            self.0.transact(tx)
         }
     }
 }
@@ -172,8 +155,12 @@ impl EvmFactory<EvmEnv> for EthEvmFactory {
     type HaltReason = HaltReason;
 
     fn create_evm<DB: Database>(&self, db: DB, input: EvmEnv) -> Self::Evm<DB, NoOpInspector> {
-        EthEvm::Raw(
-            Context::default().with_block(input.block_env).with_cfg(input.cfg_env).with_db(db),
+        EthEvm(
+            Context::mainnet()
+                .with_block(input.block_env)
+                .with_cfg(input.cfg_env)
+                .with_db(db)
+                .build_mainnet(),
         )
     }
 
@@ -183,8 +170,12 @@ impl EvmFactory<EvmEnv> for EthEvmFactory {
         input: EvmEnv,
         inspector: I,
     ) -> Self::Evm<DB, I> {
-        let ctx =
-            Context::default().with_block(input.block_env).with_cfg(input.cfg_env).with_db(db);
-        EthEvm::Inspector(InspectorContext::new(ctx, inspector))
+        EthEvm(
+            Context::mainnet()
+                .with_block(input.block_env)
+                .with_cfg(input.cfg_env)
+                .with_db(db)
+                .build_mainnet_with_inspector(inspector),
+        )
     }
 }

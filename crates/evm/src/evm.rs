@@ -5,12 +5,14 @@ use alloy_primitives::{Address, Bytes};
 use core::error::Error;
 use revm::{
     context::BlockEnv,
-    context_interface::result::{HaltReasonTrait, ResultAndState},
-    handler::EthContext,
+    context_interface::{
+        result::{HaltReasonTrait, ResultAndState},
+        ContextTrait,
+    },
+    handler::{Inspector, NoOpInspector},
     interpreter::interpreter::EthInterpreter,
     DatabaseCommit,
 };
-use revm_inspector::{inspectors::NoOpInspector, journal::JournalExtGetter, Inspector};
 
 /// Helper trait to bound [`revm::Database::Error`] with common requirements.
 pub trait Database: revm::Database<Error: Error + Send + Sync + 'static> {}
@@ -80,7 +82,7 @@ pub trait EvmFactory<Input> {
     >;
 
     /// The EVM context for inspectors
-    type Context<DB: Database>: EthContext<Database = DB> + JournalExtGetter;
+    type Context<DB: Database>: ContextTrait<Db = DB>;
     /// Transaction environment.
     type Tx;
     /// EVM error. See [`Evm::Error`].

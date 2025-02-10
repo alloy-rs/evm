@@ -17,7 +17,6 @@ workspace = true
 alloy-primitives.workspace = true
 alloy-evm = { workspace = true, features = ["op"] }
 revm.workspace = true
-revm-inspector.workspace = true
 revm-optimism.workspace = true
 
 
