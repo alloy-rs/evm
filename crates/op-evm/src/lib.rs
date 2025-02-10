@@ -39,7 +39,7 @@ pub type OpEvmContext<DB> =
 #[allow(missing_debug_implementations)] // missing revm::OpContext Debug impl
 pub enum OpEvm<DB: Database, I> {
     /// Simple EVM implementation.
-    Simple(OpEvmContext<DB>),
+    Raw(OpEvmContext<DB>),
     /// EVM with an inspector.
     Inspector(InspectorContext<I, OpEvmContext<DB>>),
 }
@@ -48,7 +48,7 @@ impl<DB: Database, I> OpEvm<DB, I> {
     /// Provides a reference to the EVM context.
     pub const fn ctx(&self) -> &OpEvmContext<DB> {
         match self {
-            Self::Simple(ctx) => ctx,
+            Self::Raw(ctx) => ctx,
             Self::Inspector(ctx) => &ctx.inner,
         }
     }
@@ -56,7 +56,7 @@ impl<DB: Database, I> OpEvm<DB, I> {
     /// Provides a mutable reference to the EVM context.
     pub fn ctx_mut(&mut self) -> &mut OpEvmContext<DB> {
         match self {
-            Self::Simple(ctx) => ctx,
+            Self::Raw(ctx) => ctx,
             Self::Inspector(ctx) => &mut ctx.inner,
         }
     }
@@ -86,7 +86,7 @@ where
         tx: OpTransaction<TxEnv>,
     ) -> Result<ResultAndState<OptimismHaltReason>, EVMError<DB::Error, OpTransactionError>> {
         match self {
-            Self::Simple(ctx) => ctx.exec(tx),
+            Self::Raw(ctx) => ctx.exec(tx),
             Self::Inspector(ctx) => {
                 ctx.inner.set_tx(tx);
                 inspect_op(ctx)
@@ -206,7 +206,7 @@ impl EvmFactory<EvmEnv<OpSpec>> for OpEvmFactory {
                 .with_block(input.block_env)
                 .with_cfg(input.cfg_env),
         );
-        OpEvm::Simple(ctx)
+        OpEvm::Raw(ctx)
     }
 
     fn create_evm_with_inspector<DB: Database, I: Inspector<Self::Context<DB>, EthInterpreter>>(

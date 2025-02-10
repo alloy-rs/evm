@@ -27,7 +27,7 @@ pub type EthEvmContext<DB> = Context<BlockEnv, TxEnv, CfgEnv, DB>;
 #[derive(Debug)]
 pub enum EthEvm<DB: Database, I> {
     /// Simple EVM implementation.
-    Simple(EthEvmContext<DB>),
+    Raw(EthEvmContext<DB>),
     /// EVM with an inspector.
     Inspector(InspectorContext<I, EthEvmContext<DB>>),
 }
@@ -36,7 +36,7 @@ impl<DB: Database, I> EthEvm<DB, I> {
     /// Provides a reference to the EVM context.
     pub const fn ctx(&self) -> &EthEvmContext<DB> {
         match self {
-            Self::Simple(ctx) => ctx,
+            Self::Raw(ctx) => ctx,
             Self::Inspector(ctx) => &ctx.inner,
         }
     }
@@ -44,7 +44,7 @@ impl<DB: Database, I> EthEvm<DB, I> {
     /// Provides a mutable reference to the EVM context.
     pub fn ctx_mut(&mut self) -> &mut EthEvmContext<DB> {
         match self {
-            Self::Simple(ctx) => ctx,
+            Self::Raw(ctx) => ctx,
             Self::Inspector(ctx) => &mut ctx.inner,
         }
     }
@@ -71,7 +71,7 @@ where
 {
     fn transact(&mut self, tx: TxEnv) -> Result<ResultAndState, EVMError<DB::Error>> {
         match self {
-            Self::Simple(ctx) => ctx.exec(tx),
+            Self::Raw(ctx) => ctx.exec(tx),
             Self::Inspector(ctx) => {
                 ctx.inner.set_tx(tx);
                 inspect_main(ctx)
@@ -172,7 +172,7 @@ impl EvmFactory<EvmEnv> for EthEvmFactory {
     type HaltReason = HaltReason;
 
     fn create_evm<DB: Database>(&self, db: DB, input: EvmEnv) -> Self::Evm<DB, NoOpInspector> {
-        EthEvm::Simple(
+        EthEvm::Raw(
             Context::default().with_block(input.block_env).with_cfg(input.cfg_env).with_db(db),
         )
     }
