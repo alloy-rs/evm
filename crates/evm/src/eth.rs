@@ -53,12 +53,14 @@ impl<DB: Database, I> EthEvm<DB, I> {
 impl<DB: Database, I> Deref for EthEvm<DB, I> {
     type Target = EthEvmContext<DB>;
 
+    #[inline]
     fn deref(&self) -> &Self::Target {
         self.ctx()
     }
 }
 
 impl<DB: Database, I> DerefMut for EthEvm<DB, I> {
+    #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.ctx_mut()
     }
@@ -129,10 +131,8 @@ where
             authorization_list: Default::default(),
         };
 
-        *self.tx_mut() = tx_env;
-
         let mut gas_limit = tx.gas_limit;
-        let mut basefee = U256::ZERO;
+        let mut basefee = 0;
         let mut disable_nonce_check = true;
 
         // ensure the block gas limit is >= the tx
@@ -145,9 +145,9 @@ where
         let res = self.transact(tx);
 
         // swap back to the previous gas limit
-        core::mem::swap(&mut self.block_mut().gas_limit, &mut gas_limit);
+        core::mem::swap(&mut self.block.gas_limit, &mut gas_limit);
         // swap back to the previous base fee
-        core::mem::swap(&mut self.block_mut().basefee, &mut basefee);
+        core::mem::swap(&mut self.block.basefee, &mut basefee);
         // swap back to the previous nonce check flag
         core::mem::swap(&mut self.cfg.disable_nonce_check, &mut disable_nonce_check);
 

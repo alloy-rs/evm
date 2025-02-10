@@ -65,12 +65,14 @@ impl<DB: Database, I> OpEvm<DB, I> {
 impl<DB: Database, I> Deref for OpEvm<DB, I> {
     type Target = OpEvmContext<DB>;
 
+    #[inline]
     fn deref(&self) -> &Self::Target {
         self.ctx()
     }
 }
 
 impl<DB: Database, I> DerefMut for OpEvm<DB, I> {
+    #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.ctx_mut()
     }
@@ -151,10 +153,8 @@ where
             deposit: Default::default(),
         };
 
-        *self.tx_mut() = tx_env;
-
-        let mut gas_limit = tx.gas_limit;
-        let mut basefee = U256::ZERO;
+        let mut gas_limit = tx.base.gas_limit;
+        let mut basefee = 0;
         let mut disable_nonce_check = true;
 
         // ensure the block gas limit is >= the tx
@@ -167,9 +167,9 @@ where
         let res = self.transact(tx);
 
         // swap back to the previous gas limit
-        core::mem::swap(&mut self.block_mut().gas_limit, &mut gas_limit);
+        core::mem::swap(&mut self.block.gas_limit, &mut gas_limit);
         // swap back to the previous base fee
-        core::mem::swap(&mut self.block_mut().basefee, &mut basefee);
+        core::mem::swap(&mut self.block.basefee, &mut basefee);
         // swap back to the previous nonce check flag
         core::mem::swap(&mut self.cfg.disable_nonce_check, &mut disable_nonce_check);
 
