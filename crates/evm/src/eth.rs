@@ -11,12 +11,10 @@ use revm::{
     context::{BlockEnv, CfgEnv, Evm as RevmEvm, TxEnv},
     context_interface::result::{EVMError, HaltReason, ResultAndState},
     handler::{
-        instructions::{EthInstructions, InstructionProvider},
-        EthPrecompiles, Inspector, NoOpInspector, PrecompileProvider,
+        instructions::EthInstructions, EthPrecompiles, Inspector, NoOpInspector, PrecompileProvider,
     },
     interpreter::{interpreter::EthInterpreter, InterpreterResult},
-    precompile::PrecompileResult,
-    Context, MainBuilder, MainContext,
+    Context, ExecuteEvm, InspectEvm, MainBuilder, MainContext,
 };
 
 /// The Ethereum EVM context type.
@@ -84,10 +82,11 @@ where
     }
 }
 
-impl<DB, I, INST, PRECOMPILE> Evm for EthEvm<DB, I, INST, PRECOMPILE>
+impl<DB, I, PRECOMPILE> Evm for EthEvm<DB, I, PRECOMPILE>
 where
     DB: Database,
     I: Inspector<EthEvmContext<DB>>,
+    PRECOMPILE: PrecompileProvider<Context = EthEvmContext<DB>, Output = InterpreterResult>,
 {
     type DB = DB;
     type Tx = TxEnv;
