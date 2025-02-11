@@ -9,7 +9,7 @@ use revm::{
         result::{HaltReasonTrait, ResultAndState},
         ContextTrait,
     },
-    handler::{Inspector, NoOpInspector},
+    handler::{Inspector, JournalExt, NoOpInspector},
     interpreter::interpreter::EthInterpreter,
     DatabaseCommit,
 };
@@ -82,7 +82,7 @@ pub trait EvmFactory<Input> {
     >;
 
     /// The EVM context for inspectors
-    type Context<DB: Database>: ContextTrait<Db = DB>;
+    type Context<DB: Database>: ContextTrait<Db = DB, Journal: JournalExt>;
     /// Transaction environment.
     type Tx;
     /// EVM error. See [`Evm::Error`].
