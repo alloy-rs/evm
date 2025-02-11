@@ -12,7 +12,7 @@ use revm::{
     context_interface::result::{EVMError, HaltReason, ResultAndState},
     handler::{instructions::EthInstructions, EthPrecompiles, Inspector, NoOpInspector},
     interpreter::interpreter::EthInterpreter,
-    Context, ExecuteEvm, InspectEvm, MainBuilder, MainContext, MainnetEvm,
+    Context, ExecuteEvm, InspectEvm, MainBuilder, MainContext,
 };
 
 /// The Ethereum EVM context type.
@@ -27,9 +27,9 @@ pub struct EthEvm<
     PRECOMPILE = EthPrecompiles<EthEvmContext<DB>>,
 >(RevmEvm<EthEvmContext<DB>, I, INST, PRECOMPILE>);
 
-impl<DB: Database, I> EthEvm<DB, I> {
+impl<DB: Database, I, INST, PRECOMPILE> EthEvm<DB, I, INST, PRECOMPILE> {
     /// Creates a new Ethereum EVM instance.
-    pub const fn new(evm: MainnetEvm<EthEvmContext<DB>, I>) -> Self {
+    pub const fn new(evm: RevmEvm<EthEvmContext<DB>, I, INST, PRECOMPILE>) -> Self {
         Self(evm)
     }
 
