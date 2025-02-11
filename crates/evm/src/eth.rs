@@ -8,9 +8,10 @@ use core::{
     ops::{Deref, DerefMut},
 };
 use revm::{
-    context::{BlockEnv, CfgEnv, TxEnv},
+    context::{BlockEnv, CfgEnv, Evm as RevmEvm, TxEnv},
     context_interface::result::{EVMError, HaltReason, ResultAndState},
-    handler::{Inspector, NoOpInspector},
+    handler::{instructions::EthInstructions, EthPrecompiles, Inspector, NoOpInspector},
+    interpreter::interpreter::EthInterpreter,
     Context, ExecuteEvm, InspectEvm, MainBuilder, MainContext, MainnetEvm,
 };
 
@@ -19,11 +20,16 @@ pub type EthEvmContext<DB> = Context<BlockEnv, TxEnv, CfgEnv, DB>;
 
 /// Ethereum EVM implementation.
 #[expect(missing_debug_implementations)]
-pub struct EthEvm<DB: Database, I>(MainnetEvm<EthEvmContext<DB>, I>);
+pub struct EthEvm<
+    DB: Database,
+    I,
+    INST = EthInstructions<EthInterpreter, EthEvmContext<DB>>,
+    PRECOMPILE = EthPrecompiles<EthEvmContext<DB>>,
+>(RevmEvm<EthEvmContext<DB>, I, INST, PRECOMPILE>);
 
 impl<DB: Database, I> EthEvm<DB, I> {
     /// Creates a new Ethereum EVM instance.
-    pub fn new(evm: MainnetEvm<EthEvmContext<DB>, I>) -> Self {
+    pub const fn new(evm: MainnetEvm<EthEvmContext<DB>, I>) -> Self {
         Self(evm)
     }
 
