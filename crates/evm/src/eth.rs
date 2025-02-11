@@ -22,6 +22,11 @@ pub type EthEvmContext<DB> = Context<BlockEnv, TxEnv, CfgEnv, DB>;
 pub struct EthEvm<DB: Database, I>(MainnetEvm<EthEvmContext<DB>, I>);
 
 impl<DB: Database, I> EthEvm<DB, I> {
+    /// Creates a new Ethereum EVM instance.
+    pub fn new(evm: MainnetEvm<EthEvmContext<DB>, I>) -> Self {
+        Self(evm)
+    }
+
     /// Provides a reference to the EVM context.
     pub const fn ctx(&self) -> &EthEvmContext<DB> {
         &self.0.data.ctx
