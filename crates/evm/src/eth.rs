@@ -98,7 +98,7 @@ where
     }
 
     fn transact(&mut self, tx: Self::Tx) -> Result<ResultAndState, Self::Error> {
-        self.transact(tx)
+        self.0.transact(tx)
     }
 
     fn transact_system_call(
