@@ -11,7 +11,6 @@ use revm::{
     context::{BlockEnv, CfgEnv, TxEnv},
     context_interface::result::{EVMError, HaltReason, ResultAndState},
     handler::{Inspector, NoOpInspector},
-    interpreter::interpreter::EthInterpreter,
     Context, ExecuteEvm, InspectEvm, MainBuilder, MainContext, MainnetEvm,
 };
 
@@ -53,7 +52,7 @@ impl<DB: Database, I> DerefMut for EthEvm<DB, I> {
 impl<DB, I> EthEvm<DB, I>
 where
     DB: Database,
-    I: Inspector<EthEvmContext<DB>, EthInterpreter>,
+    I: Inspector<EthEvmContext<DB>>,
 {
     fn transact(&mut self, tx: TxEnv) -> Result<ResultAndState, EVMError<DB::Error>> {
         if self.0.enabled_inspection {
@@ -68,7 +67,7 @@ where
 impl<DB, I> Evm for EthEvm<DB, I>
 where
     DB: Database,
-    I: Inspector<EthEvmContext<DB>, EthInterpreter>,
+    I: Inspector<EthEvmContext<DB>>,
 {
     type DB = DB;
     type Tx = TxEnv;
@@ -148,7 +147,7 @@ where
 pub struct EthEvmFactory;
 
 impl EvmFactory<EvmEnv> for EthEvmFactory {
-    type Evm<DB: Database, I: Inspector<EthEvmContext<DB>, EthInterpreter>> = EthEvm<DB, I>;
+    type Evm<DB: Database, I: Inspector<EthEvmContext<DB>>> = EthEvm<DB, I>;
     type Context<DB: Database> = Context<BlockEnv, TxEnv, CfgEnv, DB>;
     type Tx = TxEnv;
     type Error<DBError: core::error::Error + Send + Sync + 'static> = EVMError<DBError>;
@@ -164,7 +163,7 @@ impl EvmFactory<EvmEnv> for EthEvmFactory {
         )
     }
 
-    fn create_evm_with_inspector<DB: Database, I: Inspector<Self::Context<DB>, EthInterpreter>>(
+    fn create_evm_with_inspector<DB: Database, I: Inspector<Self::Context<DB>>>(
         &self,
         db: DB,
         input: EvmEnv,

@@ -64,7 +64,7 @@ impl<DB: Database, I> DerefMut for OpEvm<DB, I> {
 impl<DB, I> OpEvm<DB, I>
 where
     DB: Database,
-    I: Inspector<OpContext<DB>, EthInterpreter>,
+    I: Inspector<OpContext<DB>>,
 {
     fn transact(
         &mut self,
@@ -82,7 +82,7 @@ where
 impl<DB, I> Evm for OpEvm<DB, I>
 where
     DB: Database,
-    I: Inspector<OpContext<DB>, EthInterpreter>,
+    I: Inspector<OpContext<DB>>,
 {
     type DB = DB;
     type Tx = OpTransaction<TxEnv>;
@@ -169,7 +169,7 @@ where
 pub struct OpEvmFactory;
 
 impl EvmFactory<EvmEnv<OpSpecId>> for OpEvmFactory {
-    type Evm<DB: Database, I: Inspector<OpContext<DB>, EthInterpreter>> = OpEvm<DB, I>;
+    type Evm<DB: Database, I: Inspector<OpContext<DB>>> = OpEvm<DB, I>;
     type Context<DB: Database> = OpContext<DB>;
     type Tx = OpTransaction<TxEnv>;
     type HaltReason = OpHaltReason;
@@ -190,7 +190,7 @@ impl EvmFactory<EvmEnv<OpSpecId>> for OpEvmFactory {
         )
     }
 
-    fn create_evm_with_inspector<DB: Database, I: Inspector<Self::Context<DB>, EthInterpreter>>(
+    fn create_evm_with_inspector<DB: Database, I: Inspector<Self::Context<DB>>>(
         &self,
         db: DB,
         input: EvmEnv<OpSpecId>,

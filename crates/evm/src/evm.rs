@@ -10,7 +10,6 @@ use revm::{
         ContextTrait,
     },
     handler::{Inspector, JournalExt, NoOpInspector},
-    interpreter::interpreter::EthInterpreter,
     DatabaseCommit,
 };
 
@@ -74,7 +73,7 @@ pub trait EvmFactory<Input> {
     /// The EVM type that this factory creates.
     // TODO: this doesn't quite work because this would force use to use an enum approach for trace
     // evm for example, unless we
-    type Evm<DB: Database, I: Inspector<Self::Context<DB>, EthInterpreter>>: Evm<
+    type Evm<DB: Database, I: Inspector<Self::Context<DB>>>: Evm<
         DB = DB,
         Tx = Self::Tx,
         HaltReason = Self::HaltReason,
@@ -94,7 +93,7 @@ pub trait EvmFactory<Input> {
     fn create_evm<DB: Database>(&self, db: DB, input: Input) -> Self::Evm<DB, NoOpInspector>;
 
     /// Creates a new instance of an EVM with an inspector.
-    fn create_evm_with_inspector<DB: Database, I: Inspector<Self::Context<DB>, EthInterpreter>>(
+    fn create_evm_with_inspector<DB: Database, I: Inspector<Self::Context<DB>>>(
         &self,
         db: DB,
         input: Input,
