@@ -22,7 +22,7 @@ use revm::{
     Context, ExecuteEvm, InspectEvm,
 };
 use revm_optimism::{
-    DefaultOp, OpBuilder, OpContext, OpHaltReason, OpSpec, OpTransaction, OpTransactionError,
+    DefaultOp, OpBuilder, OpContext, OpHaltReason, OpSpecId, OpTransaction, OpTransactionError,
 };
 
 extern crate alloc;
@@ -168,7 +168,7 @@ where
 #[non_exhaustive]
 pub struct OpEvmFactory;
 
-impl EvmFactory<EvmEnv<OpSpec>> for OpEvmFactory {
+impl EvmFactory<EvmEnv<OpSpecId>> for OpEvmFactory {
     type Evm<DB: Database, I: Inspector<OpContext<DB>, EthInterpreter>> = OpEvm<DB, I>;
     type Context<DB: Database> = OpContext<DB>;
     type Tx = OpTransaction<TxEnv>;
@@ -179,7 +179,7 @@ impl EvmFactory<EvmEnv<OpSpec>> for OpEvmFactory {
     fn create_evm<DB: Database>(
         &self,
         db: DB,
-        input: EvmEnv<OpSpec>,
+        input: EvmEnv<OpSpecId>,
     ) -> Self::Evm<DB, NoOpInspector> {
         OpEvm(
             Context::op()
@@ -193,7 +193,7 @@ impl EvmFactory<EvmEnv<OpSpec>> for OpEvmFactory {
     fn create_evm_with_inspector<DB: Database, I: Inspector<Self::Context<DB>, EthInterpreter>>(
         &self,
         db: DB,
-        input: EvmEnv<OpSpec>,
+        input: EvmEnv<OpSpecId>,
         inspector: I,
     ) -> Self::Evm<DB, I> {
         OpEvm(
