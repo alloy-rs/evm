@@ -8,10 +8,13 @@ use core::{
     ops::{Deref, DerefMut},
 };
 use revm::{
-    context::{BlockEnv, CfgEnv, TxEnv},
+    context::{BlockEnv, CfgEnv, Evm as RevmEvm, TxEnv},
     context_interface::result::{EVMError, HaltReason, ResultAndState},
-    handler::{Inspector, NoOpInspector},
-    Context, ExecuteEvm, InspectEvm, MainBuilder, MainContext, MainnetEvm,
+    handler::{
+        instructions::EthInstructions, EthPrecompiles, Inspector, NoOpInspector, PrecompileProvider,
+    },
+    interpreter::{interpreter::EthInterpreter, InterpreterResult},
+    Context, ExecuteEvm, InspectEvm, MainBuilder, MainContext,
 };
 
 /// The Ethereum EVM context type.
@@ -19,9 +22,31 @@ pub type EthEvmContext<DB> = Context<BlockEnv, TxEnv, CfgEnv, DB>;
 
 /// Ethereum EVM implementation.
 #[expect(missing_debug_implementations)]
-pub struct EthEvm<DB: Database, I>(MainnetEvm<EthEvmContext<DB>, I>);
+pub struct EthEvm<DB: Database, I, PRECOMPILE = EthPrecompiles<EthEvmContext<DB>>>(
+    RevmEvm<EthEvmContext<DB>, I, EthInstructions<EthInterpreter, EthEvmContext<DB>>, PRECOMPILE>,
+);
 
-impl<DB: Database, I> EthEvm<DB, I> {
+impl<DB: Database, I, PRECOMPILE> EthEvm<DB, I, PRECOMPILE> {
+    /// Creates a new Ethereum EVM instance.
+    pub const fn new(
+        evm: RevmEvm<
+            EthEvmContext<DB>,
+            I,
+            EthInstructions<EthInterpreter, EthEvmContext<DB>>,
+            PRECOMPILE,
+        >,
+    ) -> Self {
+        Self(evm)
+    }
+
+    /// Consumes self and return the inner EVM instance.
+    pub fn into_inner(
+        self,
+    ) -> RevmEvm<EthEvmContext<DB>, I, EthInstructions<EthInterpreter, EthEvmContext<DB>>, PRECOMPILE>
+    {
+        self.0
+    }
+
     /// Provides a reference to the EVM context.
     pub const fn ctx(&self) -> &EthEvmContext<DB> {
         &self.0.data.ctx
@@ -33,7 +58,7 @@ impl<DB: Database, I> EthEvm<DB, I> {
     }
 }
 
-impl<DB: Database, I> Deref for EthEvm<DB, I> {
+impl<DB: Database, I, PRECOMPILE> Deref for EthEvm<DB, I, PRECOMPILE> {
     type Target = EthEvmContext<DB>;
 
     #[inline]
@@ -42,17 +67,18 @@ impl<DB: Database, I> Deref for EthEvm<DB, I> {
     }
 }
 
-impl<DB: Database, I> DerefMut for EthEvm<DB, I> {
+impl<DB: Database, I, PRECOMPILE> DerefMut for EthEvm<DB, I, PRECOMPILE> {
     #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.ctx_mut()
     }
 }
 
-impl<DB, I> EthEvm<DB, I>
+impl<DB, I, PRECOMPILE> EthEvm<DB, I, PRECOMPILE>
 where
     DB: Database,
     I: Inspector<EthEvmContext<DB>>,
+    PRECOMPILE: PrecompileProvider<Context = EthEvmContext<DB>, Output = InterpreterResult>,
 {
     fn transact(&mut self, tx: TxEnv) -> Result<ResultAndState, EVMError<DB::Error>> {
         if self.0.enabled_inspection {
@@ -64,10 +90,11 @@ where
     }
 }
 
-impl<DB, I> Evm for EthEvm<DB, I>
+impl<DB, I, PRECOMPILE> Evm for EthEvm<DB, I, PRECOMPILE>
 where
     DB: Database,
     I: Inspector<EthEvmContext<DB>>,
+    PRECOMPILE: PrecompileProvider<Context = EthEvmContext<DB>, Output = InterpreterResult>,
 {
     type DB = DB;
     type Tx = TxEnv;
@@ -79,7 +106,7 @@ where
     }
 
     fn transact(&mut self, tx: Self::Tx) -> Result<ResultAndState, Self::Error> {
-        self.transact(tx)
+        self.0.transact(tx)
     }
 
     fn transact_system_call(
