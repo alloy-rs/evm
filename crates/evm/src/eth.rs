@@ -132,7 +132,7 @@ where
             // Setting the gas priority fee to None ensures the effective gas price is derived from
             // the `gas_price` field, which we need to be zero
             gas_priority_fee: None,
-            access_list: Vec::new(),
+            access_list: Default::default(),
             // blob fields can be None for this tx
             blob_hashes: Vec::new(),
             max_fee_per_blob_gas: 0,
