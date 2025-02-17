@@ -15,11 +15,12 @@ use core::{
     ops::{Deref, DerefMut},
 };
 use revm::{
-    context::{BlockEnv, TxEnv},
+    context::{setters::ContextSetters, BlockEnv, TxEnv},
     context_interface::result::{EVMError, ResultAndState},
-    handler::{instructions::EthInstructions, Inspector, NoOpInspector},
+    handler::instructions::EthInstructions,
+    inspector::NoOpInspector,
     interpreter::interpreter::EthInterpreter,
-    Context, ExecuteEvm, InspectEvm,
+    Context, ExecuteEvm, InspectEvm, Inspector,
 };
 use revm_optimism::{
     DefaultOp, OpBuilder, OpContext, OpHaltReason, OpSpecId, OpTransaction, OpTransactionError,
@@ -29,19 +30,20 @@ extern crate alloc;
 
 /// OP EVM implementation.
 #[allow(missing_debug_implementations)] // missing revm::OpContext Debug impl
-pub struct OpEvm<DB: Database, I>(
-    revm_optimism::OpEvm<OpContext<DB>, I, EthInstructions<EthInterpreter, OpContext<DB>>>,
-);
+pub struct OpEvm<DB: Database, I> {
+    inner: revm_optimism::OpEvm<OpContext<DB>, I, EthInstructions<EthInterpreter, OpContext<DB>>>,
+    inspect: bool,
+}
 
 impl<DB: Database, I> OpEvm<DB, I> {
     /// Provides a reference to the EVM context.
     pub const fn ctx(&self) -> &OpContext<DB> {
-        &self.0.data.ctx
+        &self.inner.0.data.ctx
     }
 
     /// Provides a mutable reference to the EVM context.
     pub fn ctx_mut(&mut self) -> &mut OpContext<DB> {
-        &mut self.0.data.ctx
+        &mut self.inner.0.data.ctx
     }
 }
 
@@ -70,11 +72,11 @@ where
         &mut self,
         tx: OpTransaction<TxEnv>,
     ) -> Result<ResultAndState<OpHaltReason>, EVMError<DB::Error, OpTransactionError>> {
-        if self.0.enabled_inspection {
-            self.tx = tx;
-            self.0.inspect_previous()
+        if self.inspect {
+            self.inner.set_tx(tx);
+            self.inner.inspect_previous()
         } else {
-            self.0.transact(tx)
+            self.inner.transact(tx)
         }
     }
 }
@@ -94,7 +96,7 @@ where
     }
 
     fn transact(&mut self, tx: Self::Tx) -> Result<ResultAndState<Self::HaltReason>, Self::Error> {
-        self.0.transact(tx)
+        self.inner.transact(tx)
     }
 
     fn transact_system_call(
@@ -181,13 +183,14 @@ impl EvmFactory<EvmEnv<OpSpecId>> for OpEvmFactory {
         db: DB,
         input: EvmEnv<OpSpecId>,
     ) -> Self::Evm<DB, NoOpInspector> {
-        OpEvm(
-            Context::op()
+        OpEvm {
+            inner: Context::op()
                 .with_db(db)
                 .with_block(input.block_env)
                 .with_cfg(input.cfg_env)
-                .build_op(),
-        )
+                .build_op_with_inspector(NoOpInspector {}),
+            inspect: false,
+        }
     }
 
     fn create_evm_with_inspector<DB: Database, I: Inspector<Self::Context<DB>>>(
@@ -196,12 +199,13 @@ impl EvmFactory<EvmEnv<OpSpecId>> for OpEvmFactory {
         input: EvmEnv<OpSpecId>,
         inspector: I,
     ) -> Self::Evm<DB, I> {
-        OpEvm(
-            Context::op()
+        OpEvm {
+            inner: Context::op()
                 .with_db(db)
                 .with_block(input.block_env)
                 .with_cfg(input.cfg_env)
                 .build_op_with_inspector(inspector),
-        )
+            inspect: true,
+        }
     }
 }

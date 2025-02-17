@@ -6,11 +6,11 @@ use core::error::Error;
 use revm::{
     context::BlockEnv,
     context_interface::{
-        result::{HaltReasonTrait, ResultAndState},
-        ContextTrait,
+        result::{HaltReasonTr, ResultAndState},
+        ContextTr,
     },
-    handler::{Inspector, JournalExt, NoOpInspector},
-    DatabaseCommit,
+    inspector::{JournalExt, NoOpInspector},
+    DatabaseCommit, Inspector,
 };
 
 /// Helper trait to bound [`revm::Database::Error`] with common requirements.
@@ -34,7 +34,7 @@ pub trait Evm {
     /// Halt reason. Enum over all possible reasons for halting the execution. When execution halts,
     /// it means that transaction is valid, however, it's execution was interrupted (e.g because of
     /// running out of gas or overflowing stack).
-    type HaltReason: HaltReasonTrait + Send + Sync;
+    type HaltReason: HaltReasonTr + Send + Sync;
 
     /// Reference to [`BlockEnv`].
     fn block(&self) -> &BlockEnv;
@@ -81,13 +81,13 @@ pub trait EvmFactory<Input> {
     >;
 
     /// The EVM context for inspectors
-    type Context<DB: Database>: ContextTrait<Db = DB, Journal: JournalExt>;
+    type Context<DB: Database>: ContextTr<Db = DB, Journal: JournalExt>;
     /// Transaction environment.
     type Tx;
     /// EVM error. See [`Evm::Error`].
     type Error<DBError: Error + Send + Sync + 'static>: EvmError;
     /// Halt reason. See [`Evm::HaltReason`].
-    type HaltReason: HaltReasonTrait + Send + Sync;
+    type HaltReason: HaltReasonTr + Send + Sync;
 
     /// Creates a new instance of an EVM.
     fn create_evm<DB: Database>(&self, db: DB, input: Input) -> Self::Evm<DB, NoOpInspector>;

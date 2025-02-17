@@ -10,11 +10,10 @@ use core::{
 use revm::{
     context::{BlockEnv, CfgEnv, Evm as RevmEvm, TxEnv},
     context_interface::result::{EVMError, HaltReason, ResultAndState},
-    handler::{
-        instructions::EthInstructions, EthPrecompiles, Inspector, NoOpInspector, PrecompileProvider,
-    },
+    handler::{instructions::EthInstructions, EthPrecompiles, PrecompileProvider},
+    inspector::NoOpInspector,
     interpreter::{interpreter::EthInterpreter, InterpreterResult},
-    Context, ExecuteEvm, InspectEvm, MainBuilder, MainContext,
+    Context, ExecuteEvm, InspectEvm, Inspector, MainBuilder, MainContext,
 };
 
 /// The Ethereum EVM context type.
@@ -22,9 +21,15 @@ pub type EthEvmContext<DB> = Context<BlockEnv, TxEnv, CfgEnv, DB>;
 
 /// Ethereum EVM implementation.
 #[expect(missing_debug_implementations)]
-pub struct EthEvm<DB: Database, I, PRECOMPILE = EthPrecompiles<EthEvmContext<DB>>>(
-    RevmEvm<EthEvmContext<DB>, I, EthInstructions<EthInterpreter, EthEvmContext<DB>>, PRECOMPILE>,
-);
+pub struct EthEvm<DB: Database, I, PRECOMPILE = EthPrecompiles<EthEvmContext<DB>>> {
+    inner: RevmEvm<
+        EthEvmContext<DB>,
+        I,
+        EthInstructions<EthInterpreter, EthEvmContext<DB>>,
+        PRECOMPILE,
+    >,
+    inspect: bool,
+}
 
 impl<DB: Database, I, PRECOMPILE> EthEvm<DB, I, PRECOMPILE> {
     /// Creates a new Ethereum EVM instance.
@@ -35,8 +40,9 @@ impl<DB: Database, I, PRECOMPILE> EthEvm<DB, I, PRECOMPILE> {
             EthInstructions<EthInterpreter, EthEvmContext<DB>>,
             PRECOMPILE,
         >,
+        inspect: bool,
     ) -> Self {
-        Self(evm)
+        Self { inner: evm, inspect }
     }
 
     /// Consumes self and return the inner EVM instance.
@@ -44,17 +50,17 @@ impl<DB: Database, I, PRECOMPILE> EthEvm<DB, I, PRECOMPILE> {
         self,
     ) -> RevmEvm<EthEvmContext<DB>, I, EthInstructions<EthInterpreter, EthEvmContext<DB>>, PRECOMPILE>
     {
-        self.0
+        self.inner
     }
 
     /// Provides a reference to the EVM context.
     pub const fn ctx(&self) -> &EthEvmContext<DB> {
-        &self.0.data.ctx
+        &self.inner.data.ctx
     }
 
     /// Provides a mutable reference to the EVM context.
     pub fn ctx_mut(&mut self) -> &mut EthEvmContext<DB> {
-        &mut self.0.data.ctx
+        &mut self.inner.data.ctx
     }
 }
 
@@ -81,11 +87,11 @@ where
     PRECOMPILE: PrecompileProvider<Context = EthEvmContext<DB>, Output = InterpreterResult>,
 {
     fn transact(&mut self, tx: TxEnv) -> Result<ResultAndState, EVMError<DB::Error>> {
-        if self.0.enabled_inspection {
+        if self.inspect {
             self.tx = tx;
-            self.0.inspect_previous()
+            self.inner.inspect_previous()
         } else {
-            self.0.transact(tx)
+            self.inner.transact(tx)
         }
     }
 }
@@ -106,7 +112,7 @@ where
     }
 
     fn transact(&mut self, tx: Self::Tx) -> Result<ResultAndState, Self::Error> {
-        self.0.transact(tx)
+        self.inner.transact(tx)
     }
 
     fn transact_system_call(
@@ -181,13 +187,14 @@ impl EvmFactory<EvmEnv> for EthEvmFactory {
     type HaltReason = HaltReason;
 
     fn create_evm<DB: Database>(&self, db: DB, input: EvmEnv) -> Self::Evm<DB, NoOpInspector> {
-        EthEvm(
-            Context::mainnet()
+        EthEvm {
+            inner: Context::mainnet()
                 .with_block(input.block_env)
                 .with_cfg(input.cfg_env)
                 .with_db(db)
-                .build_mainnet(),
-        )
+                .build_mainnet_with_inspector(NoOpInspector {}),
+            inspect: false,
+        }
     }
 
     fn create_evm_with_inspector<DB: Database, I: Inspector<Self::Context<DB>>>(
@@ -196,12 +203,13 @@ impl EvmFactory<EvmEnv> for EthEvmFactory {
         input: EvmEnv,
         inspector: I,
     ) -> Self::Evm<DB, I> {
-        EthEvm(
-            Context::mainnet()
+        EthEvm {
+            inner: Context::mainnet()
                 .with_block(input.block_env)
                 .with_cfg(input.cfg_env)
                 .with_db(db)
                 .build_mainnet_with_inspector(inspector),
-        )
+            inspect: true,
+        }
     }
 }
