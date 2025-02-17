@@ -15,17 +15,15 @@ workspace = true
 
 [dependencies]
 alloy-primitives.workspace = true
-alloy-evm.workspace = true
-derive_more.workspace = true
+alloy-evm = { workspace = true, features = ["op"] }
 revm.workspace = true
+revm-optimism.workspace = true
 
 
 [features]
 default = ["std"]
 std = [
 	"alloy-primitives/std",
-	"derive_more/std",
 	"revm/std",
 	"alloy-evm/std"
 ]
-optimism = ["revm/optimism"]

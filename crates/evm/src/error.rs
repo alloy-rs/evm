@@ -1,8 +1,7 @@
 //! Abstraction over EVM errors.
 
 use core::error::Error;
-
-use revm::primitives::{EVMError, InvalidTransaction};
+use revm::context_interface::result::{EVMError, InvalidTransaction};
 
 /// Abstraction over transaction validation error.
 pub trait InvalidTxError: Error + Send + Sync + 'static {
@@ -38,16 +37,24 @@ pub trait EvmError: Error + Send + Sync + 'static {
     }
 }
 
-impl<DBError> EvmError for EVMError<DBError>
+impl<DBError, TxError> EvmError for EVMError<DBError, TxError>
 where
     DBError: Error + Send + Sync + 'static,
+    TxError: InvalidTxError,
 {
-    type InvalidTransaction = InvalidTransaction;
+    type InvalidTransaction = TxError;
 
     fn as_invalid_tx_err(&self) -> Option<&Self::InvalidTransaction> {
         match self {
             Self::Transaction(err) => Some(err),
             _ => None,
         }
+    }
+}
+
+#[cfg(feature = "op")]
+impl InvalidTxError for revm_optimism::OpTransactionError {
+    fn is_nonce_too_low(&self) -> bool {
+        matches!(self, Self::Base(tx) if tx.is_nonce_too_low())
     }
 }

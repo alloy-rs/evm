@@ -46,10 +46,13 @@ alloy-consensus = { version = "0.8", default-features = false }
 alloy-primitives = { version = "0.8", default-features = false }
 
 # revm
-revm = { version = "19", default-features = false }
-revm-interpreter = { version = "15", default-features = false }
-revm-primitives = { version = "15", default-features = false }
+revm = { version = "20.0.0-alpha.1", default-features = false }
+revm-optimism = { version = "1.0.0-alpha.1", default-features = false }
 
 # misc
 derive_more = { version = "1", default-features = false, features = ["full"] }
 serde = { version = "1", default-features = false, features = ["derive"] }
+
+[patch.crates-io]
+revm = { git = "https://github.com/bluealloy/revm", rev = "a8b9b1e" }
+revm-optimism = { git = "https://github.com/bluealloy/revm", rev = "a8b9b1e" }

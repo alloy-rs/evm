@@ -1,13 +1,17 @@
 //! Abstraction over EVM.
 
+use crate::EvmError;
 use alloy_primitives::{Address, Bytes};
 use core::error::Error;
 use revm::{
-    primitives::{BlockEnv, ResultAndState},
-    DatabaseCommit, GetInspector,
+    context::BlockEnv,
+    context_interface::{
+        result::{HaltReasonTr, ResultAndState},
+        ContextTr,
+    },
+    inspector::{JournalExt, NoOpInspector},
+    DatabaseCommit, Inspector,
 };
-
-use crate::EvmError;
 
 /// Helper trait to bound [`revm::Database::Error`] with common requirements.
 pub trait Database: revm::Database<Error: Error + Send + Sync + 'static> {}
@@ -30,13 +34,13 @@ pub trait Evm {
     /// Halt reason. Enum over all possible reasons for halting the execution. When execution halts,
     /// it means that transaction is valid, however, it's execution was interrupted (e.g because of
     /// running out of gas or overflowing stack).
-    type HaltReason: Send + Sync;
+    type HaltReason: HaltReasonTr + Send + Sync;
 
     /// Reference to [`BlockEnv`].
     fn block(&self) -> &BlockEnv;
 
     /// Executes a transaction and returns the outcome.
-    fn transact(&mut self, tx: Self::Tx) -> Result<ResultAndState, Self::Error>;
+    fn transact(&mut self, tx: Self::Tx) -> Result<ResultAndState<Self::HaltReason>, Self::Error>;
 
     /// Executes a system call.
     fn transact_system_call(
@@ -44,13 +48,16 @@ pub trait Evm {
         caller: Address,
         contract: Address,
         data: Bytes,
-    ) -> Result<ResultAndState, Self::Error>;
+    ) -> Result<ResultAndState<Self::HaltReason>, Self::Error>;
 
     /// Returns a mutable reference to the underlying database.
     fn db_mut(&mut self) -> &mut Self::DB;
 
     /// Executes a transaction and commits the state changes to the underlying database.
-    fn transact_commit(&mut self, tx_env: Self::Tx) -> Result<ResultAndState, Self::Error>
+    fn transact_commit(
+        &mut self,
+        tx_env: Self::Tx,
+    ) -> Result<ResultAndState<Self::HaltReason>, Self::Error>
     where
         Self::DB: DatabaseCommit,
     {
@@ -66,28 +73,30 @@ pub trait EvmFactory<Input> {
     /// The EVM type that this factory creates.
     // TODO: this doesn't quite work because this would force use to use an enum approach for trace
     // evm for example, unless we
-    type Evm<'a, DB: Database + 'a, I: 'a>: Evm<
+    type Evm<DB: Database, I: Inspector<Self::Context<DB>>>: Evm<
         DB = DB,
         Tx = Self::Tx,
         HaltReason = Self::HaltReason,
         Error = Self::Error<DB::Error>,
     >;
 
+    /// The EVM context for inspectors
+    type Context<DB: Database>: ContextTr<Db = DB, Journal: JournalExt>;
     /// Transaction environment.
     type Tx;
     /// EVM error. See [`Evm::Error`].
     type Error<DBError: Error + Send + Sync + 'static>: EvmError;
     /// Halt reason. See [`Evm::HaltReason`].
-    type HaltReason: Send + Sync;
+    type HaltReason: HaltReasonTr + Send + Sync;
 
     /// Creates a new instance of an EVM.
-    fn create_evm<'a, DB: Database + 'a>(&self, db: DB, input: Input) -> Self::Evm<'a, DB, ()>;
+    fn create_evm<DB: Database>(&self, db: DB, input: Input) -> Self::Evm<DB, NoOpInspector>;
 
     /// Creates a new instance of an EVM with an inspector.
-    fn create_evm_with_inspector<'a, DB: Database + 'a, I: GetInspector<DB> + 'a>(
+    fn create_evm_with_inspector<DB: Database, I: Inspector<Self::Context<DB>>>(
         &self,
         db: DB,
         input: Input,
         inspector: I,
-    ) -> Self::Evm<'a, DB, I>;
+    ) -> Self::Evm<DB, I>;
 }
