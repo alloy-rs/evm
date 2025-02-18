@@ -121,7 +121,6 @@ where
         contract: Address,
         data: Bytes,
     ) -> Result<ResultAndState, Self::Error> {
-        #[allow(clippy::needless_update)] // side-effect of optimism fields
         let tx = TxEnv {
             caller,
             kind: TxKind::Call(contract),

@@ -7,6 +7,8 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 #![cfg_attr(not(feature = "std"), no_std)]
 
+extern crate alloc;
+
 use alloc::vec::Vec;
 use alloy_evm::{Database, Evm, EvmEnv, EvmFactory};
 use alloy_primitives::{Address, Bytes, TxKind, U256};
@@ -25,8 +27,6 @@ use revm::{
 use revm_optimism::{
     DefaultOp, OpBuilder, OpContext, OpHaltReason, OpSpecId, OpTransaction, OpTransactionError,
 };
-
-extern crate alloc;
 
 /// OP EVM implementation.
 #[allow(missing_debug_implementations)] // missing revm::OpContext Debug impl
@@ -105,7 +105,6 @@ where
         contract: Address,
         data: Bytes,
     ) -> Result<ResultAndState<Self::HaltReason>, Self::Error> {
-        #[allow(clippy::needless_update)] // side-effect of optimism fields
         let tx = OpTransaction {
             base: TxEnv {
                 caller,
@@ -174,9 +173,9 @@ impl EvmFactory<EvmEnv<OpSpecId>> for OpEvmFactory {
     type Evm<DB: Database, I: Inspector<OpContext<DB>>> = OpEvm<DB, I>;
     type Context<DB: Database> = OpContext<DB>;
     type Tx = OpTransaction<TxEnv>;
-    type HaltReason = OpHaltReason;
     type Error<DBError: core::error::Error + Send + Sync + 'static> =
         EVMError<DBError, OpTransactionError>;
+    type HaltReason = OpHaltReason;
 
     fn create_evm<DB: Database>(
         &self,
