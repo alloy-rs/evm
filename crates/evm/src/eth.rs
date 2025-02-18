@@ -8,7 +8,7 @@ use core::{
     ops::{Deref, DerefMut},
 };
 use revm::{
-    context::{BlockEnv, CfgEnv, Evm as RevmEvm, TxEnv},
+    context::{setters::ContextSetters, BlockEnv, CfgEnv, Evm as RevmEvm, TxEnv},
     context_interface::result::{EVMError, HaltReason, ResultAndState},
     handler::{instructions::EthInstructions, EthPrecompiles, PrecompileProvider},
     inspector::NoOpInspector,
@@ -80,22 +80,6 @@ impl<DB: Database, I, PRECOMPILE> DerefMut for EthEvm<DB, I, PRECOMPILE> {
     }
 }
 
-impl<DB, I, PRECOMPILE> EthEvm<DB, I, PRECOMPILE>
-where
-    DB: Database,
-    I: Inspector<EthEvmContext<DB>>,
-    PRECOMPILE: PrecompileProvider<Context = EthEvmContext<DB>, Output = InterpreterResult>,
-{
-    fn transact(&mut self, tx: TxEnv) -> Result<ResultAndState, EVMError<DB::Error>> {
-        if self.inspect {
-            self.tx = tx;
-            self.inner.inspect_previous()
-        } else {
-            self.inner.transact(tx)
-        }
-    }
-}
-
 impl<DB, I, PRECOMPILE> Evm for EthEvm<DB, I, PRECOMPILE>
 where
     DB: Database,
@@ -112,7 +96,12 @@ where
     }
 
     fn transact(&mut self, tx: Self::Tx) -> Result<ResultAndState, Self::Error> {
-        self.inner.transact(tx)
+        if self.inspect {
+            self.inner.set_tx(tx);
+            self.inner.inspect_previous()
+        } else {
+            self.inner.transact(tx)
+        }
     }
 
     fn transact_system_call(

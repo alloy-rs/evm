@@ -63,24 +63,6 @@ impl<DB: Database, I> DerefMut for OpEvm<DB, I> {
     }
 }
 
-impl<DB, I> OpEvm<DB, I>
-where
-    DB: Database,
-    I: Inspector<OpContext<DB>>,
-{
-    fn transact(
-        &mut self,
-        tx: OpTransaction<TxEnv>,
-    ) -> Result<ResultAndState<OpHaltReason>, EVMError<DB::Error, OpTransactionError>> {
-        if self.inspect {
-            self.inner.set_tx(tx);
-            self.inner.inspect_previous()
-        } else {
-            self.inner.transact(tx)
-        }
-    }
-}
-
 impl<DB, I> Evm for OpEvm<DB, I>
 where
     DB: Database,
@@ -96,7 +78,12 @@ where
     }
 
     fn transact(&mut self, tx: Self::Tx) -> Result<ResultAndState<Self::HaltReason>, Self::Error> {
-        self.inner.transact(tx)
+        if self.inspect {
+            self.inner.set_tx(tx);
+            self.inner.inspect_previous()
+        } else {
+            self.inner.transact(tx)
+        }
     }
 
     fn transact_system_call(
