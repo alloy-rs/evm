@@ -54,5 +54,5 @@ derive_more = { version = "1", default-features = false, features = ["full"] }
 serde = { version = "1", default-features = false, features = ["derive"] }
 
 [patch.crates-io]
-revm = { git = "https://github.com/bluealloy/revm", rev = "a8b9b1e" }
-revm-optimism = { git = "https://github.com/bluealloy/revm", rev = "a8b9b1e" }
+revm = { git = "https://github.com/bluealloy/revm", rev = "a8a9893b" }
+revm-optimism = { git = "https://github.com/bluealloy/revm", rev = "a8a9893b" }
