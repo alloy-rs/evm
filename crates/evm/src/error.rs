@@ -23,13 +23,16 @@ impl InvalidTxError for InvalidTransaction {
 ///
 /// If caller occurs a error different from [`EvmError::InvalidTransaction`], it should most likely
 /// be treated as fatal error flagging some EVM misconfiguration.
-pub trait EvmError: Error + Send + Sync + 'static {
+pub trait EvmError: Sized + Error + Send + Sync + 'static {
     /// Errors which might occur as a result of an invalid transaction. i.e unrelated to general EVM
     /// configuration.
     type InvalidTransaction: InvalidTxError;
 
     /// Returns the [`EvmError::InvalidTransaction`] if the error is an invalid transaction error.
     fn as_invalid_tx_err(&self) -> Option<&Self::InvalidTransaction>;
+
+    /// Attempts to convert the error into [`EvmError::InvalidTransaction`].
+    fn try_into_invalid_tx_err(self) -> Result<Self::InvalidTransaction, Self>;
 
     /// Returns `true` if the error is an invalid transaction error.
     fn is_invalid_tx_err(&self) -> bool {
@@ -48,6 +51,13 @@ where
         match self {
             Self::Transaction(err) => Some(err),
             _ => None,
+        }
+    }
+
+    fn try_into_invalid_tx_err(self) -> Result<Self::InvalidTransaction, Self> {
+        match self {
+            Self::Transaction(err) => Ok(err),
+            err => Err(err),
         }
     }
 }
