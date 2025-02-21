@@ -27,6 +27,10 @@ pub trait Evm {
     /// Database type held by the EVM.
     type DB;
     /// The transaction object that the EVM will execute.
+    ///
+    /// Implementations are expected to rely on a single entrypoint for transaction execution such
+    /// as [`revm::context::TxEnv`]. The actual set of valid inputs is not limited by allowing to
+    /// provide any [`IntoTxEnv`] implementation for [`Evm::transact`] method.
     type Tx;
     /// Error type returned by EVM. Contains either errors related to invalid transactions or
     /// internal irrecoverable execution errors.
