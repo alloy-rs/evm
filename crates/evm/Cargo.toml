@@ -14,10 +14,11 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
+alloy-consensus.workspace = true
 alloy-primitives.workspace = true
+
 revm.workspace = true
 revm-optimism = { workspace = true, optional = true }
-
 
 [features]
 default = ["std"]
