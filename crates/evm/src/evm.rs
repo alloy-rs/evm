@@ -31,7 +31,7 @@ pub trait Evm {
     /// Implementations are expected to rely on a single entrypoint for transaction execution such
     /// as [`revm::context::TxEnv`]. The actual set of valid inputs is not limited by allowing to
     /// provide any [`IntoTxEnv`] implementation for [`Evm::transact`] method.
-    type Tx;
+    type Tx: IntoTxEnv<Self::Tx>;
     /// Error type returned by EVM. Contains either errors related to invalid transactions or
     /// internal irrecoverable execution errors.
     type Error: EvmError;
@@ -99,7 +99,7 @@ pub trait EvmFactory<Input> {
     /// The EVM context for inspectors
     type Context<DB: Database>: ContextTr<Db = DB, Journal: JournalExt>;
     /// Transaction environment.
-    type Tx;
+    type Tx: IntoTxEnv<Self::Tx>;
     /// EVM error. See [`Evm::Error`].
     type Error<DBError: Error + Send + Sync + 'static>: EvmError;
     /// Halt reason. See [`Evm::HaltReason`].
