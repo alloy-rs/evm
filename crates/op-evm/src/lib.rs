@@ -19,23 +19,25 @@ use core::{
 use revm::{
     context::{setters::ContextSetters, BlockEnv, TxEnv},
     context_interface::result::{EVMError, ResultAndState},
-    handler::instructions::EthInstructions,
+    handler::{instructions::EthInstructions, PrecompileProvider},
     inspector::NoOpInspector,
-    interpreter::interpreter::EthInterpreter,
+    interpreter::{interpreter::EthInterpreter, InterpreterResult},
     Context, ExecuteEvm, InspectEvm, Inspector,
 };
 use revm_optimism::{
-    handler::precompiles::OpPrecompileProvider, DefaultOp, OpBuilder, OpContext, OpHaltReason, OpSpecId, OpTransaction, OpTransactionError
+    handler::precompiles::OpPrecompileProvider, DefaultOp, OpBuilder, OpContext, OpHaltReason,
+    OpSpecId, OpTransaction, OpTransactionError,
 };
 
 /// OP EVM implementation.
 #[allow(missing_debug_implementations)] // missing revm::OpContext Debug impl
 pub struct OpEvm<DB: Database, I, P = OpPrecompileProvider<OpContext<DB>>> {
-    inner: revm_optimism::OpEvm<OpContext<DB>, I, EthInstructions<EthInterpreter, OpContext<DB>>, P>,
+    inner:
+        revm_optimism::OpEvm<OpContext<DB>, I, EthInstructions<EthInterpreter, OpContext<DB>>, P>,
     inspect: bool,
 }
 
-impl<DB: Database, I> OpEvm<DB, I> {
+impl<DB: Database, I, P> OpEvm<DB, I, P> {
     /// Provides a reference to the EVM context.
     pub const fn ctx(&self) -> &OpContext<DB> {
         &self.inner.0.data.ctx
@@ -62,7 +64,7 @@ impl<DB: Database, I, P> OpEvm<DB, I, P> {
     }
 }
 
-impl<DB: Database, I> Deref for OpEvm<DB, I> {
+impl<DB: Database, I, P> Deref for OpEvm<DB, I, P> {
     type Target = OpContext<DB>;
 
     #[inline]
@@ -71,17 +73,18 @@ impl<DB: Database, I> Deref for OpEvm<DB, I> {
     }
 }
 
-impl<DB: Database, I> DerefMut for OpEvm<DB, I> {
+impl<DB: Database, I, P> DerefMut for OpEvm<DB, I, P> {
     #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.ctx_mut()
     }
 }
 
-impl<DB, I> Evm for OpEvm<DB, I>
+impl<DB, I, P> Evm for OpEvm<DB, I, P>
 where
     DB: Database,
     I: Inspector<OpContext<DB>>,
+    P: PrecompileProvider<Context = OpContext<DB>, Output = InterpreterResult>,
 {
     type DB = DB;
     type Tx = OpTransaction<TxEnv>;
