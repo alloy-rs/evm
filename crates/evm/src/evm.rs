@@ -1,8 +1,8 @@
 //! Abstraction over EVM.
 
-use crate::{EvmError, IntoTxEnv};
+use crate::{EvmEnv, EvmError, IntoTxEnv};
 use alloy_primitives::{Address, Bytes};
-use core::error::Error;
+use core::{error::Error, fmt::Debug};
 use revm::{
     context::BlockEnv,
     context_interface::{
@@ -39,6 +39,9 @@ pub trait Evm {
     /// it means that transaction is valid, however, it's execution was interrupted (e.g because of
     /// running out of gas or overflowing stack).
     type HaltReason: HaltReasonTr + Send + Sync + 'static;
+    /// Identifier of the EVM specification. EVM is expected to use this identifier to determine
+    /// which features are enabled.
+    type Spec: Debug + Copy + Send + Sync + 'static;
 
     /// Reference to [`BlockEnv`].
     fn block(&self) -> &BlockEnv;
@@ -82,10 +85,31 @@ pub trait Evm {
 
         Ok(result)
     }
+
+    /// Consumes the EVM and returns the inner [`EvmEnv`].
+    fn finish(self) -> (Self::DB, EvmEnv<Self::Spec>)
+    where
+        Self: Sized;
+
+    /// Consumes the EVM and returns the inner database.
+    fn into_db(self) -> Self::DB
+    where
+        Self: Sized,
+    {
+        self.finish().0
+    }
+
+    /// Consumes the EVM and returns the inner [`EvmEnv`].
+    fn into_env(self) -> EvmEnv<Self::Spec>
+    where
+        Self: Sized,
+    {
+        self.finish().1
+    }
 }
 
 /// A type responsible for creating instances of an ethereum virtual machine given a certain input.
-pub trait EvmFactory<Input> {
+pub trait EvmFactory {
     /// The EVM type that this factory creates.
     // TODO: this doesn't quite work because this would force use to use an enum approach for trace
     // evm for example, unless we
@@ -94,6 +118,7 @@ pub trait EvmFactory<Input> {
         Tx = Self::Tx,
         HaltReason = Self::HaltReason,
         Error = Self::Error<DB::Error>,
+        Spec = Self::Spec,
     >;
 
     /// The EVM context for inspectors
@@ -104,15 +129,21 @@ pub trait EvmFactory<Input> {
     type Error<DBError: Error + Send + Sync + 'static>: EvmError;
     /// Halt reason. See [`Evm::HaltReason`].
     type HaltReason: HaltReasonTr + Send + Sync + 'static;
+    /// The EVM specification identifier, see [`Evm::Spec`].
+    type Spec;
 
     /// Creates a new instance of an EVM.
-    fn create_evm<DB: Database>(&self, db: DB, input: Input) -> Self::Evm<DB, NoOpInspector>;
+    fn create_evm<DB: Database>(
+        &self,
+        db: DB,
+        evm_env: EvmEnv<Self::Spec>,
+    ) -> Self::Evm<DB, NoOpInspector>;
 
     /// Creates a new instance of an EVM with an inspector.
     fn create_evm_with_inspector<DB: Database, I: Inspector<Self::Context<DB>>>(
         &self,
         db: DB,
-        input: Input,
+        input: EvmEnv<Self::Spec>,
         inspector: I,
     ) -> Self::Evm<DB, I>;
 }

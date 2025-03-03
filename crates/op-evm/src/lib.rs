@@ -72,6 +72,7 @@ where
     type Tx = OpTransaction<TxEnv>;
     type Error = EVMError<DB::Error, OpTransactionError>;
     type HaltReason = OpHaltReason;
+    type Spec = OpSpecId;
 
     fn block(&self) -> &BlockEnv {
         &self.block
@@ -152,6 +153,12 @@ where
     fn db_mut(&mut self) -> &mut Self::DB {
         &mut self.journaled_state.database
     }
+
+    fn finish(self) -> (Self::DB, EvmEnv<Self::Spec>) {
+        let Context { block: block_env, cfg: cfg_env, journaled_state, .. } = self.inner.0.data.ctx;
+
+        (journaled_state.database, EvmEnv { block_env, cfg_env })
+    }
 }
 
 /// Factory producing [`OpEvm`]s.
@@ -159,13 +166,14 @@ where
 #[non_exhaustive]
 pub struct OpEvmFactory;
 
-impl EvmFactory<EvmEnv<OpSpecId>> for OpEvmFactory {
+impl EvmFactory for OpEvmFactory {
     type Evm<DB: Database, I: Inspector<OpContext<DB>>> = OpEvm<DB, I>;
     type Context<DB: Database> = OpContext<DB>;
     type Tx = OpTransaction<TxEnv>;
     type Error<DBError: core::error::Error + Send + Sync + 'static> =
         EVMError<DBError, OpTransactionError>;
     type HaltReason = OpHaltReason;
+    type Spec = OpSpecId;
 
     fn create_evm<DB: Database>(
         &self,

@@ -13,6 +13,7 @@ use revm::{
     handler::{instructions::EthInstructions, EthPrecompiles, PrecompileProvider},
     inspector::NoOpInspector,
     interpreter::{interpreter::EthInterpreter, InterpreterResult},
+    specification::hardfork::SpecId,
     Context, ExecuteEvm, InspectEvm, Inspector, MainBuilder, MainContext,
 };
 
@@ -90,6 +91,7 @@ where
     type Tx = TxEnv;
     type Error = EVMError<DB::Error>;
     type HaltReason = HaltReason;
+    type Spec = SpecId;
 
     fn block(&self) -> &BlockEnv {
         &self.block
@@ -160,6 +162,12 @@ where
     fn db_mut(&mut self) -> &mut Self::DB {
         &mut self.journaled_state.database
     }
+
+    fn finish(self) -> (Self::DB, EvmEnv<Self::Spec>) {
+        let Context { block: block_env, cfg: cfg_env, journaled_state, .. } = self.inner.data.ctx;
+
+        (journaled_state.database, EvmEnv { block_env, cfg_env })
+    }
 }
 
 /// Factory producing [`EthEvm`].
@@ -167,12 +175,13 @@ where
 #[non_exhaustive]
 pub struct EthEvmFactory;
 
-impl EvmFactory<EvmEnv> for EthEvmFactory {
+impl EvmFactory for EthEvmFactory {
     type Evm<DB: Database, I: Inspector<EthEvmContext<DB>>> = EthEvm<DB, I>;
     type Context<DB: Database> = Context<BlockEnv, TxEnv, CfgEnv, DB>;
     type Tx = TxEnv;
     type Error<DBError: core::error::Error + Send + Sync + 'static> = EVMError<DBError>;
     type HaltReason = HaltReason;
+    type Spec = SpecId;
 
     fn create_evm<DB: Database>(&self, db: DB, input: EvmEnv) -> Self::Evm<DB, NoOpInspector> {
         EthEvm {
