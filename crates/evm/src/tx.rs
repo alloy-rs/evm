@@ -17,7 +17,7 @@ impl IntoTxEnv<Self> for TxEnv {
 }
 
 #[cfg(feature = "op")]
-impl<T: revm::context::Transaction> IntoTxEnv<Self> for revm_optimism::OpTransaction<T> {
+impl<T: revm::context::Transaction> IntoTxEnv<Self> for op_revm::OpTransaction<T> {
     fn into_tx_env(self) -> Self {
         self
     }

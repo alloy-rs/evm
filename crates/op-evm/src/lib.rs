@@ -24,7 +24,7 @@ use revm::{
     interpreter::{interpreter::EthInterpreter, InterpreterResult},
     Context, ExecuteEvm, InspectEvm, Inspector,
 };
-use revm_optimism::{
+use op_revm::{
     handler::precompiles::OpPrecompileProvider, DefaultOp, OpBuilder, OpContext, OpHaltReason,
     OpSpecId, OpTransaction, OpTransactionError,
 };
@@ -33,7 +33,7 @@ use revm_optimism::{
 #[allow(missing_debug_implementations)] // missing revm::OpContext Debug impl
 pub struct OpEvm<DB: Database, I, P = OpPrecompileProvider<OpContext<DB>>> {
     inner:
-        revm_optimism::OpEvm<OpContext<DB>, I, EthInstructions<EthInterpreter, OpContext<DB>>, P>,
+        op_revm::OpEvm<OpContext<DB>, I, EthInstructions<EthInterpreter, OpContext<DB>>, P>,
     inspect: bool,
 }
 
@@ -52,7 +52,7 @@ impl<DB: Database, I, P> OpEvm<DB, I, P> {
 impl<DB: Database, I, P> OpEvm<DB, I, P> {
     /// Creates a new OP EVM instance.
     pub const fn new(
-        evm: revm_optimism::OpEvm<
+        evm: op_revm::OpEvm<
             OpContext<DB>,
             I,
             EthInstructions<EthInterpreter, OpContext<DB>>,

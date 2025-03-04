@@ -18,7 +18,7 @@ alloy-consensus.workspace = true
 alloy-primitives.workspace = true
 
 revm.workspace = true
-revm-optimism = { workspace = true, optional = true }
+op-revm = { workspace = true, optional = true }
 
 [features]
 default = ["std"]
@@ -26,4 +26,4 @@ std = [
 	"alloy-primitives/std",
 	"revm/std"
 ]
-op = ["revm-optimism"]
+op = ["op-revm"]
