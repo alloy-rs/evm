@@ -4,7 +4,7 @@ use crate::{EvmError, IntoTxEnv};
 use alloy_primitives::{Address, Bytes};
 use core::error::Error;
 use revm::{
-    context::BlockEnv,
+    context::{result::ExecutionResult, BlockEnv},
     context_interface::{
         result::{HaltReasonTr, ResultAndState},
         ContextTr,
@@ -73,12 +73,12 @@ pub trait Evm {
     fn transact_commit(
         &mut self,
         tx: impl IntoTxEnv<Self::Tx>,
-    ) -> Result<ResultAndState<Self::HaltReason>, Self::Error>
+    ) -> Result<ExecutionResult<Self::HaltReason>, Self::Error>
     where
         Self::DB: DatabaseCommit,
     {
-        let result = self.transact(tx)?;
-        self.db_mut().commit(result.state.clone());
+        let ResultAndState { result, state } = self.transact(tx)?;
+        self.db_mut().commit(state);
 
         Ok(result)
     }
