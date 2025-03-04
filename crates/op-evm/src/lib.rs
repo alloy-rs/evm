@@ -16,6 +16,10 @@ use core::{
     fmt::Debug,
     ops::{Deref, DerefMut},
 };
+use op_revm::{
+    handler::precompiles::OpPrecompileProvider, DefaultOp, OpBuilder, OpContext, OpHaltReason,
+    OpSpecId, OpTransaction, OpTransactionError,
+};
 use revm::{
     context::{setters::ContextSetters, BlockEnv, TxEnv},
     context_interface::result::{EVMError, ResultAndState},
@@ -24,16 +28,11 @@ use revm::{
     interpreter::{interpreter::EthInterpreter, InterpreterResult},
     Context, ExecuteEvm, InspectEvm, Inspector,
 };
-use op_revm::{
-    handler::precompiles::OpPrecompileProvider, DefaultOp, OpBuilder, OpContext, OpHaltReason,
-    OpSpecId, OpTransaction, OpTransactionError,
-};
 
 /// OP EVM implementation.
 #[allow(missing_debug_implementations)] // missing revm::OpContext Debug impl
 pub struct OpEvm<DB: Database, I, P = OpPrecompileProvider<OpContext<DB>>> {
-    inner:
-        op_revm::OpEvm<OpContext<DB>, I, EthInstructions<EthInterpreter, OpContext<DB>>, P>,
+    inner: op_revm::OpEvm<OpContext<DB>, I, EthInstructions<EthInterpreter, OpContext<DB>>, P>,
     inspect: bool,
 }
 
@@ -52,12 +51,7 @@ impl<DB: Database, I, P> OpEvm<DB, I, P> {
 impl<DB: Database, I, P> OpEvm<DB, I, P> {
     /// Creates a new OP EVM instance.
     pub const fn new(
-        evm: op_revm::OpEvm<
-            OpContext<DB>,
-            I,
-            EthInstructions<EthInterpreter, OpContext<DB>>,
-            P,
-        >,
+        evm: op_revm::OpEvm<OpContext<DB>, I, EthInstructions<EthInterpreter, OpContext<DB>>, P>,
         inspect: bool,
     ) -> Self {
         Self { inner: evm, inspect }
