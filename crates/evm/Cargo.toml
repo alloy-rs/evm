@@ -15,10 +15,13 @@ workspace = true
 
 [dependencies]
 alloy-consensus.workspace = true
+alloy-eips.workspace = true
 alloy-primitives.workspace = true
 
 revm.workspace = true
 op-revm = { workspace = true, optional = true }
+
+thiserror.workspace = true
 
 [features]
 default = ["std"]

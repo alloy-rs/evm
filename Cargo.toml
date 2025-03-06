@@ -52,6 +52,7 @@ op-revm = { version = "1.0.0-alpha.1", default-features = false }
 # misc
 derive_more = { version = "1", default-features = false, features = ["full"] }
 serde = { version = "1", default-features = false, features = ["derive"] }
+thiserror = { version = "2.0.0", default-features = false }
 
 [patch.crates-io]
 revm = { git = "https://github.com/bluealloy/revm", rev = "19a5f3b" }
