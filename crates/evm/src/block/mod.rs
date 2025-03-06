@@ -12,7 +12,7 @@ pub use error::*;
 mod state_hook;
 pub use state_hook::*;
 
-mod system_calls;
+pub mod system_calls;
 pub use system_calls::*;
 
 pub mod state_changes;
