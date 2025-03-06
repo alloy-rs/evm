@@ -1,4 +1,4 @@
-//! Ethereum block execution strategy.
+//! Ethereum block executor.
 
 use super::{
     dao_fork, eip6110,
@@ -44,7 +44,7 @@ pub struct EthBlockExecutor<'a, E: Evm, Spec, R: ReceiptBuilder<E>> {
 
     /// Context for block execution.
     pub ctx: EthBlockExecutionCtx<'a>,
-    /// The EVM used by strategy.
+    /// Inner EVM.
     evm: E,
     /// Utility to call system smart contracts.
     system_caller: SystemCaller<Spec>,
@@ -63,7 +63,7 @@ where
     E: Evm,
     R: ReceiptBuilder<E>,
 {
-    /// Creates a new [`EthExecutionStrategy`]
+    /// Creates a new [`EthBlockExecutor`]
     pub fn new(evm: E, ctx: EthBlockExecutionCtx<'a>, spec: Spec, receipt_builder: R) -> Self {
         Self {
             evm,
