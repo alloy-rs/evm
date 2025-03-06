@@ -1,11 +1,11 @@
 //! State changes that are not related to transactions.
 
+use super::calc;
 use alloy_consensus::BlockHeader;
 use alloy_eips::eip4895::{Withdrawal, Withdrawals};
 use alloy_hardforks::EthereumHardforks;
 use alloy_primitives::{map::HashMap, Address};
 use revm::context::BlockEnv;
-use super::calc;
 
 /// Collect all balance changes at the end of the block.
 ///

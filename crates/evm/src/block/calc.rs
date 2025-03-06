@@ -58,8 +58,8 @@ pub fn base_block_reward_pre_merge(
 /// # Examples
 ///
 /// ```
-/// # use reth_chainspec::MAINNET;
-/// # use reth_consensus_common::calc::{base_block_reward, block_reward};
+/// # use alloy_hardforks::EthereumChainHardforks;
+/// # use alloy_evm::block::calc::{base_block_reward, block_reward};
 /// # use alloy_consensus::constants::ETH_TO_WEI;
 /// # use alloy_primitives::U256;
 /// #
@@ -67,7 +67,8 @@ pub fn base_block_reward_pre_merge(
 /// let block_number = 126;
 /// let number_of_ommers = 1;
 ///
-/// let reward = base_block_reward(&*MAINNET, block_number).map(|reward| block_reward(reward, 1));
+/// let reward = base_block_reward(EthereumChainHardforks::mainnet(), block_number)
+///     .map(|reward| block_reward(reward, 1));
 ///
 /// // The base block reward is 5 ETH, and the ommer inclusion reward is 1/32th of 5 ETH.
 /// assert_eq!(reward.unwrap(), ETH_TO_WEI * 5 + ((ETH_TO_WEI * 5) >> 5));
