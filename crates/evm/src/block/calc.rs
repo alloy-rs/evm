@@ -110,3 +110,49 @@ pub const fn ommer_reward(
 ) -> u128 {
     ((8 + ommer_block_number - block_number) as u128 * base_block_reward) >> 3
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use alloy_hardforks::EthereumChainHardforks;
+    use alloy_primitives::U256;
+
+    #[test]
+    fn calc_base_block_reward() {
+        // ((block number, td), reward)
+        let cases = [
+            // Pre-byzantium
+            ((0, U256::ZERO), Some(ETH_TO_WEI * 5)),
+            // Byzantium
+            ((4370000, U256::ZERO), Some(ETH_TO_WEI * 3)),
+            // Petersburg
+            ((7280000, U256::ZERO), Some(ETH_TO_WEI * 2)),
+            // Merge
+            ((15537394, U256::from(58_750_000_000_000_000_000_000_u128)), None),
+        ];
+
+        for ((block_number, _td), expected_reward) in cases {
+            assert_eq!(
+                base_block_reward(EthereumChainHardforks::mainnet(), block_number),
+                expected_reward
+            );
+        }
+    }
+
+    #[test]
+    fn calc_full_block_reward() {
+        let base_reward = ETH_TO_WEI;
+        let one_thirty_twoth_reward = base_reward >> 5;
+
+        // (num_ommers, reward)
+        let cases = [
+            (0, base_reward),
+            (1, base_reward + one_thirty_twoth_reward),
+            (2, base_reward + one_thirty_twoth_reward * 2),
+        ];
+
+        for (num_ommers, expected_reward) in cases {
+            assert_eq!(block_reward(base_reward, num_ommers), expected_reward);
+        }
+    }
+}
