@@ -4,7 +4,7 @@ use crate::{
     block::{BlockExecutionError, OnStateHook},
     Evm,
 };
-use alloc::boxed::Box;
+use alloc::{borrow::Cow, boxed::Box};
 use alloy_consensus::BlockHeader;
 use alloy_eips::{
     eip7002::WITHDRAWAL_REQUEST_TYPE, eip7251::CONSOLIDATION_REQUEST_TYPE, eip7685::Requests,
@@ -183,11 +183,11 @@ where
     /// Invokes the state hook with the outcome of the given closure.
     pub fn on_state_with<'a, F>(&mut self, f: F)
     where
-        F: FnOnce() -> (StateChangeSource, &'a EvmState),
+        F: FnOnce() -> (StateChangeSource, Cow<'a, EvmState>),
     {
         self.invoke_hook_with(|hook| {
             let (source, state) = f();
-            hook.on_state(source, state);
+            hook.on_state(source, &state);
         });
     }
 
