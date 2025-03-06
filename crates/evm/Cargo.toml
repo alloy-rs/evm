@@ -14,13 +14,15 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
+alloy-primitives.workspace = true
 alloy-consensus.workspace = true
 alloy-eips.workspace = true
-alloy-primitives.workspace = true
+alloy-hardforks.workspace = true
 
 revm.workspace = true
 op-revm = { workspace = true, optional = true }
 
+derive_more.workspace = true
 thiserror.workspace = true
 
 [features]
