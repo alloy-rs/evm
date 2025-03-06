@@ -113,9 +113,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::eth::spec::EthSpec;
-
     use super::*;
+    use crate::eth::spec::EthSpec;
+    use alloc::vec;
     use alloy_consensus::Receipt;
     use alloy_primitives::{b256, bytes};
 

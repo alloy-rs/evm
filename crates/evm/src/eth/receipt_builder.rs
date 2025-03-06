@@ -30,7 +30,7 @@ pub trait ReceiptBuilder<E: Evm> {
     type Receipt;
 
     /// Builds a receipt given a transaction and the result of the execution.
-    fn build_receipt<'a>(&self, ctx: ReceiptBuilderCtx<'a, Self::Transaction, E>) -> Self::Receipt;
+    fn build_receipt(&self, ctx: ReceiptBuilderCtx<'_, Self::Transaction, E>) -> Self::Receipt;
 }
 
 /// Receipt builder operating on Alloy types.
@@ -42,7 +42,7 @@ impl<E: Evm> ReceiptBuilder<E> for AlloyReceiptBuilder {
     type Transaction = TxEnvelope;
     type Receipt = ReceiptEnvelope;
 
-    fn build_receipt<'a>(&self, ctx: ReceiptBuilderCtx<'a, TxEnvelope, E>) -> Self::Receipt {
+    fn build_receipt(&self, ctx: ReceiptBuilderCtx<'_, TxEnvelope, E>) -> Self::Receipt {
         let receipt = alloy_consensus::Receipt {
             status: Eip658Value::Eip658(ctx.result.is_success()),
             cumulative_gas_used: ctx.cumulative_gas_used,

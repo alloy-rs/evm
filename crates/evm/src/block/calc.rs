@@ -23,10 +23,7 @@ use alloy_primitives::BlockNumber;
 /// - Definition: [Yellow Paper][yp] (page 15, 11.3)
 ///
 /// [yp]: https://ethereum.github.io/yellowpaper/paper.pdf
-pub fn base_block_reward(
-    spec: impl EthereumHardforks,
-    block_number: BlockNumber,
-) -> Option<u128> {
+pub fn base_block_reward(spec: impl EthereumHardforks, block_number: BlockNumber) -> Option<u128> {
     if spec.is_paris_active_at_block(block_number) {
         None
     } else {
