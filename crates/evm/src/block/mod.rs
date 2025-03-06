@@ -1,6 +1,7 @@
 //! Block execution abstraction.
 
 use crate::Evm;
+use alloc::{boxed::Box, vec::Vec};
 use alloy_consensus::transaction::Recovered;
 use alloy_eips::eip7685::Requests;
 use revm::context::result::ExecutionResult;
