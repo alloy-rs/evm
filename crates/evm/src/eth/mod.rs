@@ -17,6 +17,14 @@ use revm::{
     Context, ExecuteEvm, InspectEvm, Inspector, MainBuilder, MainContext,
 };
 
+mod block;
+pub use block::*;
+
+pub mod dao_fork;
+pub mod eip6110;
+pub mod receipt_builder;
+pub mod spec;
+
 /// The Ethereum EVM context type.
 pub type EthEvmContext<DB> = Context<BlockEnv, TxEnv, CfgEnv, DB>;
 

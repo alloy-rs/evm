@@ -24,13 +24,13 @@ use alloy_primitives::BlockNumber;
 ///
 /// [yp]: https://ethereum.github.io/yellowpaper/paper.pdf
 pub fn base_block_reward(
-    chain_spec: impl EthereumHardforks,
+    spec: impl EthereumHardforks,
     block_number: BlockNumber,
 ) -> Option<u128> {
-    if chain_spec.is_paris_active_at_block(block_number) {
+    if spec.is_paris_active_at_block(block_number) {
         None
     } else {
-        Some(base_block_reward_pre_merge(chain_spec, block_number))
+        Some(base_block_reward_pre_merge(spec, block_number))
     }
 }
 
@@ -38,12 +38,12 @@ pub fn base_block_reward(
 ///
 /// Caution: The caller must ensure that the block number is before the merge.
 pub fn base_block_reward_pre_merge(
-    chain_spec: impl EthereumHardforks,
+    spec: impl EthereumHardforks,
     block_number: BlockNumber,
 ) -> u128 {
-    if chain_spec.is_constantinople_active_at_block(block_number) {
+    if spec.is_constantinople_active_at_block(block_number) {
         ETH_TO_WEI * 2
-    } else if chain_spec.is_byzantium_active_at_block(block_number) {
+    } else if spec.is_byzantium_active_at_block(block_number) {
         ETH_TO_WEI * 3
     } else {
         ETH_TO_WEI * 5

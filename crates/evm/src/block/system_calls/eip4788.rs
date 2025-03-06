@@ -21,11 +21,11 @@ use revm::context_interface::result::ResultAndState;
 /// [EIP-4788]: https://eips.ethereum.org/EIPS/eip-4788
 #[inline]
 pub(crate) fn transact_beacon_root_contract_call<Halt>(
-    chain_spec: impl EthereumHardforks,
+    spec: impl EthereumHardforks,
     parent_beacon_block_root: Option<B256>,
     evm: &mut impl Evm<HaltReason = Halt>,
 ) -> Result<Option<ResultAndState<Halt>>, BlockExecutionError> {
-    if !chain_spec.is_cancun_active_at_timestamp(evm.block().timestamp) {
+    if !spec.is_cancun_active_at_timestamp(evm.block().timestamp) {
         return Ok(None);
     }
 

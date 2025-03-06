@@ -24,11 +24,11 @@ use revm::context_interface::result::ResultAndState;
 /// [EIP-2935]: https://eips.ethereum.org/EIPS/eip-2935
 #[inline]
 pub(crate) fn transact_blockhashes_contract_call<Halt>(
-    chain_spec: impl EthereumHardforks,
+    spec: impl EthereumHardforks,
     parent_block_hash: B256,
     evm: &mut impl Evm<HaltReason = Halt>,
 ) -> Result<Option<ResultAndState<Halt>>, BlockExecutionError> {
-    if !chain_spec.is_prague_active_at_timestamp(evm.block().timestamp) {
+    if !spec.is_prague_active_at_timestamp(evm.block().timestamp) {
         return Ok(None);
     }
 
