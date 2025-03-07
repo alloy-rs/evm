@@ -119,7 +119,7 @@ where
 
         // Execute transaction.
         let result_and_state =
-            self.evm.transact(&tx).map_err(|err| BlockExecutionError::evm(err, tx.trie_hash()))?;
+            self.evm.transact(tx).map_err(|err| BlockExecutionError::evm(err, tx.trie_hash()))?;
         self.system_caller
             .on_state(StateChangeSource::Transaction(self.receipts.len()), &result_and_state.state);
         let ResultAndState { result, state } = result_and_state;
