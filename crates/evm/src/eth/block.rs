@@ -7,14 +7,13 @@ use super::{
     EthEvmFactory,
 };
 use crate::{
-    Database,
     block::{
         state_changes::{balance_increment_state, post_block_balance_increments},
         BlockExecutionError, BlockExecutionResult, BlockExecutor, BlockExecutorFactory,
         BlockExecutorFor, BlockValidationError, OnStateHook, StateChangePostBlockSource,
         StateChangeSource, SystemCaller,
     },
-    Evm, FromRecoveredTx,
+    Database, Evm, FromRecoveredTx,
 };
 use alloc::{borrow::Cow, boxed::Box, vec::Vec};
 use alloy_consensus::{transaction::Recovered, Header, Transaction, TxReceipt};
@@ -227,7 +226,8 @@ where
 
 impl<R, Spec> BlockExecutorFactory for EthEvmFactory<R, Spec>
 where
-    R: ReceiptBuilder<Transaction: Transaction + Encodable2718, Receipt: TxReceipt<Log = Log>> + 'static,
+    R: ReceiptBuilder<Transaction: Transaction + Encodable2718, Receipt: TxReceipt<Log = Log>>
+        + 'static,
     Spec: EthExecutorSpec + 'static,
     Self::Tx: FromRecoveredTx<R::Transaction>,
 {

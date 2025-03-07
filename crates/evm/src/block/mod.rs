@@ -1,11 +1,11 @@
 //! Block execution abstraction.
 
-use crate::{Evm, EvmFactory, Database};
+use crate::{Database, Evm, EvmFactory};
 use alloc::{boxed::Box, vec::Vec};
 use alloy_consensus::transaction::Recovered;
 use alloy_eips::eip7685::Requests;
 use revm::{
-    context::result::ExecutionResult, database::State, inspector::NoOpInspector, Inspector
+    context::result::ExecutionResult, database::State, inspector::NoOpInspector, Inspector,
 };
 
 mod error;
