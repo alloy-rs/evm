@@ -25,5 +25,6 @@ default = ["std"]
 std = [
 	"alloy-primitives/std",
 	"revm/std",
-	"alloy-evm/std"
+	"alloy-evm/std",
+	"op-revm/std"
 ]

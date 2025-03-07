@@ -28,6 +28,7 @@ derive_more.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
+alloy-evm = { workspace = true, features = ["std"] }
 alloy-primitives = { workspace = true, features = ["serde"] }
 serde_json.workspace = true
 
@@ -35,6 +36,13 @@ serde_json.workspace = true
 default = ["std"]
 std = [
 	"alloy-primitives/std",
-	"revm/std"
+	"revm/std",
+	"alloy-consensus/std",
+	"alloy-eips/std",
+	"alloy-evm/std",
+	"alloy-sol-types/std",
+	"derive_more/std",
+	"op-revm?/std",
+	"thiserror/std"
 ]
 op = ["op-revm"]
