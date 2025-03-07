@@ -46,7 +46,7 @@ impl<T, TxEnv: FromRecoveredTx<T>> IntoTxEnv<TxEnv> for Recovered<T> {
 
 impl<T, TxEnv: FromRecoveredTx<T>> IntoTxEnv<TxEnv> for &Recovered<T> {
     fn into_tx_env(self) -> TxEnv {
-        TxEnv::from_recovered_tx(self.tx(), self.signer())
+        TxEnv::from_recovered_tx(self.inner(), self.signer())
     }
 }
 
