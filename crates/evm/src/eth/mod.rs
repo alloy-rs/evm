@@ -7,6 +7,7 @@ use core::{
     fmt::Debug,
     ops::{Deref, DerefMut},
 };
+use receipt_builder::AlloyReceiptBuilder;
 use revm::{
     context::{setters::ContextSetters, BlockEnv, CfgEnv, Evm as RevmEvm, TxEnv},
     context_interface::result::{EVMError, HaltReason, ResultAndState},
@@ -16,6 +17,7 @@ use revm::{
     specification::hardfork::SpecId,
     Context, ExecuteEvm, InspectEvm, Inspector, MainBuilder, MainContext,
 };
+use spec::EthSpec;
 
 mod block;
 pub use block::*;
@@ -181,9 +183,14 @@ where
 /// Factory producing [`EthEvm`].
 #[derive(Debug, Default, Clone, Copy)]
 #[non_exhaustive]
-pub struct EthEvmFactory;
+pub struct EthEvmFactory<R = AlloyReceiptBuilder, Spec = EthSpec> {
+    /// Receipt builder.
+    receipt_builder: R,
+    /// Chain specification.
+    spec: Spec,
+}
 
-impl EvmFactory for EthEvmFactory {
+impl<R, Spec> EvmFactory for EthEvmFactory<R, Spec> {
     type Evm<DB: Database, I: Inspector<EthEvmContext<DB>>> = EthEvm<DB, I>;
     type Context<DB: Database> = Context<BlockEnv, TxEnv, CfgEnv, DB>;
     type Tx = TxEnv;

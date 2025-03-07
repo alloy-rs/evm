@@ -23,14 +23,17 @@ pub struct ReceiptBuilderCtx<'a, T, E: Evm> {
 
 /// Type that knows how to build a receipt based on execution result.
 #[auto_impl::auto_impl(&, Arc)]
-pub trait ReceiptBuilder<E: Evm> {
+pub trait ReceiptBuilder {
     /// Transaction type.
     type Transaction;
     /// Receipt type.
     type Receipt;
 
     /// Builds a receipt given a transaction and the result of the execution.
-    fn build_receipt(&self, ctx: ReceiptBuilderCtx<'_, Self::Transaction, E>) -> Self::Receipt;
+    fn build_receipt<E: Evm>(
+        &self,
+        ctx: ReceiptBuilderCtx<'_, Self::Transaction, E>,
+    ) -> Self::Receipt;
 }
 
 /// Receipt builder operating on Alloy types.
@@ -38,11 +41,11 @@ pub trait ReceiptBuilder<E: Evm> {
 #[non_exhaustive]
 pub struct AlloyReceiptBuilder;
 
-impl<E: Evm> ReceiptBuilder<E> for AlloyReceiptBuilder {
+impl ReceiptBuilder for AlloyReceiptBuilder {
     type Transaction = TxEnvelope;
     type Receipt = ReceiptEnvelope;
 
-    fn build_receipt(&self, ctx: ReceiptBuilderCtx<'_, TxEnvelope, E>) -> Self::Receipt {
+    fn build_receipt<E: Evm>(&self, ctx: ReceiptBuilderCtx<'_, TxEnvelope, E>) -> Self::Receipt {
         let receipt = alloy_consensus::Receipt {
             status: Eip658Value::Eip658(ctx.result.is_success()),
             cumulative_gas_used: ctx.cumulative_gas_used,

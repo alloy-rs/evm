@@ -1,10 +1,12 @@
 //! Block execution abstraction.
 
-use crate::Evm;
+use crate::{Evm, EvmFactory, Database};
 use alloc::{boxed::Box, vec::Vec};
 use alloy_consensus::transaction::Recovered;
 use alloy_eips::eip7685::Requests;
-use revm::context::result::ExecutionResult;
+use revm::{
+    context::result::ExecutionResult, database::State, inspector::NoOpInspector, Inspector
+};
 
 mod error;
 pub use error::*;
@@ -30,7 +32,7 @@ pub struct BlockExecutionResult<T> {
     pub gas_used: u64,
 }
 
-/// A type that knows how to execute g a single block.
+/// A type that knows how to execute a single block.
 ///
 /// The current abstraction assumes that block execution consists of the following steps:
 /// 1. Apply pre-execution changes. Those might include system calls, irregular state transitions
@@ -101,4 +103,65 @@ pub trait BlockExecutor {
 
     /// Exposes mutable reference to EVM.
     fn evm_mut(&mut self) -> &mut Self::Evm;
+}
+
+/// A helper trait encapsulating the constraints on [`BlockExecutor`] produced by the
+/// [`BlockExecutorFactory`] to avoid duplicating them in every implementation.
+pub trait BlockExecutorFor<'a, F: BlockExecutorFactory + ?Sized, DB, I = NoOpInspector>
+where
+    Self: BlockExecutor<
+        Evm = F::Evm<&'a mut State<DB>, I>,
+        Transaction = F::Transaction,
+        Receipt = F::Receipt,
+    >,
+    DB: Database + 'a,
+    I: Inspector<F::Context<&'a mut State<DB>>> + 'a,
+{
+}
+
+impl<'a, F, DB, I, T> BlockExecutorFor<'a, F, DB, I> for T
+where
+    F: BlockExecutorFactory,
+    DB: Database + 'a,
+    I: Inspector<F::Context<&'a mut State<DB>>> + 'a,
+    T: BlockExecutor<
+        Evm = F::Evm<&'a mut State<DB>, I>,
+        Transaction = F::Transaction,
+        Receipt = F::Receipt,
+    >,
+{
+}
+
+/// A factory that can create [`BlockExecutor`]s.
+///
+/// This trait extends [`crate::EvmFactory`] and provides a way to construct a [`BlockExecutor`].
+/// Executor is expected to derive most of the context for block execution from the EVM (which
+/// includes [`revm::context::BlockEnv`]), and any additional context should be contained in
+/// configured [`ExecutionCtx`].
+///
+/// For more context on the executor design, see the documentation for [`BlockExecutor`].
+///
+/// [`ExecutionCtx`]: BlockExecutorFactory::ExecutionCtx
+pub trait BlockExecutorFactory: EvmFactory + 'static {
+    /// Context required for block execution.
+    ///
+    /// This is similar to [`crate::EvmEnv`], but only contains context unrelated to EVM and
+    /// required for execution of an entire block.
+    type ExecutionCtx<'a>: Clone;
+
+    /// Transaction type used by the executor, see [`BlockExecutor::Transaction`].
+    type Transaction;
+
+    /// Receipt type produced by the executor, see [`BlockExecutor::Receipt`].
+    type Receipt;
+
+    /// Creates an executor with given EVM and execution context.
+    fn create_executor<'a, DB, I>(
+        &'a self,
+        evm: Self::Evm<&'a mut State<DB>, I>,
+        ctx: Self::ExecutionCtx<'a>,
+    ) -> impl BlockExecutorFor<'a, Self, DB, I>
+    where
+        DB: Database + 'a,
+        I: Inspector<Self::Context<&'a mut State<DB>>> + 'a;
 }

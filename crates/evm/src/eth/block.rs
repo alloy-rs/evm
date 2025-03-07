@@ -4,12 +4,15 @@ use super::{
     dao_fork, eip6110,
     receipt_builder::{ReceiptBuilder, ReceiptBuilderCtx},
     spec::EthExecutorSpec,
+    EthEvmFactory,
 };
 use crate::{
+    Database,
     block::{
         state_changes::{balance_increment_state, post_block_balance_increments},
-        BlockExecutionError, BlockExecutionResult, BlockExecutor, BlockValidationError,
-        OnStateHook, StateChangePostBlockSource, StateChangeSource, SystemCaller,
+        BlockExecutionError, BlockExecutionResult, BlockExecutor, BlockExecutorFactory,
+        BlockExecutorFor, BlockValidationError, OnStateHook, StateChangePostBlockSource,
+        StateChangeSource, SystemCaller,
     },
     Evm, FromRecoveredTx,
 };
@@ -20,7 +23,7 @@ use alloy_hardforks::EthereumHardfork;
 use alloy_primitives::{Log, B256};
 use revm::{
     context::result::ExecutionResult, context_interface::result::ResultAndState, database::State,
-    Database, DatabaseCommit,
+    DatabaseCommit, Inspector,
 };
 
 /// Context for Ethereum block execution.
@@ -38,14 +41,14 @@ pub struct EthBlockExecutionCtx<'a> {
 
 /// Block executor for Ethereum.
 #[derive(Debug)]
-pub struct EthBlockExecutor<'a, E: Evm, Spec, R: ReceiptBuilder<E>> {
+pub struct EthBlockExecutor<'a, Evm, Spec, R: ReceiptBuilder> {
     /// Reference to the specification object.
     spec: Spec,
 
     /// Context for block execution.
     pub ctx: EthBlockExecutionCtx<'a>,
     /// Inner EVM.
-    evm: E,
+    evm: Evm,
     /// Utility to call system smart contracts.
     system_caller: SystemCaller<Spec>,
     /// Receipt builder.
@@ -57,14 +60,13 @@ pub struct EthBlockExecutor<'a, E: Evm, Spec, R: ReceiptBuilder<E>> {
     gas_used: u64,
 }
 
-impl<'a, E, Spec, R> EthBlockExecutor<'a, E, Spec, R>
+impl<'a, Evm, Spec, R> EthBlockExecutor<'a, Evm, Spec, R>
 where
     Spec: Clone,
-    E: Evm,
-    R: ReceiptBuilder<E>,
+    R: ReceiptBuilder,
 {
     /// Creates a new [`EthBlockExecutor`]
-    pub fn new(evm: E, ctx: EthBlockExecutionCtx<'a>, spec: Spec, receipt_builder: R) -> Self {
+    pub fn new(evm: Evm, ctx: EthBlockExecutionCtx<'a>, spec: Spec, receipt_builder: R) -> Self {
         Self {
             evm,
             ctx,
@@ -82,7 +84,7 @@ where
     DB: Database + 'db,
     E: Evm<DB = &'db mut State<DB>, Tx: FromRecoveredTx<R::Transaction>>,
     Spec: EthExecutorSpec,
-    R: ReceiptBuilder<E, Transaction: Transaction + Encodable2718, Receipt: TxReceipt<Log = Log>>,
+    R: ReceiptBuilder<Transaction: Transaction + Encodable2718, Receipt: TxReceipt<Log = Log>>,
 {
     type Transaction = R::Transaction;
     type Receipt = R::Receipt;
@@ -220,5 +222,28 @@ where
 
     fn evm_mut(&mut self) -> &mut Self::Evm {
         &mut self.evm
+    }
+}
+
+impl<R, Spec> BlockExecutorFactory for EthEvmFactory<R, Spec>
+where
+    R: ReceiptBuilder<Transaction: Transaction + Encodable2718, Receipt: TxReceipt<Log = Log>> + 'static,
+    Spec: EthExecutorSpec + 'static,
+    Self::Tx: FromRecoveredTx<R::Transaction>,
+{
+    type ExecutionCtx<'a> = EthBlockExecutionCtx<'a>;
+    type Transaction = R::Transaction;
+    type Receipt = R::Receipt;
+
+    fn create_executor<'a, DB, I>(
+        &'a self,
+        evm: Self::Evm<&'a mut State<DB>, I>,
+        ctx: Self::ExecutionCtx<'a>,
+    ) -> impl BlockExecutorFor<'a, Self, DB, I>
+    where
+        DB: Database + 'a,
+        I: Inspector<Self::Context<&'a mut State<DB>>> + 'a,
+    {
+        EthBlockExecutor::new(evm, ctx, &self.spec, &self.receipt_builder)
     }
 }
