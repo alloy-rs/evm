@@ -181,7 +181,8 @@ where
     {
         self.invoke_hook_with(|hook| {
             let (source, state) = f()?;
-            Ok(hook.on_state(source, &state))
+            hook.on_state(source, &state);
+            Ok(())
         })
         .unwrap_or(Ok(()))
     }
