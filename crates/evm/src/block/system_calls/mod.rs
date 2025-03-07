@@ -43,9 +43,6 @@ impl<Spec> SystemCaller<Spec> {
         self.hook = hook;
         self
     }
-
-    /// Convenience method to consume the type and drop borrowed fields
-    pub fn finish(self) {}
 }
 
 impl<Spec> SystemCaller<Spec>
@@ -175,6 +172,18 @@ where
         if let Some(hook) = &mut self.hook {
             hook.on_state(source, state);
         }
+    }
+
+    /// Invokes the state hook with the outcome of the given closure, forwards error if any.
+    pub fn try_on_state_with<'a, F, E>(&mut self, f: F) -> Result<(), E>
+    where
+        F: FnOnce() -> Result<(StateChangeSource, Cow<'a, EvmState>), E>,
+    {
+        self.invoke_hook_with(|hook| {
+            let (source, state) = f()?;
+            Ok(hook.on_state(source, &state))
+        })
+        .unwrap_or(Ok(()))
     }
 
     /// Invokes the state hook with the outcome of the given closure.

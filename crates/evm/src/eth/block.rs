@@ -197,12 +197,16 @@ where
             .db_mut()
             .increment_balances(balance_increments.clone())
             .map_err(|_| BlockValidationError::IncrementBalanceFailed)?;
+
         // call state hook with changes due to balance increments.
-        let balance_state = balance_increment_state(&balance_increments, self.evm.db_mut())?;
-        self.system_caller.on_state(
-            StateChangeSource::PostBlock(StateChangePostBlockSource::BalanceIncrements),
-            &balance_state,
-        );
+        self.system_caller.try_on_state_with(|| {
+            balance_increment_state(&balance_increments, self.evm.db_mut()).map(|state| {
+                (
+                    StateChangeSource::PostBlock(StateChangePostBlockSource::BalanceIncrements),
+                    Cow::Owned(state),
+                )
+            })
+        })?;
 
         Ok((
             self.evm,
