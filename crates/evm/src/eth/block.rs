@@ -2,8 +2,8 @@
 
 use super::{
     dao_fork, eip6110,
-    receipt_builder::{ReceiptBuilder, ReceiptBuilderCtx},
-    spec::EthExecutorSpec,
+    receipt_builder::{AlloyReceiptBuilder, ReceiptBuilder, ReceiptBuilderCtx},
+    spec::{EthExecutorSpec, EthSpec},
     EthEvmFactory,
 };
 use crate::{
@@ -13,7 +13,7 @@ use crate::{
         BlockExecutorFor, BlockValidationError, OnStateHook, StateChangePostBlockSource,
         StateChangeSource, SystemCaller,
     },
-    Database, Evm, FromRecoveredTx,
+    Database, Evm, EvmFactory, FromRecoveredTx,
 };
 use alloc::{borrow::Cow, boxed::Box, vec::Vec};
 use alloy_consensus::{transaction::Recovered, Header, Transaction, TxReceipt};
@@ -224,25 +224,45 @@ where
     }
 }
 
-impl<R, Spec> BlockExecutorFactory for EthEvmFactory<R, Spec>
+/// Ethereum block executor factory.
+#[derive(Debug, Clone, Default, Copy)]
+pub struct EthBlockExecutorFactory<
+    R = AlloyReceiptBuilder,
+    Spec = EthSpec,
+    EvmFactory = EthEvmFactory,
+> {
+    /// Receipt builder.
+    receipt_builder: R,
+    /// Chain specification.
+    spec: Spec,
+    /// EVM factory.
+    evm_factory: EvmFactory,
+}
+
+impl<R, Spec, EvmF> BlockExecutorFactory for EthBlockExecutorFactory<R, Spec, EvmF>
 where
-    R: ReceiptBuilder<Transaction: Transaction + Encodable2718, Receipt: TxReceipt<Log = Log>>
-        + 'static,
-    Spec: EthExecutorSpec + 'static,
-    Self::Tx: FromRecoveredTx<R::Transaction>,
+    R: ReceiptBuilder<Transaction: Transaction + Encodable2718, Receipt: TxReceipt<Log = Log>>,
+    Spec: EthExecutorSpec,
+    EvmF: EvmFactory<Tx: FromRecoveredTx<R::Transaction>>,
+    Self: 'static,
 {
+    type EvmFactory = EvmF;
     type ExecutionCtx<'a> = EthBlockExecutionCtx<'a>;
     type Transaction = R::Transaction;
     type Receipt = R::Receipt;
 
+    fn evm_factory(&self) -> &Self::EvmFactory {
+        &self.evm_factory
+    }
+
     fn create_executor<'a, DB, I>(
         &'a self,
-        evm: Self::Evm<&'a mut State<DB>, I>,
+        evm: EvmF::Evm<&'a mut State<DB>, I>,
         ctx: Self::ExecutionCtx<'a>,
     ) -> impl BlockExecutorFor<'a, Self, DB, I>
     where
         DB: Database + 'a,
-        I: Inspector<Self::Context<&'a mut State<DB>>> + 'a,
+        I: Inspector<EvmF::Context<&'a mut State<DB>>> + 'a,
     {
         EthBlockExecutor::new(evm, ctx, &self.spec, &self.receipt_builder)
     }

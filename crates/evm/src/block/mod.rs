@@ -110,12 +110,12 @@ pub trait BlockExecutor {
 pub trait BlockExecutorFor<'a, F: BlockExecutorFactory + ?Sized, DB, I = NoOpInspector>
 where
     Self: BlockExecutor<
-        Evm = F::Evm<&'a mut State<DB>, I>,
+        Evm = <F::EvmFactory as EvmFactory>::Evm<&'a mut State<DB>, I>,
         Transaction = F::Transaction,
         Receipt = F::Receipt,
     >,
     DB: Database + 'a,
-    I: Inspector<F::Context<&'a mut State<DB>>> + 'a,
+    I: Inspector<<F::EvmFactory as EvmFactory>::Context<&'a mut State<DB>>> + 'a,
 {
 }
 
@@ -123,9 +123,9 @@ impl<'a, F, DB, I, T> BlockExecutorFor<'a, F, DB, I> for T
 where
     F: BlockExecutorFactory,
     DB: Database + 'a,
-    I: Inspector<F::Context<&'a mut State<DB>>> + 'a,
+    I: Inspector<<F::EvmFactory as EvmFactory>::Context<&'a mut State<DB>>> + 'a,
     T: BlockExecutor<
-        Evm = F::Evm<&'a mut State<DB>, I>,
+        Evm = <F::EvmFactory as EvmFactory>::Evm<&'a mut State<DB>, I>,
         Transaction = F::Transaction,
         Receipt = F::Receipt,
     >,
@@ -139,10 +139,16 @@ where
 /// includes [`revm::context::BlockEnv`]), and any additional context should be contained in
 /// configured [`ExecutionCtx`].
 ///
+/// Every block executor factory is expected to contain and expose an [`EvmFactory`] instance.
+///
 /// For more context on the executor design, see the documentation for [`BlockExecutor`].
 ///
 /// [`ExecutionCtx`]: BlockExecutorFactory::ExecutionCtx
-pub trait BlockExecutorFactory: EvmFactory + 'static {
+#[auto_impl::auto_impl(Arc)]
+pub trait BlockExecutorFactory: 'static {
+    /// The EVM factory used by the executor.
+    type EvmFactory: EvmFactory;
+
     /// Context required for block execution.
     ///
     /// This is similar to [`crate::EvmEnv`], but only contains context unrelated to EVM and
@@ -155,13 +161,16 @@ pub trait BlockExecutorFactory: EvmFactory + 'static {
     /// Receipt type produced by the executor, see [`BlockExecutor::Receipt`].
     type Receipt;
 
+    /// Reference to EVM factory used by the executor.
+    fn evm_factory(&self) -> &Self::EvmFactory;
+
     /// Creates an executor with given EVM and execution context.
     fn create_executor<'a, DB, I>(
         &'a self,
-        evm: Self::Evm<&'a mut State<DB>, I>,
+        evm: <Self::EvmFactory as EvmFactory>::Evm<&'a mut State<DB>, I>,
         ctx: Self::ExecutionCtx<'a>,
     ) -> impl BlockExecutorFor<'a, Self, DB, I>
     where
         DB: Database + 'a,
-        I: Inspector<Self::Context<&'a mut State<DB>>> + 'a;
+        I: Inspector<<Self::EvmFactory as EvmFactory>::Context<&'a mut State<DB>>> + 'a;
 }
