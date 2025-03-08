@@ -14,6 +14,8 @@ use alloy_evm::{
     eth::receipt_builder::ReceiptBuilderCtx,
     Database, Evm, EvmFactory, FromRecoveredTx,
 };
+use alloc::vec::Vec;
+use alloc::boxed::Box;
 use alloy_op_hardforks::{OpChainHardforks, OpHardforks};
 use alloy_primitives::{Bytes, B256};
 use canyon::ensure_create2_deployer;
