@@ -34,5 +34,8 @@ std = [
 	"alloy-primitives/std",
 	"revm/std",
 	"alloy-evm/std",
-	"op-revm/std"
+	"op-revm/std",
+	"alloy-consensus/std",
+	"alloy-eips/std",
+	"op-alloy-consensus/std"
 ]
