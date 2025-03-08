@@ -246,6 +246,11 @@ impl<R, Spec, EvmFactory> EthBlockExecutorFactory<R, Spec, EvmFactory> {
         Self { receipt_builder, spec, evm_factory }
     }
 
+    /// Exposes the receipt builder.
+    pub const fn receipt_builder(&self) -> &R {
+        &self.receipt_builder
+    }
+
     /// Exposes the chain specification.
     pub const fn spec(&self) -> &Spec {
         &self.spec
