@@ -47,6 +47,10 @@ alloy-primitives = { version = "0.8.22", default-features = false }
 alloy-sol-types = { version = "0.8.22", default-features = false }
 alloy-hardforks = { version = "0.1", git = "https://github.com/alloy-rs/hardforks", rev = "ce46371" }
 
+# op-alloy
+alloy-op-hardforks = { version = "0.1", git = "https://github.com/alloy-rs/hardforks", rev = "ce46371" }
+op-alloy-consensus = { version = "0.11", default-features = false }
+
 # revm
 revm = { version = "20.0.0-alpha.1", default-features = false }
 op-revm = { version = "1.0.0-alpha.1", default-features = false }

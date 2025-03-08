@@ -29,6 +29,8 @@ use revm::{
     Context, ExecuteEvm, InspectEvm, Inspector,
 };
 
+pub mod block;
+
 /// OP EVM implementation.
 #[allow(missing_debug_implementations)] // missing revm::OpContext Debug impl
 pub struct OpEvm<DB: Database, I, P = OpPrecompileProvider<OpContext<DB>>> {

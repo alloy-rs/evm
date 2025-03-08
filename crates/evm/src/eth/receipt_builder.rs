@@ -1,5 +1,5 @@
 //! Abstraction over receipt building logic to allow plugging different primitive types into
-//! [`crate::block::BlockExecutor`].
+//! [`super::EthBlockExecutor`].
 
 use crate::Evm;
 use alloy_consensus::{Eip658Value, ReceiptEnvelope, TxEnvelope, TxType};

@@ -14,11 +14,19 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
-alloy-primitives.workspace = true
 alloy-evm = { workspace = true, features = ["op"] }
+
+alloy-eips.workspace = true
+alloy-consensus.workspace = true
+alloy-primitives.workspace = true
+
+alloy-op-hardforks.workspace = true
+op-alloy-consensus.workspace = true
+
 revm.workspace = true
 op-revm.workspace = true
 
+auto_impl.workspace = true
 
 [features]
 default = ["std"]
