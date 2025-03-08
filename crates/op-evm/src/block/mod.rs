@@ -11,10 +11,10 @@ use alloy_evm::{
         BlockExecutorFor, BlockValidationError, OnStateHook, StateChangePostBlockSource,
         StateChangeSource, SystemCaller,
     },
-    eth::{receipt_builder::ReceiptBuilderCtx, spec::EthSpec},
+    eth::receipt_builder::ReceiptBuilderCtx,
     Database, Evm, EvmFactory, FromRecoveredTx,
 };
-use alloy_op_hardforks::OpHardforks;
+use alloy_op_hardforks::{OpChainHardforks, OpHardforks};
 use alloy_primitives::{Bytes, B256};
 use canyon::ensure_create2_deployer;
 use op_alloy_consensus::OpDepositReceipt;
@@ -244,7 +244,7 @@ where
 #[derive(Debug, Clone, Default, Copy)]
 pub struct OpBlockExecutorFactory<
     R = OpAlloyReceiptBuilder,
-    Spec = EthSpec,
+    Spec = OpChainHardforks,
     EvmFactory = OpEvmFactory,
 > {
     /// Receipt builder.
@@ -253,6 +253,24 @@ pub struct OpBlockExecutorFactory<
     spec: Spec,
     /// EVM factory.
     evm_factory: EvmFactory,
+}
+
+impl<R, Spec, EvmFactory> OpBlockExecutorFactory<R, Spec, EvmFactory> {
+    /// Creates a new [`OpBlockExecutorFactory`] with the given spec, [`EvmFactory`], and
+    /// [`OpReceiptBuilder`].
+    pub const fn new(receipt_builder: R, spec: Spec, evm_factory: EvmFactory) -> Self {
+        Self { receipt_builder, spec, evm_factory }
+    }
+
+    /// Exposes the chain specification.
+    pub const fn spec(&self) -> &Spec {
+        &self.spec
+    }
+
+    /// Exposes the EVM factory.
+    pub const fn evm_factory(&self) -> &EvmFactory {
+        &self.evm_factory
+    }
 }
 
 impl<R, Spec, EvmF> BlockExecutorFactory for OpBlockExecutorFactory<R, Spec, EvmF>
