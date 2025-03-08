@@ -1,7 +1,7 @@
 //! Block executor for Optimism.
 
 use crate::OpEvmFactory;
-use alloc::borrow::Cow;
+use alloc::{borrow::Cow, boxed::Box, vec::Vec};
 use alloy_consensus::{transaction::Recovered, Eip658Value, Header, Transaction, TxReceipt};
 use alloy_eips::{Encodable2718, Typed2718};
 use alloy_evm::{
@@ -14,8 +14,6 @@ use alloy_evm::{
     eth::receipt_builder::ReceiptBuilderCtx,
     Database, Evm, EvmFactory, FromRecoveredTx,
 };
-use alloc::vec::Vec;
-use alloc::boxed::Box;
 use alloy_op_hardforks::{OpChainHardforks, OpHardforks};
 use alloy_primitives::{Bytes, B256};
 use canyon::ensure_create2_deployer;
@@ -67,7 +65,7 @@ where
     R: OpReceiptBuilder,
     Spec: OpHardforks + Clone,
 {
-    /// Creates a new [`OpExecutionexecutor`]
+    /// Creates a new [`OpBlockExecutor`].
     pub fn new(evm: E, ctx: OpBlockExecutionCtx, spec: Spec, receipt_builder: R) -> Self {
         Self {
             is_regolith: spec.is_regolith_active_at_timestamp(evm.block().timestamp),
