@@ -2,7 +2,7 @@
 
 use revm::{
     context::{BlockEnv, CfgEnv},
-    specification::hardfork::SpecId,
+    primitives::hardfork::SpecId,
 };
 
 /// Container type that holds both the configuration and block environment for EVM execution.

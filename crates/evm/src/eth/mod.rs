@@ -13,7 +13,7 @@ use revm::{
     handler::{instructions::EthInstructions, EthPrecompiles, PrecompileProvider},
     inspector::NoOpInspector,
     interpreter::{interpreter::EthInterpreter, InterpreterResult},
-    specification::hardfork::SpecId,
+    primitives::hardfork::SpecId,
     Context, ExecuteEvm, InspectEvm, Inspector, MainBuilder, MainContext,
 };
 

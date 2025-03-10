@@ -17,8 +17,8 @@ use core::{
     ops::{Deref, DerefMut},
 };
 use op_revm::{
-    handler::precompiles::OpPrecompileProvider, DefaultOp, OpBuilder, OpContext, OpHaltReason,
-    OpSpecId, OpTransaction, OpTransactionError,
+    precompiles::OpPrecompileProvider, DefaultOp, OpBuilder, OpContext, OpHaltReason, OpSpecId,
+    OpTransaction, OpTransactionError,
 };
 use revm::{
     context::{setters::ContextSetters, BlockEnv, TxEnv},
