@@ -17,7 +17,7 @@ use core::{
     ops::{Deref, DerefMut},
 };
 use op_revm::{
-    precompiles::OpPrecompileProvider, DefaultOp, OpBuilder, OpContext, OpHaltReason, OpSpecId,
+    precompiles::OpPrecompiles, DefaultOp, OpBuilder, OpContext, OpHaltReason, OpSpecId,
     OpTransaction, OpTransactionError,
 };
 use revm::{
@@ -34,7 +34,7 @@ pub use block::{OpBlockExecutionCtx, OpBlockExecutor, OpBlockExecutorFactory};
 
 /// OP EVM implementation.
 #[allow(missing_debug_implementations)] // missing revm::OpContext Debug impl
-pub struct OpEvm<DB: Database, I, P = OpPrecompileProvider<OpContext<DB>>> {
+pub struct OpEvm<DB: Database, I, P = OpPrecompiles> {
     inner: op_revm::OpEvm<OpContext<DB>, I, EthInstructions<EthInterpreter, OpContext<DB>>, P>,
     inspect: bool,
 }
@@ -81,7 +81,7 @@ impl<DB, I, P> Evm for OpEvm<DB, I, P>
 where
     DB: Database,
     I: Inspector<OpContext<DB>>,
-    P: PrecompileProvider<Context = OpContext<DB>, Output = InterpreterResult>,
+    P: PrecompileProvider<OpContext<DB>, Output = InterpreterResult>,
 {
     type DB = DB;
     type Tx = OpTransaction<TxEnv>;

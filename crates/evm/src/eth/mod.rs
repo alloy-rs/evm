@@ -30,7 +30,7 @@ pub type EthEvmContext<DB> = Context<BlockEnv, TxEnv, CfgEnv, DB>;
 
 /// Ethereum EVM implementation.
 #[expect(missing_debug_implementations)]
-pub struct EthEvm<DB: Database, I, PRECOMPILE = EthPrecompiles<EthEvmContext<DB>>> {
+pub struct EthEvm<DB: Database, I, PRECOMPILE = EthPrecompiles> {
     inner: RevmEvm<
         EthEvmContext<DB>,
         I,
@@ -93,7 +93,7 @@ impl<DB, I, PRECOMPILE> Evm for EthEvm<DB, I, PRECOMPILE>
 where
     DB: Database,
     I: Inspector<EthEvmContext<DB>>,
-    PRECOMPILE: PrecompileProvider<Context = EthEvmContext<DB>, Output = InterpreterResult>,
+    PRECOMPILE: PrecompileProvider<EthEvmContext<DB>, Output = InterpreterResult>,
 {
     type DB = DB;
     type Tx = TxEnv;
