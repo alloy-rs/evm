@@ -49,6 +49,11 @@ impl<DB: Database, I, P> OpEvm<DB, I, P> {
     pub fn ctx_mut(&mut self) -> &mut OpContext<DB> {
         &mut self.inner.0.data.ctx
     }
+
+    /// Provides a mutable rference to the EVM inspector.
+    pub fn inspector_mut(&mut self) -> &mut I {
+        &mut self.inner.0.data.inspector
+    }
 }
 
 impl<DB: Database, I, P> OpEvm<DB, I, P> {
