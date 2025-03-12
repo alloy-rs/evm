@@ -8,7 +8,7 @@ use core::{
     ops::{Deref, DerefMut},
 };
 use revm::{
-    context::{setters::ContextSetters, BlockEnv, CfgEnv, Evm as RevmEvm, TxEnv},
+    context::{BlockEnv, CfgEnv, Evm as RevmEvm, TxEnv},
     context_interface::result::{EVMError, HaltReason, ResultAndState},
     handler::{instructions::EthInstructions, EthPrecompiles, PrecompileProvider},
     inspector::NoOpInspector,
@@ -120,7 +120,7 @@ where
     fn transact_raw(&mut self, tx: Self::Tx) -> Result<ResultAndState, Self::Error> {
         if self.inspect {
             self.inner.set_tx(tx);
-            self.inner.inspect_previous()
+            self.inner.inspect_replay()
         } else {
             self.inner.transact(tx)
         }

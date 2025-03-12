@@ -21,7 +21,7 @@ use op_revm::{
     OpTransaction, OpTransactionError,
 };
 use revm::{
-    context::{setters::ContextSetters, BlockEnv, TxEnv},
+    context::{BlockEnv, TxEnv},
     context_interface::result::{EVMError, ResultAndState},
     handler::{instructions::EthInstructions, PrecompileProvider},
     inspector::NoOpInspector,
@@ -111,7 +111,7 @@ where
     ) -> Result<ResultAndState<Self::HaltReason>, Self::Error> {
         if self.inspect {
             self.inner.set_tx(tx);
-            self.inner.inspect_previous()
+            self.inner.inspect_replay()
         } else {
             self.inner.transact(tx)
         }
