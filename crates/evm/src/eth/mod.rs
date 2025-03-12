@@ -29,6 +29,10 @@ pub mod spec;
 pub type EthEvmContext<DB> = Context<BlockEnv, TxEnv, CfgEnv, DB>;
 
 /// Ethereum EVM implementation.
+///
+/// This is a wrapper type around the `revm` ethereum evm with optional [`Inspector`] (tracing)
+/// support. [`Inspector`] support is configurable at runtime because it's part of the underlying
+/// [`RevmEvm`] type.
 #[expect(missing_debug_implementations)]
 pub struct EthEvm<DB: Database, I, PRECOMPILE = EthPrecompiles> {
     inner: RevmEvm<
@@ -42,6 +46,9 @@ pub struct EthEvm<DB: Database, I, PRECOMPILE = EthPrecompiles> {
 
 impl<DB: Database, I, PRECOMPILE> EthEvm<DB, I, PRECOMPILE> {
     /// Creates a new Ethereum EVM instance.
+    ///
+    /// The `inspect` argument determines whether the configured [`Inspector`] of the given
+    /// [`RevmEvm`] should be invoked on [`Evm::transact`].
     pub const fn new(
         evm: RevmEvm<
             EthEvmContext<DB>,

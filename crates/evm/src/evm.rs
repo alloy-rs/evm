@@ -111,8 +111,6 @@ pub trait Evm {
 /// A type responsible for creating instances of an ethereum virtual machine given a certain input.
 pub trait EvmFactory {
     /// The EVM type that this factory creates.
-    // TODO: this doesn't quite work because this would force use to use an enum approach for trace
-    // evm for example, unless we
     type Evm<DB: Database, I: Inspector<Self::Context<DB>>>: Evm<
         DB = DB,
         Tx = Self::Tx,
@@ -140,6 +138,9 @@ pub trait EvmFactory {
     ) -> Self::Evm<DB, NoOpInspector>;
 
     /// Creates a new instance of an EVM with an inspector.
+    ///
+    /// Note: It is expected that the [`Inspector`] is usually provided as `&mut Inspector` so that
+    /// it remains owned by the call site when [`Evm::transact`] is invoked.
     fn create_evm_with_inspector<DB: Database, I: Inspector<Self::Context<DB>>>(
         &self,
         db: DB,
