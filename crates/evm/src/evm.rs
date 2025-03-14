@@ -106,6 +106,9 @@ pub trait Evm {
     {
         self.finish().1
     }
+
+    /// Sets the inspector state.
+    fn set_inspector(&mut self, enabled: bool);
 }
 
 /// A type responsible for creating instances of an ethereum virtual machine given a certain input.

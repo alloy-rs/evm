@@ -83,6 +83,11 @@ impl<DB: Database, I, PRECOMPILE> EthEvm<DB, I, PRECOMPILE> {
     pub fn inspector_mut(&mut self) -> &mut I {
         &mut self.inner.data.inspector
     }
+
+    /// Sets the inspector state.
+    fn set_inspector(&mut self, enabled: bool) {
+        self.inspect = enabled;
+    }
 }
 
 impl<DB: Database, I, PRECOMPILE> Deref for EthEvm<DB, I, PRECOMPILE> {
@@ -187,6 +192,10 @@ where
         let Context { block: block_env, cfg: cfg_env, journaled_state, .. } = self.inner.data.ctx;
 
         (journaled_state.database, EvmEnv { block_env, cfg_env })
+    }
+
+    fn set_inspector(&mut self, enabled: bool) {
+        self.inspect = enabled;
     }
 }
 
