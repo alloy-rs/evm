@@ -186,6 +186,10 @@ where
 
         (journaled_state.database, EvmEnv { block_env, cfg_env })
     }
+
+    fn set_inspector(&mut self, enabled: bool) {
+        self.inspect = enabled;
+    }
 }
 
 /// Factory producing [`OpEvm`]s.
