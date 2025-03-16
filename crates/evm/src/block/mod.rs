@@ -1,11 +1,13 @@
 //! Block execution abstraction.
 
-use crate::{Database, Evm, EvmFactory};
+use crate::{AsRecoveredTx, Database, Evm, EvmFactory, IntoTxEnv};
 use alloc::{boxed::Box, vec::Vec};
-use alloy_consensus::transaction::Recovered;
 use alloy_eips::eip7685::Requests;
 use revm::{
-    context::result::ExecutionResult, database::State, inspector::NoOpInspector, Inspector,
+    context::{result::ExecutionResult, TxEnv},
+    database::State,
+    inspector::NoOpInspector,
+    Inspector,
 };
 
 mod error;
@@ -59,7 +61,7 @@ pub trait BlockExecutor {
     /// Returns the gas used by the transaction.
     fn execute_transaction(
         &mut self,
-        tx: Recovered<&Self::Transaction>,
+        tx: impl IntoTxEnv<TxEnv> + AsRecoveredTx<Self::Transaction>,
     ) -> Result<u64, BlockExecutionError> {
         self.execute_transaction_with_result_closure(tx, |_| ())
     }
@@ -68,7 +70,7 @@ pub trait BlockExecutor {
     /// given closure with an internal [`ExecutionResult`] produced by the EVM.
     fn execute_transaction_with_result_closure(
         &mut self,
-        tx: Recovered<&Self::Transaction>,
+        tx: impl IntoTxEnv<TxEnv> + AsRecoveredTx<Self::Transaction>,
         f: impl FnOnce(&ExecutionResult<<Self::Evm as Evm>::HaltReason>),
     ) -> Result<u64, BlockExecutionError>;
 

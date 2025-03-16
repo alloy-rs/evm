@@ -2,7 +2,7 @@
 
 use crate::OpEvmFactory;
 use alloc::{borrow::Cow, boxed::Box, vec::Vec};
-use alloy_consensus::{transaction::Recovered, Eip658Value, Header, Transaction, TxReceipt};
+use alloy_consensus::{Eip658Value, Header, Transaction, TxReceipt};
 use alloy_eips::{Encodable2718, Typed2718};
 use alloy_evm::{
     block::{
@@ -12,7 +12,7 @@ use alloy_evm::{
         StateChangeSource, SystemCaller,
     },
     eth::receipt_builder::ReceiptBuilderCtx,
-    Database, Evm, EvmFactory, FromRecoveredTx,
+    AsRecoveredTx, Database, Evm, EvmFactory, FromRecoveredTx, IntoTxEnv,
 };
 use alloy_op_hardforks::{OpChainHardforks, OpHardforks};
 use alloy_primitives::{Bytes, B256};
@@ -21,7 +21,11 @@ use op_alloy_consensus::OpDepositReceipt;
 use op_revm::transaction::deposit::DEPOSIT_TRANSACTION_TYPE;
 pub use receipt_builder::OpAlloyReceiptBuilder;
 use receipt_builder::OpReceiptBuilder;
-use revm::{context::result::ResultAndState, database::State, DatabaseCommit, Inspector};
+use revm::{
+    context::{result::ResultAndState, TxEnv},
+    database::State,
+    DatabaseCommit, Inspector,
+};
 
 mod canyon;
 pub mod receipt_builder;
@@ -113,9 +117,10 @@ where
 
     fn execute_transaction_with_result_closure(
         &mut self,
-        tx: Recovered<&Self::Transaction>,
+        tx: impl IntoTxEnv<TxEnv> + AsRecoveredTx<Self::Transaction>,
         f: impl FnOnce(&revm::context::result::ExecutionResult<<Self::Evm as Evm>::HaltReason>),
     ) -> Result<u64, BlockExecutionError> {
+        let tx = tx.as_recovered();
         let is_deposit = tx.ty() == DEPOSIT_TRANSACTION_TYPE;
 
         // The sum of the transaction’s gas limit, Tg, and the gas utilized in this block prior,
