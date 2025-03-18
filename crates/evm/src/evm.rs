@@ -107,8 +107,24 @@ pub trait Evm {
         self.finish().1
     }
 
-    /// Sets the inspector state.
-    fn set_inspector(&mut self, enabled: bool);
+    /// Determines whether additional transactions should be inspected or not.
+    ///
+    /// See also [`EvmFactory::create_evm_with_inspector`].
+    fn set_inspector_enabled(&mut self, enabled: bool);
+
+    /// Enables the configured inspector.
+    ///
+    /// All additional transactions will be inspected if enabled.
+    fn enable_inspector(&mut self) {
+        self.set_inspector_enabled(true)
+    }
+
+    /// Disables the configured inspector.
+    ///
+    /// Transactions will no longer be inspected.
+    fn disable_inspector(&mut self) {
+        self.set_inspector_enabled(false)
+    }
 }
 
 /// A type responsible for creating instances of an ethereum virtual machine given a certain input.
