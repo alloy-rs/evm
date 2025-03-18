@@ -5,7 +5,7 @@ resolver = "2"
 [workspace.package]
 version = "0.1.0-alpha.1"
 edition = "2021"
-rust-version = "1.82"
+rust-version = "1.85"
 authors = ["Alloy Contributors"]
 license = "MIT OR Apache-2.0"
 homepage = "https://github.com/alloy-rs/alloy-evm"
@@ -25,7 +25,7 @@ unnameable-types = "warn"
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }
-missing-const-for-fn = "warn"
+missing-const-for-fn = "allow" # TODO: https://github.com/rust-lang/rust-clippy/issues/14020
 use-self = "warn"
 option-if-let-else = "warn"
 redundant-clone = "warn"
@@ -52,12 +52,12 @@ alloy-op-hardforks = { version = "0.1" }
 op-alloy-consensus = { version = "0.11", default-features = false }
 
 # revm
-revm = { version = "20.0.0-alpha.5", default-features = false }
-op-revm = { version = "1.0.0-alpha.4", default-features = false }
+revm = { version = "20.0.0-alpha.6", default-features = false }
+op-revm = { version = "1.0.0-alpha.5", default-features = false }
 
 # misc
 auto_impl = "1"
-derive_more = { version = "1", default-features = false, features = ["full"] }
+derive_more = { version = "2", default-features = false, features = ["full"] }
 serde = { version = "1", default-features = false, features = ["derive"] }
 thiserror = { version = "2.0.0", default-features = false }
 serde_json = "1"
