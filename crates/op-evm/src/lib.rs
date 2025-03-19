@@ -165,7 +165,7 @@ where
         // disable the nonce check
         core::mem::swap(&mut self.cfg.disable_nonce_check, &mut disable_nonce_check);
 
-        let res = self.transact(tx);
+        let mut res = self.transact(tx);
 
         // swap back to the previous gas limit
         core::mem::swap(&mut self.block.gas_limit, &mut gas_limit);
@@ -173,6 +173,11 @@ where
         core::mem::swap(&mut self.block.basefee, &mut basefee);
         // swap back to the previous nonce check flag
         core::mem::swap(&mut self.cfg.disable_nonce_check, &mut disable_nonce_check);
+
+        // NOTE: Revm might commit the nonce state change for the caller but we want to avoid it.
+        if let Ok(res) = &mut res {
+            res.state.remove(&caller);
+        }
 
         res
     }

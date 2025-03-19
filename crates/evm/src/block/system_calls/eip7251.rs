@@ -29,7 +29,7 @@ pub(crate) fn transact_consolidation_requests_contract_call<Halt>(
     // after processing all transactions and after performing the block body requests validations)
     // clienst software MUST [..] call the contract as `SYSTEM_ADDRESS` and empty input data to
     // trigger the system subroutine execute.
-    let mut res = match evm.transact_system_call(
+    let res = match evm.transact_system_call(
         alloy_eips::eip7002::SYSTEM_ADDRESS,
         CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS,
         Bytes::new(),
@@ -42,14 +42,6 @@ pub(crate) fn transact_consolidation_requests_contract_call<Halt>(
             .into())
         }
     };
-
-    // NOTE: Revm currently marks these accounts as "touched" when we do the above transact calls,
-    // and includes them in the result.
-    //
-    // There should be no state changes to these addresses anyways as a result of this system call,
-    // so we can just remove them from the state returned.
-    res.state.remove(&alloy_eips::eip7002::SYSTEM_ADDRESS);
-    res.state.remove(&evm.block().beneficiary);
 
     Ok(res)
 }
