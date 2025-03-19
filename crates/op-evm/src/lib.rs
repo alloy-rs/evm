@@ -174,9 +174,9 @@ where
         // swap back to the previous nonce check flag
         core::mem::swap(&mut self.cfg.disable_nonce_check, &mut disable_nonce_check);
 
-        // NOTE: Revm might commit the nonce state change for the caller but we want to avoid it.
+        // NOTE: We assume that only the contract storage is modified.
         if let Ok(res) = &mut res {
-            res.state.remove(&caller);
+            res.state.retain(|addr, _| *addr == contract);
         }
 
         res
