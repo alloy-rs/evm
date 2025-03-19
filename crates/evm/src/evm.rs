@@ -62,6 +62,10 @@ pub trait Evm {
     }
 
     /// Executes a system call.
+    ///
+    /// Note: this will only keep the target `contract` in the state. This is done because revm is
+    /// loading [`BlockEnv::beneficiary`] into state by default, and we need to avoid it by also
+    /// covering edge cases when beneficiary is set to the system contract address.
     fn transact_system_call(
         &mut self,
         caller: Address,
