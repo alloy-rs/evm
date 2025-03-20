@@ -63,31 +63,46 @@ impl<T> AsRecoveredTx<T> for Recovered<&T> {
     }
 }
 
+impl<T> AsRecoveredTx<T> for Recovered<T> {
+    fn as_recovered(&self) -> Recovered<&T> {
+        Recovered::new_unchecked(self.inner(), self.signer())
+    }
+}
+
+impl<T> AsRecoveredTx<T> for WithEncoded<Recovered<T>> {
+    fn as_recovered(&self) -> Recovered<&T> {
+        let recovered = &self.1;
+        Recovered::new_unchecked(recovered.inner(), recovered.signer())
+    }
+}
+
 /// Helper user-facing trait to allow implementing [`IntoTxEnv`] on instances of [`WithEncoded`].
 /// This allows creating transaction environments directly from EIP-2718 encoded bytes.
 pub trait FromEncodedTx<Tx> {
-    /// Builds a `TxEnv` from encoded transaction bytes.
-    fn from_encoded_tx(encoded: &[u8]) -> Self;
+    /// Builds a `TxEnv` from a transaction, its sender, and encoded transaction bytes.
+    fn from_encoded_tx(tx: &Tx, sender: Address, encoded: &[u8]) -> Self;
 }
 
 impl<TxEnv, T> FromEncodedTx<&T> for TxEnv
 where
     TxEnv: FromEncodedTx<T>,
 {
-    fn from_encoded_tx(encoded: &[u8]) -> Self {
-        TxEnv::from_encoded_tx(encoded)
+    fn from_encoded_tx(tx: &&T, sender: Address, encoded: &[u8]) -> Self {
+        TxEnv::from_encoded_tx(tx, sender, encoded)
     }
 }
 
-impl<T, TxEnv: FromEncodedTx<T>> IntoTxEnv<TxEnv> for WithEncoded<T> {
+impl<T, TxEnv: FromEncodedTx<T>> IntoTxEnv<TxEnv> for WithEncoded<Recovered<T>> {
     fn into_tx_env(self) -> TxEnv {
-        TxEnv::from_encoded_tx(self.encoded_bytes())
+        let recovered = &self.1;
+        TxEnv::from_encoded_tx(recovered.inner(), recovered.signer(), self.encoded_bytes())
     }
 }
 
-impl<T, TxEnv: FromEncodedTx<T>> IntoTxEnv<TxEnv> for &WithEncoded<T> {
+impl<T, TxEnv: FromEncodedTx<T>> IntoTxEnv<TxEnv> for &WithEncoded<Recovered<T>> {
     fn into_tx_env(self) -> TxEnv {
-        TxEnv::from_encoded_tx(self.encoded_bytes())
+        let recovered = &self.1;
+        TxEnv::from_encoded_tx(recovered.inner(), recovered.signer(), self.encoded_bytes())
     }
 }
 
@@ -111,12 +126,13 @@ mod tests {
     }
 
     impl FromEncodedTx<MyTransaction> for MyTxEnv {
-        fn from_encoded_tx(_encoded: &[u8]) -> Self {
+        fn from_encoded_tx(_tx: &MyTransaction, _sender: Address, _encoded: &[u8]) -> Self {
             Self
         }
     }
 
     const fn assert_env<T: IntoTxEnv<MyTxEnv>>() {}
+    const fn assert_recoverable<T: AsRecoveredTx<MyTransaction>>() {}
 
     #[test]
     const fn test_into_tx_env() {
@@ -127,9 +143,10 @@ mod tests {
 
     #[test]
     const fn test_into_encoded_tx_env() {
-        assert_env::<WithEncoded<MyTransaction>>();
-        assert_env::<&WithEncoded<MyTransaction>>();
-        assert_env::<WithEncoded<&MyTransaction>>();
-        assert_env::<&WithEncoded<&MyTransaction>>();
+        assert_env::<WithEncoded<Recovered<MyTransaction>>>();
+        assert_env::<&WithEncoded<Recovered<MyTransaction>>>();
+
+        assert_recoverable::<Recovered<MyTransaction>>();
+        assert_recoverable::<WithEncoded<Recovered<MyTransaction>>>();
     }
 }
