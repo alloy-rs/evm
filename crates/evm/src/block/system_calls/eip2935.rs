@@ -38,7 +38,7 @@ pub(crate) fn transact_blockhashes_contract_call<Halt>(
         return Ok(None);
     }
 
-    let mut res = match evm.transact_system_call(
+    let res = match evm.transact_system_call(
         alloy_eips::eip4788::SYSTEM_ADDRESS,
         HISTORY_STORAGE_ADDRESS,
         parent_block_hash.0.into(),
@@ -50,14 +50,6 @@ pub(crate) fn transact_blockhashes_contract_call<Halt>(
             )
         }
     };
-
-    // NOTE: Revm currently marks these accounts as "touched" when we do the above transact calls,
-    // and includes them in the result.
-    //
-    // There should be no state changes to these addresses anyways as a result of this system call,
-    // so we can just remove them from the state returned.
-    res.state.remove(&alloy_eips::eip4788::SYSTEM_ADDRESS);
-    res.state.remove(&evm.block().beneficiary);
 
     Ok(Some(res))
 }

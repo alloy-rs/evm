@@ -62,6 +62,10 @@ pub trait Evm {
     }
 
     /// Executes a system call.
+    ///
+    /// Note: this will only keep the target `contract` in the state. This is done because revm is
+    /// loading [`BlockEnv::beneficiary`] into state by default, and we need to avoid it by also
+    /// covering edge cases when beneficiary is set to the system contract address.
     fn transact_system_call(
         &mut self,
         caller: Address,
@@ -105,6 +109,25 @@ pub trait Evm {
         Self: Sized,
     {
         self.finish().1
+    }
+
+    /// Determines whether additional transactions should be inspected or not.
+    ///
+    /// See also [`EvmFactory::create_evm_with_inspector`].
+    fn set_inspector_enabled(&mut self, enabled: bool);
+
+    /// Enables the configured inspector.
+    ///
+    /// All additional transactions will be inspected if enabled.
+    fn enable_inspector(&mut self) {
+        self.set_inspector_enabled(true)
+    }
+
+    /// Disables the configured inspector.
+    ///
+    /// Transactions will no longer be inspected.
+    fn disable_inspector(&mut self) {
+        self.set_inspector_enabled(false)
     }
 }
 
