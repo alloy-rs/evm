@@ -198,7 +198,7 @@ pub trait RecoveredTx<T> {
 
 impl<T> RecoveredTx<T> for Recovered<&T> {
     fn tx(&self) -> &T {
-        *self.inner()
+        self.inner()
     }
 
     fn signer(&self) -> &Address {

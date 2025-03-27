@@ -1,6 +1,6 @@
 //! Block execution abstraction.
 
-use crate::{Database, Evm, EvmFactory, IntoTxEnv, RecoveredTx};
+use crate::{Database, Evm, EvmFactory, FromRecoveredTx, IntoTxEnv, RecoveredTx};
 use alloc::{boxed::Box, vec::Vec};
 use alloy_eips::eip7685::Requests;
 use revm::{
@@ -48,7 +48,7 @@ pub trait BlockExecutor {
     /// Receipt type this executor produces.
     type Receipt;
     /// EVM used by the executor.
-    type Evm: Evm;
+    type Evm: Evm<Tx: FromRecoveredTx<Self::Transaction>>;
 
     /// Applies any necessary changes before executing the block's transactions.
     fn apply_pre_execution_changes(&mut self) -> Result<(), BlockExecutionError>;
