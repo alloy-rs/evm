@@ -1,8 +1,10 @@
 //! Abstraction of an executable transaction.
 
-use alloy_consensus::transaction::Recovered;
-use alloy_eips::eip2718::WithEncoded;
-use alloy_primitives::Address;
+use alloy_consensus::{
+    transaction::Recovered, TxEip1559, TxEip2930, TxEip4844, TxEip7702, TxLegacy,
+};
+use alloy_eips::{eip2718::WithEncoded, Typed2718};
+use alloy_primitives::{Address, Bytes, TxKind};
 use revm::context::TxEnv;
 
 /// Trait marking types that can be converted into a transaction environment.
@@ -51,10 +53,149 @@ impl<T, TxEnv: FromRecoveredTx<T>> IntoTxEnv<TxEnv> for &Recovered<T> {
     }
 }
 
+impl FromRecoveredTx<TxLegacy> for TxEnv {
+    fn from_recovered_tx(tx: &TxLegacy, caller: Address) -> Self {
+        let TxLegacy { chain_id, nonce, gas_price, gas_limit, to, value, input } = tx;
+        TxEnv {
+            tx_type: tx.ty(),
+            caller,
+            gas_limit: *gas_limit,
+            gas_price: *gas_price,
+            kind: *to,
+            value: *value,
+            data: input.clone(),
+            nonce: *nonce,
+            chain_id: *chain_id,
+            ..Default::default()
+        }
+    }
+}
+
+impl FromRecoveredTx<TxEip2930> for TxEnv {
+    fn from_recovered_tx(tx: &TxEip2930, caller: Address) -> Self {
+        let TxEip2930 { chain_id, nonce, gas_price, gas_limit, to, value, access_list, input } = tx;
+        TxEnv {
+            tx_type: tx.ty(),
+            caller,
+            gas_limit: *gas_limit,
+            gas_price: *gas_price,
+            kind: *to,
+            value: *value,
+            data: input.clone(),
+            chain_id: Some(*chain_id),
+            nonce: *nonce,
+            access_list: access_list.clone(),
+            ..Default::default()
+        }
+    }
+}
+
+impl FromRecoveredTx<TxEip1559> for TxEnv {
+    fn from_recovered_tx(tx: &TxEip1559, caller: Address) -> Self {
+        let TxEip1559 {
+            chain_id,
+            nonce,
+            gas_limit,
+            to,
+            value,
+            input,
+            max_fee_per_gas,
+            max_priority_fee_per_gas,
+            access_list,
+        } = tx;
+        TxEnv {
+            tx_type: tx.ty(),
+            caller,
+            gas_limit: *gas_limit,
+            gas_price: *max_fee_per_gas,
+            kind: *to,
+            value: *value,
+            data: input.clone(),
+            nonce: *nonce,
+            chain_id: Some(*chain_id),
+            gas_priority_fee: Some(*max_priority_fee_per_gas),
+            access_list: access_list.clone(),
+            ..Default::default()
+        }
+    }
+}
+
+impl FromRecoveredTx<TxEip4844> for TxEnv {
+    fn from_recovered_tx(tx: &TxEip4844, caller: Address) -> Self {
+        let TxEip4844 {
+            chain_id,
+            nonce,
+            gas_limit,
+            to,
+            value,
+            input,
+            max_fee_per_gas,
+            max_priority_fee_per_gas,
+            access_list,
+            blob_versioned_hashes,
+            max_fee_per_blob_gas,
+        } = tx;
+        TxEnv {
+            tx_type: tx.ty(),
+            caller,
+            gas_limit: *gas_limit,
+            gas_price: *max_fee_per_gas,
+            kind: TxKind::Call(*to),
+            value: *value,
+            data: input.clone(),
+            nonce: *nonce,
+            chain_id: Some(*chain_id),
+            gas_priority_fee: Some(*max_priority_fee_per_gas),
+            access_list: access_list.clone(),
+            blob_hashes: blob_versioned_hashes.clone(),
+            max_fee_per_blob_gas: *max_fee_per_blob_gas,
+            ..Default::default()
+        }
+    }
+}
+
+impl FromRecoveredTx<TxEip7702> for TxEnv {
+    fn from_recovered_tx(tx: &TxEip7702, caller: Address) -> Self {
+        let TxEip7702 {
+            chain_id,
+            nonce,
+            gas_limit,
+            to,
+            value,
+            input,
+            max_fee_per_gas,
+            max_priority_fee_per_gas,
+            access_list,
+            authorization_list,
+        } = tx;
+        TxEnv {
+            tx_type: tx.ty(),
+            caller,
+            gas_limit: *gas_limit,
+            gas_price: *max_fee_per_gas,
+            kind: TxKind::Call(*to),
+            value: *value,
+            data: input.clone(),
+            nonce: *nonce,
+            chain_id: Some(*chain_id),
+            gas_priority_fee: Some(*max_priority_fee_per_gas),
+            access_list: access_list.clone(),
+            authorization_list: authorization_list.clone(),
+            ..Default::default()
+        }
+    }
+}
+
 /// Helper user-facing trait to allow retrieving a recovered transaction reference.
 pub trait AsRecoveredTx<T> {
     /// Returns a reference to the recovered transaction.
     fn as_recovered(&self) -> Recovered<&T>;
+}
+
+impl<Tx, T: AsRecoveredTx<Tx>> AsRecoveredTx<Tx> for &T {
+    fn as_recovered(&self) -> Recovered<&Tx> {
+        (*self).as_recovered()
+    }
 }
 
 impl<T> AsRecoveredTx<T> for Recovered<&T> {
@@ -78,31 +219,92 @@ impl<T> AsRecoveredTx<T> for WithEncoded<Recovered<T>> {
 
 /// Helper user-facing trait to allow implementing [`IntoTxEnv`] on instances of [`WithEncoded`].
 /// This allows creating transaction environments directly from EIP-2718 encoded bytes.
-pub trait FromEncodedTx<Tx> {
+pub trait FromTxWithEncoded<Tx> {
     /// Builds a `TxEnv` from a transaction, its sender, and encoded transaction bytes.
-    fn from_encoded_tx(tx: &Tx, sender: Address, encoded: &[u8]) -> Self;
+    fn from_encoded_tx(tx: &Tx, sender: Address, encoded: Bytes) -> Self;
 }
 
-impl<TxEnv, T> FromEncodedTx<&T> for TxEnv
+impl<TxEnv, T> FromTxWithEncoded<&T> for TxEnv
 where
-    TxEnv: FromEncodedTx<T>,
+    TxEnv: FromTxWithEncoded<T>,
 {
-    fn from_encoded_tx(tx: &&T, sender: Address, encoded: &[u8]) -> Self {
+    fn from_encoded_tx(tx: &&T, sender: Address, encoded: Bytes) -> Self {
         TxEnv::from_encoded_tx(tx, sender, encoded)
     }
 }
 
-impl<T, TxEnv: FromEncodedTx<T>> IntoTxEnv<TxEnv> for WithEncoded<Recovered<T>> {
+impl<T, TxEnv: FromTxWithEncoded<T>> IntoTxEnv<TxEnv> for WithEncoded<Recovered<T>> {
     fn into_tx_env(self) -> TxEnv {
         let recovered = &self.1;
-        TxEnv::from_encoded_tx(recovered.inner(), recovered.signer(), self.encoded_bytes())
+        TxEnv::from_encoded_tx(recovered.inner(), recovered.signer(), self.encoded_bytes().clone())
     }
 }
 
-impl<T, TxEnv: FromEncodedTx<T>> IntoTxEnv<TxEnv> for &WithEncoded<Recovered<T>> {
+impl<T, TxEnv: FromTxWithEncoded<T>> IntoTxEnv<TxEnv> for &WithEncoded<Recovered<T>> {
     fn into_tx_env(self) -> TxEnv {
         let recovered = &self.1;
-        TxEnv::from_encoded_tx(recovered.inner(), recovered.signer(), self.encoded_bytes())
+        TxEnv::from_encoded_tx(recovered.inner(), recovered.signer(), self.encoded_bytes().clone())
+    }
+}
+
+#[cfg(feature = "op")]
+mod op {
+    use super::*;
+    use alloy_eips::{Encodable2718, Typed2718};
+    use alloy_primitives::{Address, Bytes};
+    use op_alloy_consensus::{OpTxEnvelope, TxDeposit};
+    use op_revm::{transaction::deposit::DepositTransactionParts, OpTransaction};
+    use revm::context::TxEnv;
+
+    impl FromTxWithEncoded<OpTxEnvelope> for OpTransaction<TxEnv> {
+        fn from_encoded_tx(tx: &OpTxEnvelope, caller: Address, encoded: Bytes) -> Self {
+            let base = match tx {
+                OpTxEnvelope::Legacy(tx) => TxEnv::from_recovered_tx(tx.tx(), caller),
+                OpTxEnvelope::Eip1559(tx) => TxEnv::from_recovered_tx(tx.tx(), caller),
+                OpTxEnvelope::Eip2930(tx) => TxEnv::from_recovered_tx(tx.tx(), caller),
+                OpTxEnvelope::Eip7702(tx) => TxEnv::from_recovered_tx(tx.tx(), caller),
+                OpTxEnvelope::Deposit(tx) => {
+                    let TxDeposit {
+                        to,
+                        value,
+                        gas_limit,
+                        input,
+                        source_hash: _,
+                        from: _,
+                        mint: _,
+                        is_system_transaction: _,
+                    } = tx.inner();
+                    TxEnv {
+                        tx_type: tx.ty(),
+                        caller,
+                        gas_limit: *gas_limit,
+                        kind: *to,
+                        value: *value,
+                        data: input.clone(),
+                        ..Default::default()
+                    }
+                }
+            };
+
+            let deposit = if let OpTxEnvelope::Deposit(tx) = tx {
+                DepositTransactionParts {
+                    source_hash: tx.source_hash,
+                    mint: tx.mint,
+                    is_system_transaction: tx.is_system_transaction,
+                }
+            } else {
+                Default::default()
+            };
+
+            OpTransaction { base, enveloped_tx: Some(encoded), deposit }
+        }
+    }
+
+    impl FromRecoveredTx<OpTxEnvelope> for OpTransaction<TxEnv> {
+        fn from_recovered_tx(tx: &OpTxEnvelope, sender: Address) -> Self {
+            let encoded = tx.encoded_2718();
+            Self::from_encoded_tx(tx, sender, encoded.into())
+        }
     }
 }
 
@@ -125,8 +327,8 @@ mod tests {
         }
     }
 
-    impl FromEncodedTx<MyTransaction> for MyTxEnv {
-        fn from_encoded_tx(_tx: &MyTransaction, _sender: Address, _encoded: &[u8]) -> Self {
+    impl FromTxWithEncoded<MyTransaction> for MyTxEnv {
+        fn from_encoded_tx(_tx: &MyTransaction, _sender: Address, _encoded: Bytes) -> Self {
             Self
         }
     }

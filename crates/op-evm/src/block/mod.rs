@@ -21,17 +21,13 @@ use op_alloy_consensus::OpDepositReceipt;
 use op_revm::transaction::deposit::DEPOSIT_TRANSACTION_TYPE;
 pub use receipt_builder::OpAlloyReceiptBuilder;
 use receipt_builder::OpReceiptBuilder;
-use revm::{
-    context::{result::ResultAndState, TxEnv},
-    database::State,
-    DatabaseCommit, Inspector,
-};
+use revm::{context::result::ResultAndState, database::State, DatabaseCommit, Inspector};
 
 mod canyon;
 pub mod receipt_builder;
 
 /// Context for OP block execution.
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct OpBlockExecutionCtx {
     /// Parent block hash.
     pub parent_hash: B256,
@@ -117,18 +113,18 @@ where
 
     fn execute_transaction_with_result_closure(
         &mut self,
-        tx: impl IntoTxEnv<TxEnv> + AsRecoveredTx<Self::Transaction>,
+        tx: impl IntoTxEnv<E::Tx> + AsRecoveredTx<Self::Transaction> + Copy,
         f: impl FnOnce(&revm::context::result::ExecutionResult<<Self::Evm as Evm>::HaltReason>),
     ) -> Result<u64, BlockExecutionError> {
-        let tx = tx.as_recovered();
-        let is_deposit = tx.ty() == DEPOSIT_TRANSACTION_TYPE;
+        let is_deposit = tx.as_recovered().ty() == DEPOSIT_TRANSACTION_TYPE;
 
         // The sum of the transaction’s gas limit, Tg, and the gas utilized in this block prior,
         // must be no greater than the block’s gasLimit.
         let block_available_gas = self.evm.block().gas_limit - self.gas_used;
-        if tx.gas_limit() > block_available_gas && (self.is_regolith || !is_deposit) {
+        if tx.as_recovered().gas_limit() > block_available_gas && (self.is_regolith || !is_deposit)
+        {
             return Err(BlockValidationError::TransactionGasLimitMoreThanAvailableBlockGas {
-                transaction_gas_limit: tx.gas_limit(),
+                transaction_gas_limit: tx.as_recovered().gas_limit(),
                 block_available_gas,
             }
             .into());
@@ -143,13 +139,13 @@ where
             .then(|| {
                 self.evm
                     .db_mut()
-                    .load_cache_account(tx.signer())
+                    .load_cache_account(tx.as_recovered().signer())
                     .map(|acc| acc.account_info().unwrap_or_default())
             })
             .transpose()
             .map_err(BlockExecutionError::other)?;
 
-        let hash = tx.trie_hash();
+        let hash = tx.as_recovered().trie_hash();
 
         // Execute transaction.
         let result_and_state =
@@ -168,7 +164,7 @@ where
 
         self.receipts.push(
             match self.receipt_builder.build_receipt(ReceiptBuilderCtx {
-                tx: tx.inner(),
+                tx: &tx.as_recovered(),
                 result,
                 cumulative_gas_used: self.gas_used,
                 evm: &self.evm,
@@ -309,5 +305,42 @@ where
         I: Inspector<EvmF::Context<&'a mut State<DB>>> + 'a,
     {
         OpBlockExecutor::new(evm, ctx, &self.spec, &self.receipt_builder)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use alloy_consensus::{transaction::Recovered, SignableTransaction, TxLegacy};
+    use alloy_eips::eip2718::WithEncoded;
+    use alloy_evm::EvmEnv;
+    use alloy_primitives::{Address, PrimitiveSignature as Signature};
+    use op_alloy_consensus::OpTxEnvelope;
+    use revm::database::{CacheDB, EmptyDB};
+
+    use super::*;
+
+    #[test]
+    fn test_with_encoded() {
+        let executor_factory = OpBlockExecutorFactory::new(
+            OpAlloyReceiptBuilder::default(),
+            OpChainHardforks::op_mainnet(),
+            OpEvmFactory::default(),
+        );
+        let mut db = State::builder().with_database(CacheDB::<EmptyDB>::default()).build();
+        let evm = executor_factory.evm_factory.create_evm(&mut db, EvmEnv::default());
+        let mut executor = executor_factory.create_executor(evm, OpBlockExecutionCtx::default());
+        let tx = Recovered::new_unchecked(
+            OpTxEnvelope::Legacy(TxLegacy::default().into_signed(Signature::new(
+                Default::default(),
+                Default::default(),
+                Default::default(),
+            ))),
+            Address::ZERO,
+        );
+        let tx_with_encoded = WithEncoded::new(tx.encoded_2718().into(), tx.clone());
+
+        // make sure we can use both `WithEncoded` and transaction itself as inputs.
+        let _ = executor.execute_transaction(&tx);
+        let _ = executor.execute_transaction(&tx_with_encoded);
     }
 }

@@ -22,6 +22,7 @@ alloy-hardforks.workspace = true
 
 revm.workspace = true
 op-revm = { workspace = true, optional = true }
+op-alloy-consensus = { workspace = true, optional = true }
 
 auto_impl.workspace = true
 derive_more.workspace = true
@@ -43,4 +44,4 @@ std = [
 	"op-revm?/std",
 	"thiserror/std"
 ]
-op = ["op-revm"]
+op = ["op-revm", "op-alloy-consensus"]
