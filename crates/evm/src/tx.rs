@@ -186,9 +186,9 @@ impl FromRecoveredTx<TxEip7702> for TxEnv {
     }
 }
 
-/// Helper trait to abstract over different Recovered<T> implementations.
+/// Helper trait to abstract over different `Recovered<T>` implementations.
 ///
-/// Implemented for Recovered<T>, Recovered<&T>, &Recovered<T>, &Recovered<&T>
+/// Implemented for `Recovered<T>`, `Recovered<&T>`, `&Recovered<T>`, `&Recovered<&T>`
 #[auto_impl::auto_impl(&)]
 pub trait RecoveredTx<T> {
     /// Returns the transaction.
