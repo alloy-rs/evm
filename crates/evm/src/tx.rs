@@ -186,7 +186,9 @@ impl FromRecoveredTx<TxEip7702> for TxEnv {
     }
 }
 
-/// Helper user-facing trait to allow retrieving a recovered transaction reference.
+/// Helper trait to abstract over different Recovered<T> implementations.
+///
+/// Implemented for Recovered<T>, Recovered<&T>, &Recovered<T>, &Recovered<&T>
 #[auto_impl::auto_impl(&)]
 pub trait RecoveredTx<T> {
     /// Returns the transaction.
@@ -216,13 +218,13 @@ impl<T> RecoveredTx<T> for Recovered<T> {
     }
 }
 
-impl<T> RecoveredTx<T> for WithEncoded<Recovered<T>> {
-    fn tx(&self) -> &T {
-        self.1.inner()
+impl<Tx, T: RecoveredTx<Tx>> RecoveredTx<Tx> for WithEncoded<T> {
+    fn tx(&self) -> &Tx {
+        self.1.tx()
     }
 
     fn signer(&self) -> &Address {
-        self.1.signer_ref()
+        self.1.signer()
     }
 }
 

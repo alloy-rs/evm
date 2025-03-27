@@ -10,10 +10,10 @@ use crate::{
     block::{
         state_changes::{balance_increment_state, post_block_balance_increments},
         BlockExecutionError, BlockExecutionResult, BlockExecutor, BlockExecutorFactory,
-        BlockExecutorFor, BlockValidationError, OnStateHook, StateChangePostBlockSource,
-        StateChangeSource, SystemCaller,
+        BlockExecutorFor, BlockValidationError, ExecutableTx, OnStateHook,
+        StateChangePostBlockSource, StateChangeSource, SystemCaller,
     },
-    Database, Evm, EvmFactory, FromRecoveredTx, IntoTxEnv, RecoveredTx,
+    Database, Evm, EvmFactory, FromRecoveredTx,
 };
 use alloc::{borrow::Cow, boxed::Box, vec::Vec};
 use alloy_consensus::{Header, Transaction, TxReceipt};
@@ -104,7 +104,7 @@ where
 
     fn execute_transaction_with_result_closure(
         &mut self,
-        tx: impl IntoTxEnv<E::Tx> + RecoveredTx<Self::Transaction> + Copy,
+        tx: impl ExecutableTx<Self>,
         f: impl FnOnce(&ExecutionResult<<Self::Evm as Evm>::HaltReason>),
     ) -> Result<u64, BlockExecutionError> {
         // The sum of the transaction's gas limit, Tg, and the gas utilized in this block prior,

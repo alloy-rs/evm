@@ -8,11 +8,11 @@ use alloy_evm::{
     block::{
         state_changes::{balance_increment_state, post_block_balance_increments},
         BlockExecutionError, BlockExecutionResult, BlockExecutor, BlockExecutorFactory,
-        BlockExecutorFor, BlockValidationError, OnStateHook, StateChangePostBlockSource,
-        StateChangeSource, SystemCaller,
+        BlockExecutorFor, BlockValidationError, ExecutableTx, OnStateHook,
+        StateChangePostBlockSource, StateChangeSource, SystemCaller,
     },
     eth::receipt_builder::ReceiptBuilderCtx,
-    Database, Evm, EvmFactory, FromRecoveredTx, IntoTxEnv, RecoveredTx,
+    Database, Evm, EvmFactory, FromRecoveredTx,
 };
 use alloy_op_hardforks::{OpChainHardforks, OpHardforks};
 use alloy_primitives::{Bytes, B256};
@@ -113,7 +113,7 @@ where
 
     fn execute_transaction_with_result_closure(
         &mut self,
-        tx: impl IntoTxEnv<E::Tx> + RecoveredTx<Self::Transaction> + Copy,
+        tx: impl ExecutableTx<Self>,
         f: impl FnOnce(&revm::context::result::ExecutionResult<<Self::Evm as Evm>::HaltReason>),
     ) -> Result<u64, BlockExecutionError> {
         let is_deposit = tx.tx().ty() == DEPOSIT_TRANSACTION_TYPE;

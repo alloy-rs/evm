@@ -31,6 +31,16 @@ pub struct BlockExecutionResult<T> {
     pub gas_used: u64,
 }
 
+/// Helper trait to encapsulate requirements for a type to be used as input for [`BlockExecutor`].
+pub trait ExecutableTx<E: BlockExecutor + ?Sized>:
+    IntoTxEnv<<E::Evm as Evm>::Tx> + RecoveredTx<E::Transaction> + Copy
+{
+}
+impl<E: BlockExecutor, T> ExecutableTx<E> for T where
+    T: IntoTxEnv<<E::Evm as Evm>::Tx> + RecoveredTx<E::Transaction> + Copy
+{
+}
+
 /// A type that knows how to execute a single block.
 ///
 /// The current abstraction assumes that block execution consists of the following steps:
@@ -58,7 +68,7 @@ pub trait BlockExecutor {
     /// Returns the gas used by the transaction.
     fn execute_transaction(
         &mut self,
-        tx: impl IntoTxEnv<<Self::Evm as Evm>::Tx> + RecoveredTx<Self::Transaction> + Copy,
+        tx: impl ExecutableTx<Self>,
     ) -> Result<u64, BlockExecutionError> {
         self.execute_transaction_with_result_closure(tx, |_| ())
     }
@@ -67,7 +77,7 @@ pub trait BlockExecutor {
     /// given closure with an internal [`ExecutionResult`] produced by the EVM.
     fn execute_transaction_with_result_closure(
         &mut self,
-        tx: impl IntoTxEnv<<Self::Evm as Evm>::Tx> + RecoveredTx<Self::Transaction> + Copy,
+        tx: impl ExecutableTx<Self>,
         f: impl FnOnce(&ExecutionResult<<Self::Evm as Evm>::HaltReason>),
     ) -> Result<u64, BlockExecutionError>;
 
