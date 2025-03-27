@@ -13,7 +13,7 @@ use crate::{
         BlockExecutorFor, BlockValidationError, OnStateHook, StateChangePostBlockSource,
         StateChangeSource, SystemCaller,
     },
-    AsRecoveredTx, Database, Evm, EvmFactory, FromRecoveredTx, IntoTxEnv,
+    Database, Evm, EvmFactory, FromRecoveredTx, IntoTxEnv, RecoveredTx,
 };
 use alloc::{borrow::Cow, boxed::Box, vec::Vec};
 use alloy_consensus::{Header, Transaction, TxReceipt};
@@ -104,16 +104,16 @@ where
 
     fn execute_transaction_with_result_closure(
         &mut self,
-        tx: impl IntoTxEnv<E::Tx> + AsRecoveredTx<Self::Transaction> + Copy,
+        tx: impl IntoTxEnv<E::Tx> + RecoveredTx<Self::Transaction> + Copy,
         f: impl FnOnce(&ExecutionResult<<Self::Evm as Evm>::HaltReason>),
     ) -> Result<u64, BlockExecutionError> {
         // The sum of the transaction's gas limit, Tg, and the gas utilized in this block prior,
         // must be no greater than the block's gasLimit.
         let block_available_gas = self.evm.block().gas_limit - self.gas_used;
 
-        if tx.as_recovered().gas_limit() > block_available_gas {
+        if tx.tx().gas_limit() > block_available_gas {
             return Err(BlockValidationError::TransactionGasLimitMoreThanAvailableBlockGas {
-                transaction_gas_limit: tx.as_recovered().gas_limit(),
+                transaction_gas_limit: tx.tx().gas_limit(),
                 block_available_gas,
             }
             .into());
@@ -123,7 +123,7 @@ where
         let result_and_state = self
             .evm
             .transact(tx)
-            .map_err(|err| BlockExecutionError::evm(err, tx.as_recovered().trie_hash()))?;
+            .map_err(|err| BlockExecutionError::evm(err, tx.tx().trie_hash()))?;
         self.system_caller
             .on_state(StateChangeSource::Transaction(self.receipts.len()), &result_and_state.state);
         let ResultAndState { result, state } = result_and_state;
@@ -137,7 +137,7 @@ where
 
         // Push transaction changeset and calculate header bloom filter for receipt.
         self.receipts.push(self.receipt_builder.build_receipt(ReceiptBuilderCtx {
-            tx: &tx.as_recovered(),
+            tx: tx.tx(),
             evm: &self.evm,
             result,
             state: &state,

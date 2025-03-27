@@ -12,7 +12,7 @@ use alloy_evm::{
         StateChangeSource, SystemCaller,
     },
     eth::receipt_builder::ReceiptBuilderCtx,
-    AsRecoveredTx, Database, Evm, EvmFactory, FromRecoveredTx, IntoTxEnv,
+    Database, Evm, EvmFactory, FromRecoveredTx, IntoTxEnv, RecoveredTx,
 };
 use alloy_op_hardforks::{OpChainHardforks, OpHardforks};
 use alloy_primitives::{Bytes, B256};
@@ -113,18 +113,17 @@ where
 
     fn execute_transaction_with_result_closure(
         &mut self,
-        tx: impl IntoTxEnv<E::Tx> + AsRecoveredTx<Self::Transaction> + Copy,
+        tx: impl IntoTxEnv<E::Tx> + RecoveredTx<Self::Transaction> + Copy,
         f: impl FnOnce(&revm::context::result::ExecutionResult<<Self::Evm as Evm>::HaltReason>),
     ) -> Result<u64, BlockExecutionError> {
-        let is_deposit = tx.as_recovered().ty() == DEPOSIT_TRANSACTION_TYPE;
+        let is_deposit = tx.tx().ty() == DEPOSIT_TRANSACTION_TYPE;
 
         // The sum of the transaction’s gas limit, Tg, and the gas utilized in this block prior,
         // must be no greater than the block’s gasLimit.
         let block_available_gas = self.evm.block().gas_limit - self.gas_used;
-        if tx.as_recovered().gas_limit() > block_available_gas && (self.is_regolith || !is_deposit)
-        {
+        if tx.tx().gas_limit() > block_available_gas && (self.is_regolith || !is_deposit) {
             return Err(BlockValidationError::TransactionGasLimitMoreThanAvailableBlockGas {
-                transaction_gas_limit: tx.as_recovered().gas_limit(),
+                transaction_gas_limit: tx.tx().gas_limit(),
                 block_available_gas,
             }
             .into());
@@ -139,13 +138,13 @@ where
             .then(|| {
                 self.evm
                     .db_mut()
-                    .load_cache_account(tx.as_recovered().signer())
+                    .load_cache_account(*tx.signer())
                     .map(|acc| acc.account_info().unwrap_or_default())
             })
             .transpose()
             .map_err(BlockExecutionError::other)?;
 
-        let hash = tx.as_recovered().trie_hash();
+        let hash = tx.tx().trie_hash();
 
         // Execute transaction.
         let result_and_state =
@@ -164,7 +163,7 @@ where
 
         self.receipts.push(
             match self.receipt_builder.build_receipt(ReceiptBuilderCtx {
-                tx: &tx.as_recovered(),
+                tx: tx.tx(),
                 result,
                 cumulative_gas_used: self.gas_used,
                 evm: &self.evm,

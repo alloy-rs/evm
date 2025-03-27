@@ -187,33 +187,42 @@ impl FromRecoveredTx<TxEip7702> for TxEnv {
 }
 
 /// Helper user-facing trait to allow retrieving a recovered transaction reference.
-pub trait AsRecoveredTx<T> {
-    /// Returns a reference to the recovered transaction.
-    fn as_recovered(&self) -> Recovered<&T>;
+#[auto_impl::auto_impl(&)]
+pub trait RecoveredTx<T> {
+    /// Returns the transaction.
+    fn tx(&self) -> &T;
+
+    /// Returns the signer of the transaction.
+    fn signer(&self) -> &Address;
 }
 
-impl<Tx, T: AsRecoveredTx<Tx>> AsRecoveredTx<Tx> for &T {
-    fn as_recovered(&self) -> Recovered<&Tx> {
-        (*self).as_recovered()
+impl<T> RecoveredTx<T> for Recovered<&T> {
+    fn tx(&self) -> &T {
+        *self.inner()
+    }
+
+    fn signer(&self) -> &Address {
+        self.signer_ref()
     }
 }
 
-impl<T> AsRecoveredTx<T> for Recovered<&T> {
-    fn as_recovered(&self) -> Recovered<&T> {
-        Recovered::new_unchecked(self.inner(), self.signer())
+impl<T> RecoveredTx<T> for Recovered<T> {
+    fn tx(&self) -> &T {
+        self.inner()
+    }
+
+    fn signer(&self) -> &Address {
+        self.signer_ref()
     }
 }
 
-impl<T> AsRecoveredTx<T> for Recovered<T> {
-    fn as_recovered(&self) -> Recovered<&T> {
-        Recovered::new_unchecked(self.inner(), self.signer())
+impl<T> RecoveredTx<T> for WithEncoded<Recovered<T>> {
+    fn tx(&self) -> &T {
+        self.1.inner()
     }
-}
 
-impl<T> AsRecoveredTx<T> for WithEncoded<Recovered<T>> {
-    fn as_recovered(&self) -> Recovered<&T> {
-        let recovered = &self.1;
-        Recovered::new_unchecked(recovered.inner(), recovered.signer())
+    fn signer(&self) -> &Address {
+        self.1.signer_ref()
     }
 }
 
@@ -334,7 +343,7 @@ mod tests {
     }
 
     const fn assert_env<T: IntoTxEnv<MyTxEnv>>() {}
-    const fn assert_recoverable<T: AsRecoveredTx<MyTransaction>>() {}
+    const fn assert_recoverable<T: RecoveredTx<MyTransaction>>() {}
 
     #[test]
     const fn test_into_tx_env() {
