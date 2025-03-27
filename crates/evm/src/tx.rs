@@ -56,7 +56,7 @@ impl<T, TxEnv: FromRecoveredTx<T>> IntoTxEnv<TxEnv> for &Recovered<T> {
 impl FromRecoveredTx<TxLegacy> for TxEnv {
     fn from_recovered_tx(tx: &TxLegacy, caller: Address) -> Self {
         let TxLegacy { chain_id, nonce, gas_price, gas_limit, to, value, input } = tx;
-        TxEnv {
+        Self {
             tx_type: tx.ty(),
             caller,
             gas_limit: *gas_limit,
@@ -74,7 +74,7 @@ impl FromRecoveredTx<TxLegacy> for TxEnv {
 impl FromRecoveredTx<TxEip2930> for TxEnv {
     fn from_recovered_tx(tx: &TxEip2930, caller: Address) -> Self {
         let TxEip2930 { chain_id, nonce, gas_price, gas_limit, to, value, access_list, input } = tx;
-        TxEnv {
+        Self {
             tx_type: tx.ty(),
             caller,
             gas_limit: *gas_limit,
@@ -103,7 +103,7 @@ impl FromRecoveredTx<TxEip1559> for TxEnv {
             max_priority_fee_per_gas,
             access_list,
         } = tx;
-        TxEnv {
+        Self {
             tx_type: tx.ty(),
             caller,
             gas_limit: *gas_limit,
@@ -135,7 +135,7 @@ impl FromRecoveredTx<TxEip4844> for TxEnv {
             blob_versioned_hashes,
             max_fee_per_blob_gas,
         } = tx;
-        TxEnv {
+        Self {
             tx_type: tx.ty(),
             caller,
             gas_limit: *gas_limit,
@@ -168,7 +168,7 @@ impl FromRecoveredTx<TxEip7702> for TxEnv {
             access_list,
             authorization_list,
         } = tx;
-        TxEnv {
+        Self {
             tx_type: tx.ty(),
             caller,
             gas_limit: *gas_limit,
@@ -296,7 +296,7 @@ mod op {
                 Default::default()
             };
 
-            OpTransaction { base, enveloped_tx: Some(encoded), deposit }
+            Self { base, enveloped_tx: Some(encoded), deposit }
         }
     }
 

@@ -42,6 +42,7 @@ std = [
 	"alloy-sol-types/std",
 	"derive_more/std",
 	"op-revm?/std",
-	"thiserror/std"
+	"thiserror/std",
+	"op-alloy-consensus?/std"
 ]
 op = ["op-revm", "op-alloy-consensus"]
