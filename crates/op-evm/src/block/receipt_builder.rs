@@ -1,9 +1,9 @@
 //! Abstraction over receipt building logic to allow plugging different primitive types into
 //! [`super::OpBlockExecutor`].
 
-use core::fmt::Debug;
 use alloy_consensus::Eip658Value;
 use alloy_evm::{eth::receipt_builder::ReceiptBuilderCtx, Evm};
+use core::fmt::Debug;
 use op_alloy_consensus::{OpDepositReceipt, OpReceiptEnvelope, OpTxEnvelope, OpTxType};
 
 /// Type that knows how to build a receipt based on execution result.
