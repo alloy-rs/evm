@@ -112,6 +112,23 @@ pub trait BlockExecutor {
 
     /// Exposes mutable reference to EVM.
     fn evm_mut(&mut self) -> &mut Self::Evm;
+    /// Executes a block of transactions, applying pre and post execution changes.
+    fn execute_block(
+        self,
+        transactions: impl IntoIterator<Item = impl ExecutableTx<Self>>,
+    ) -> Result<BlockExecutionResult<Self::Receipt>, BlockExecutionError>
+    where
+        Self: Sized,
+    {
+        let mut this = self;
+        this.apply_pre_execution_changes()?;
+
+        for tx in transactions {
+            this.execute_transaction(tx)?;
+        }
+
+        this.apply_post_execution_changes()
+    }
 }
 
 /// A helper trait encapsulating the constraints on [`BlockExecutor`] produced by the
