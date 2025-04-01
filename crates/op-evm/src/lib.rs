@@ -25,7 +25,6 @@ use revm::{
     context::{BlockEnv, TxEnv},
     context_interface::result::{EVMError, ResultAndState},
     handler::{instructions::EthInstructions, PrecompileProvider},
-    inspector::NoOpInspector,
     interpreter::{interpreter::EthInterpreter, InterpreterResult},
     Context, ExecuteEvm, InspectEvm, Inspector,
 };
@@ -217,22 +216,7 @@ impl EvmFactory for OpEvmFactory {
     type HaltReason = OpHaltReason;
     type Spec = OpSpecId;
 
-    fn create_evm<DB: Database>(
-        &self,
-        db: DB,
-        input: EvmEnv<OpSpecId>,
-    ) -> Self::Evm<DB, NoOpInspector> {
-        OpEvm {
-            inner: Context::op()
-                .with_db(db)
-                .with_block(input.block_env)
-                .with_cfg(input.cfg_env)
-                .build_op_with_inspector(NoOpInspector {}),
-            inspect: false,
-        }
-    }
-
-    fn create_evm_with_inspector<DB: Database, I: Inspector<Self::Context<DB>>>(
+    fn create_evm<DB: Database, I: Inspector<Self::Context<DB>>>(
         &self,
         db: DB,
         input: EvmEnv<OpSpecId>,
@@ -244,7 +228,7 @@ impl EvmFactory for OpEvmFactory {
                 .with_block(input.block_env)
                 .with_cfg(input.cfg_env)
                 .build_op_with_inspector(inspector),
-            inspect: true,
+            inspect: false,
         }
     }
 }

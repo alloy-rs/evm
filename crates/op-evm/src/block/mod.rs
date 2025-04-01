@@ -314,7 +314,7 @@ mod tests {
     use alloy_evm::EvmEnv;
     use alloy_primitives::{Address, PrimitiveSignature as Signature};
     use op_alloy_consensus::OpTxEnvelope;
-    use revm::database::{CacheDB, EmptyDB};
+    use revm::{database::{CacheDB, EmptyDB}, inspector::NoOpInspector};
 
     use super::*;
 
@@ -326,7 +326,7 @@ mod tests {
             OpEvmFactory::default(),
         );
         let mut db = State::builder().with_database(CacheDB::<EmptyDB>::default()).build();
-        let evm = executor_factory.evm_factory.create_evm(&mut db, EvmEnv::default());
+        let evm = executor_factory.evm_factory.create_evm(&mut db, EvmEnv::default(), NoOpInspector{});
         let mut executor = executor_factory.create_executor(evm, OpBlockExecutionCtx::default());
         let tx = Recovered::new_unchecked(
             OpTxEnvelope::Legacy(TxLegacy::default().into_signed(Signature::new(

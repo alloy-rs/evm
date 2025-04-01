@@ -11,7 +11,6 @@ use revm::{
     context::{BlockEnv, CfgEnv, Evm as RevmEvm, TxEnv},
     context_interface::result::{EVMError, HaltReason, ResultAndState},
     handler::{instructions::EthInstructions, EthPrecompiles, PrecompileProvider},
-    inspector::NoOpInspector,
     interpreter::{interpreter::EthInterpreter, InterpreterResult},
     primitives::hardfork::SpecId,
     Context, ExecuteEvm, InspectEvm, Inspector, MainBuilder, MainContext,
@@ -217,18 +216,7 @@ impl EvmFactory for EthEvmFactory {
     type HaltReason = HaltReason;
     type Spec = SpecId;
 
-    fn create_evm<DB: Database>(&self, db: DB, input: EvmEnv) -> Self::Evm<DB, NoOpInspector> {
-        EthEvm {
-            inner: Context::mainnet()
-                .with_block(input.block_env)
-                .with_cfg(input.cfg_env)
-                .with_db(db)
-                .build_mainnet_with_inspector(NoOpInspector {}),
-            inspect: false,
-        }
-    }
-
-    fn create_evm_with_inspector<DB: Database, I: Inspector<Self::Context<DB>>>(
+    fn create_evm<DB: Database, I: Inspector<Self::Context<DB>>>(
         &self,
         db: DB,
         input: EvmEnv,
@@ -240,7 +228,7 @@ impl EvmFactory for EthEvmFactory {
                 .with_cfg(input.cfg_env)
                 .with_db(db)
                 .build_mainnet_with_inspector(inspector),
-            inspect: true,
+            inspect: false,
         }
     }
 }

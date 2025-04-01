@@ -9,7 +9,7 @@ use revm::{
         result::{HaltReasonTr, ResultAndState},
         ContextTr,
     },
-    inspector::{JournalExt, NoOpInspector},
+    inspector::JournalExt,
     DatabaseCommit, Inspector,
 };
 
@@ -154,20 +154,13 @@ pub trait EvmFactory {
     type Spec: Debug + Copy + Send + Sync + 'static;
 
     /// Creates a new instance of an EVM.
-    fn create_evm<DB: Database>(
-        &self,
-        db: DB,
-        evm_env: EvmEnv<Self::Spec>,
-    ) -> Self::Evm<DB, NoOpInspector>;
-
-    /// Creates a new instance of an EVM with an inspector.
     ///
     /// Note: It is expected that the [`Inspector`] is usually provided as `&mut Inspector` so that
     /// it remains owned by the call site when [`Evm::transact`] is invoked.
-    fn create_evm_with_inspector<DB: Database, I: Inspector<Self::Context<DB>>>(
+    fn create_evm<DB: Database, I: Inspector<Self::Context<DB>>>(
         &self,
         db: DB,
-        input: EvmEnv<Self::Spec>,
+        evm_env: EvmEnv<Self::Spec>,
         inspector: I,
     ) -> Self::Evm<DB, I>;
 }
