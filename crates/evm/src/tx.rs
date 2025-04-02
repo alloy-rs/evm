@@ -289,6 +289,18 @@ impl<T, TxEnv: FromTxWithEncoded<T>> IntoTxEnv<TxEnv> for &WithEncoded<Recovered
     }
 }
 
+impl<T, TxEnv: FromTxWithEncoded<T>> IntoTxEnv<TxEnv> for WithEncoded<&Recovered<T>> {
+    fn into_tx_env(self) -> TxEnv {
+        TxEnv::from_encoded_tx(self.value(), *self.value().signer(), self.encoded_bytes().clone())
+    }
+}
+
+impl<T, TxEnv: FromTxWithEncoded<T>> IntoTxEnv<TxEnv> for &WithEncoded<&Recovered<T>> {
+    fn into_tx_env(self) -> TxEnv {
+        TxEnv::from_encoded_tx(self.value(), *self.value().signer(), self.encoded_bytes().clone())
+    }
+}
+
 impl<Eip4844: AsRef<TxEip4844>> FromTxWithEncoded<EthereumTxEnvelope<Eip4844>> for TxEnv {
     fn from_encoded_tx(tx: &EthereumTxEnvelope<Eip4844>, caller: Address, encoded: Bytes) -> Self {
         match tx {
