@@ -289,29 +289,27 @@ impl<T, TxEnv: FromTxWithEncoded<T>> IntoTxEnv<TxEnv> for &WithEncoded<Recovered
     }
 }
 
-impl FromTxWithEncoded<EthereumTxEnvelope<TxEip4844>> for TxEnv {
-    fn from_encoded_tx(
-        tx: &EthereumTxEnvelope<TxEip4844>,
-        caller: Address,
-        encoded: Bytes,
-    ) -> Self {
+impl<Eip4844: AsRef<TxEip4844>> FromTxWithEncoded<EthereumTxEnvelope<Eip4844>> for TxEnv {
+    fn from_encoded_tx(tx: &EthereumTxEnvelope<Eip4844>, caller: Address, encoded: Bytes) -> Self {
         match tx {
             EthereumTxEnvelope::Legacy(tx) => Self::from_encoded_tx(tx.tx(), caller, encoded),
             EthereumTxEnvelope::Eip1559(tx) => Self::from_encoded_tx(tx.tx(), caller, encoded),
             EthereumTxEnvelope::Eip2930(tx) => Self::from_encoded_tx(tx.tx(), caller, encoded),
-            EthereumTxEnvelope::Eip4844(tx) => Self::from_encoded_tx(tx.tx(), caller, encoded),
+            EthereumTxEnvelope::Eip4844(tx) => {
+                Self::from_encoded_tx(tx.tx().as_ref(), caller, encoded)
+            }
             EthereumTxEnvelope::Eip7702(tx) => Self::from_encoded_tx(tx.tx(), caller, encoded),
         }
     }
 }
 
-impl FromRecoveredTx<EthereumTxEnvelope<TxEip4844>> for TxEnv {
-    fn from_recovered_tx(tx: &EthereumTxEnvelope<TxEip4844>, sender: Address) -> Self {
+impl<Eip4844: AsRef<TxEip4844>> FromRecoveredTx<EthereumTxEnvelope<Eip4844>> for TxEnv {
+    fn from_recovered_tx(tx: &EthereumTxEnvelope<Eip4844>, sender: Address) -> Self {
         match tx {
             EthereumTxEnvelope::Legacy(tx) => Self::from_recovered_tx(tx.tx(), sender),
             EthereumTxEnvelope::Eip1559(tx) => Self::from_recovered_tx(tx.tx(), sender),
             EthereumTxEnvelope::Eip2930(tx) => Self::from_recovered_tx(tx.tx(), sender),
-            EthereumTxEnvelope::Eip4844(tx) => Self::from_recovered_tx(tx.tx(), sender),
+            EthereumTxEnvelope::Eip4844(tx) => Self::from_recovered_tx(tx.tx().as_ref(), sender),
             EthereumTxEnvelope::Eip7702(tx) => Self::from_recovered_tx(tx.tx(), sender),
         }
     }
