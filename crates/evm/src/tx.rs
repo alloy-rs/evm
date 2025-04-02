@@ -1,7 +1,8 @@
 //! Abstraction of an executable transaction.
 
 use alloy_consensus::{
-    transaction::Recovered, TxEip1559, TxEip2930, TxEip4844, TxEip7702, TxLegacy,
+    transaction::Recovered, EthereumTxEnvelope, TxEip1559, TxEip2930, TxEip4844, TxEip7702,
+    TxLegacy,
 };
 use alloy_eips::{eip2718::WithEncoded, Typed2718};
 use alloy_primitives::{Address, Bytes, TxKind};
@@ -71,6 +72,12 @@ impl FromRecoveredTx<TxLegacy> for TxEnv {
     }
 }
 
+impl FromTxWithEncoded<TxLegacy> for TxEnv {
+    fn from_encoded_tx(tx: &TxLegacy, sender: Address, _encoded: Bytes) -> Self {
+        Self::from_recovered_tx(tx, sender)
+    }
+}
+
 impl FromRecoveredTx<TxEip2930> for TxEnv {
     fn from_recovered_tx(tx: &TxEip2930, caller: Address) -> Self {
         let TxEip2930 { chain_id, nonce, gas_price, gas_limit, to, value, access_list, input } = tx;
@@ -87,6 +94,12 @@ impl FromRecoveredTx<TxEip2930> for TxEnv {
             access_list: access_list.clone(),
             ..Default::default()
         }
+    }
+}
+
+impl FromTxWithEncoded<TxEip2930> for TxEnv {
+    fn from_encoded_tx(tx: &TxEip2930, sender: Address, _encoded: Bytes) -> Self {
+        Self::from_recovered_tx(tx, sender)
     }
 }
 
@@ -117,6 +130,12 @@ impl FromRecoveredTx<TxEip1559> for TxEnv {
             access_list: access_list.clone(),
             ..Default::default()
         }
+    }
+}
+
+impl FromTxWithEncoded<TxEip1559> for TxEnv {
+    fn from_encoded_tx(tx: &TxEip1559, sender: Address, _encoded: Bytes) -> Self {
+        Self::from_recovered_tx(tx, sender)
     }
 }
 
@@ -154,6 +173,12 @@ impl FromRecoveredTx<TxEip4844> for TxEnv {
     }
 }
 
+impl FromTxWithEncoded<TxEip4844> for TxEnv {
+    fn from_encoded_tx(tx: &TxEip4844, sender: Address, _encoded: Bytes) -> Self {
+        Self::from_recovered_tx(tx, sender)
+    }
+}
+
 impl FromRecoveredTx<TxEip7702> for TxEnv {
     fn from_recovered_tx(tx: &TxEip7702, caller: Address) -> Self {
         let TxEip7702 {
@@ -183,6 +208,12 @@ impl FromRecoveredTx<TxEip7702> for TxEnv {
             authorization_list: authorization_list.clone(),
             ..Default::default()
         }
+    }
+}
+
+impl FromTxWithEncoded<TxEip7702> for TxEnv {
+    fn from_encoded_tx(tx: &TxEip7702, sender: Address, _encoded: Bytes) -> Self {
+        Self::from_recovered_tx(tx, sender)
     }
 }
 
@@ -255,6 +286,34 @@ impl<T, TxEnv: FromTxWithEncoded<T>> IntoTxEnv<TxEnv> for &WithEncoded<Recovered
     fn into_tx_env(self) -> TxEnv {
         let recovered = &self.1;
         TxEnv::from_encoded_tx(recovered.inner(), recovered.signer(), self.encoded_bytes().clone())
+    }
+}
+
+impl FromTxWithEncoded<EthereumTxEnvelope<TxEip4844>> for TxEnv {
+    fn from_encoded_tx(
+        tx: &EthereumTxEnvelope<TxEip4844>,
+        caller: Address,
+        encoded: Bytes,
+    ) -> Self {
+        match tx {
+            EthereumTxEnvelope::Legacy(tx) => Self::from_encoded_tx(tx.tx(), caller, encoded),
+            EthereumTxEnvelope::Eip1559(tx) => Self::from_encoded_tx(tx.tx(), caller, encoded),
+            EthereumTxEnvelope::Eip2930(tx) => Self::from_encoded_tx(tx.tx(), caller, encoded),
+            EthereumTxEnvelope::Eip4844(tx) => Self::from_encoded_tx(tx.tx(), caller, encoded),
+            EthereumTxEnvelope::Eip7702(tx) => Self::from_encoded_tx(tx.tx(), caller, encoded),
+        }
+    }
+}
+
+impl FromRecoveredTx<EthereumTxEnvelope<TxEip4844>> for TxEnv {
+    fn from_recovered_tx(tx: &EthereumTxEnvelope<TxEip4844>, sender: Address) -> Self {
+        match tx {
+            EthereumTxEnvelope::Legacy(tx) => Self::from_recovered_tx(tx.tx(), sender),
+            EthereumTxEnvelope::Eip1559(tx) => Self::from_recovered_tx(tx.tx(), sender),
+            EthereumTxEnvelope::Eip2930(tx) => Self::from_recovered_tx(tx.tx(), sender),
+            EthereumTxEnvelope::Eip4844(tx) => Self::from_recovered_tx(tx.tx(), sender),
+            EthereumTxEnvelope::Eip7702(tx) => Self::from_recovered_tx(tx.tx(), sender),
+        }
     }
 }
 
