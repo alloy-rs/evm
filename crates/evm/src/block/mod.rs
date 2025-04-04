@@ -115,6 +115,9 @@ pub trait BlockExecutor {
     /// Exposes mutable reference to EVM.
     fn evm_mut(&mut self) -> &mut Self::Evm;
 
+    /// Exposes immutable reference to EVM.
+    fn evm(&self) -> &Self::Evm;
+
     /// Executes all transactions in a block, applying pre and post execution changes.
     fn execute_block(
         mut self,
