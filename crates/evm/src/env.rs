@@ -35,6 +35,11 @@ impl<Spec> EvmEnv<Spec> {
         &self.cfg_env
     }
 
+    /// Returns the chain ID of the environment.
+    pub const fn chainid(&self) -> u64 {
+        self.cfg_env.chain_id
+    }
+
     /// Returns the spec id of the chain
     pub const fn spec_id(&self) -> &Spec {
         &self.cfg_env.spec
