@@ -54,7 +54,7 @@ pub fn accumulate_deposits_from_logs<'a>(
             // We assume that the log is valid because it was emitted by the
             // deposit contract.
             let decoded_log =
-                DepositEvent::decode_log(log, false).map_err(|err: alloy_sol_types::Error| {
+                DepositEvent::decode_log(log).map_err(|err: alloy_sol_types::Error| {
                     BlockValidationError::DepositRequestDecode(err.to_string())
                 })?;
             accumulate_deposit_from_log(&decoded_log, out);
