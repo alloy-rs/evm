@@ -106,6 +106,10 @@ where
         &self.block
     }
 
+    fn chain_id(&self) -> u64 {
+        self.cfg.chain_id
+    }
+
     fn transact_raw(
         &mut self,
         tx: Self::Tx,

@@ -46,6 +46,9 @@ pub trait Evm {
     /// Reference to [`BlockEnv`].
     fn block(&self) -> &BlockEnv;
 
+    /// Returns the chain ID of the environment.
+    fn chain_id(&self) -> u64;
+
     /// Executes a transaction and returns the outcome.
     fn transact_raw(
         &mut self,
