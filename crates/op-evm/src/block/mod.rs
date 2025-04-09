@@ -319,7 +319,7 @@ mod tests {
     use alloy_consensus::{transaction::Recovered, SignableTransaction, TxLegacy};
     use alloy_eips::eip2718::WithEncoded;
     use alloy_evm::EvmEnv;
-    use alloy_primitives::{Address, PrimitiveSignature as Signature};
+    use alloy_primitives::{Address, Signature};
     use op_alloy_consensus::OpTxEnvelope;
     use revm::database::{CacheDB, EmptyDB};
 
