@@ -9,7 +9,9 @@ use revm::{
         result::{HaltReasonTr, ResultAndState},
         ContextTr,
     },
+    handler::PrecompileProvider,
     inspector::{JournalExt, NoOpInspector},
+    interpreter::InterpreterResult,
     DatabaseCommit, Inspector,
 };
 
@@ -155,6 +157,9 @@ pub trait EvmFactory {
     type HaltReason: HaltReasonTr + Send + Sync + 'static;
     /// The EVM specification identifier, see [`Evm::Spec`].
     type Spec: Debug + Copy + Send + Sync + 'static;
+    /// The [`PrecompileProvider`] type for the EVM.
+    type Precompiles<DB: Database>: PrecompileProvider<Self::Context<DB>, Output = InterpreterResult>
+        + Clone;
 
     /// Creates a new instance of an EVM.
     fn create_evm<DB: Database>(
