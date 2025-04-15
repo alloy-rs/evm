@@ -211,10 +211,15 @@ where
 /// Factory producing [`EthEvm`].
 #[derive(Debug, Default, Clone, Copy)]
 #[non_exhaustive]
-pub struct EthEvmFactory;
+pub struct EthEvmFactory<P = EthPrecompiles> {
+    precompile_provider: P,
+}
 
-impl EvmFactory for EthEvmFactory {
-    type Evm<DB: Database, I: Inspector<EthEvmContext<DB>>> = EthEvm<DB, I>;
+impl<P> EvmFactory for EthEvmFactory<P>
+where
+    P: PrecompileProvider<EthEvmContext<DB>, Output = InterpreterResult> + Clone,
+{
+    type Evm<DB: Database, I: Inspector<EthEvmContext<DB>>> = EthEvm<DB, I, P>;
     type Context<DB: Database> = Context<BlockEnv, TxEnv, CfgEnv, DB>;
     type Tx = TxEnv;
     type Error<DBError: core::error::Error + Send + Sync + 'static> = EVMError<DBError>;
@@ -227,7 +232,8 @@ impl EvmFactory for EthEvmFactory {
                 .with_block(input.block_env)
                 .with_cfg(input.cfg_env)
                 .with_db(db)
-                .build_mainnet_with_inspector(NoOpInspector {}),
+                .build_mainnet_with_inspector(NoOpInspector {})
+                .with_precompiles(self.precompile_provider.clone()),
             inspect: false,
         }
     }
@@ -243,7 +249,8 @@ impl EvmFactory for EthEvmFactory {
                 .with_block(input.block_env)
                 .with_cfg(input.cfg_env)
                 .with_db(db)
-                .build_mainnet_with_inspector(inspector),
+                .build_mainnet_with_inspector(inspector)
+                .with_precompiles(self.precompile_provider.clone()),
             inspect: true,
         }
     }
