@@ -49,7 +49,7 @@ alloy-hardforks = { version = "0.2" }
 
 # op-alloy
 alloy-op-hardforks = { version = "0.2" }
-op-alloy-consensus = { version = "0.13", default-features = false }
+op-alloy-consensus = { version = "0.14", default-features = false }
 
 # revm
 revm = { version = "22.0.0", default-features = false }
