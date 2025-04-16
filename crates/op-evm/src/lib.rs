@@ -10,6 +10,7 @@
 extern crate alloc;
 
 use alloc::vec::Vec;
+use alloy_eips::eip4788::SYSTEM_ADDRESS;
 use alloy_evm::{Database, Evm, EvmEnv, EvmFactory};
 use alloy_primitives::{Address, Bytes, TxKind, U256};
 use core::{
@@ -124,14 +125,13 @@ where
 
     fn transact_system_call(
         &mut self,
-        caller: Address,
-        contract: Address,
+        callee: Address,
         data: Bytes,
     ) -> Result<ResultAndState<Self::HaltReason>, Self::Error> {
         let tx = OpTransaction {
             base: TxEnv {
-                caller,
-                kind: TxKind::Call(contract),
+                caller: SYSTEM_ADDRESS,
+                kind: TxKind::Call(callee),
                 // Explicitly set nonce to 0 so revm does not do any nonce checks
                 nonce: 0,
                 gas_limit: 30_000_000,
@@ -186,7 +186,7 @@ where
         // We're doing this state cleanup to make sure that changeset only includes the changed
         // contract storage.
         if let Ok(res) = &mut res {
-            res.state.retain(|addr, _| *addr == contract);
+            res.state.retain(|addr, _| *addr == callee);
         }
 
         res

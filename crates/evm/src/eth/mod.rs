@@ -2,6 +2,7 @@
 
 use crate::{env::EvmEnv, evm::EvmFactory, Database, Evm};
 use alloc::vec::Vec;
+use alloy_eips::eip4788::SYSTEM_ADDRESS;
 use alloy_primitives::{Address, Bytes, TxKind, U256};
 use core::{
     fmt::Debug,
@@ -132,13 +133,12 @@ where
 
     fn transact_system_call(
         &mut self,
-        caller: Address,
-        contract: Address,
+        callee: Address,
         data: Bytes,
     ) -> Result<ResultAndState, Self::Error> {
         let tx = TxEnv {
-            caller,
-            kind: TxKind::Call(contract),
+            caller: SYSTEM_ADDRESS,
+            kind: TxKind::Call(callee),
             // Explicitly set nonce to 0 so revm does not do any nonce checks
             nonce: 0,
             gas_limit: 30_000_000,
@@ -179,7 +179,7 @@ where
         core::mem::swap(&mut self.block.basefee, &mut basefee);
         // swap back to the previous nonce check flag
         core::mem::swap(&mut self.cfg.disable_nonce_check, &mut disable_nonce_check);
-
+        
         // NOTE: We assume that only the contract storage is modified. Revm currently marks the
         // caller and block beneficiary accounts as "touched" when we do the above transact calls,
         // and includes them in the result.
@@ -187,7 +187,7 @@ where
         // We're doing this state cleanup to make sure that changeset only includes the changed
         // contract storage.
         if let Ok(res) = &mut res {
-            res.state.retain(|addr, _| *addr == contract);
+            res.state.retain(|addr, _| *addr == callee);
         }
 
         res
