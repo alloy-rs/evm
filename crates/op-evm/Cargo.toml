@@ -37,5 +37,5 @@ std = [
 	"op-revm/std",
 	"alloy-consensus/std",
 	"alloy-eips/std",
-	"op-alloy-consensus/std"
+	"op-alloy-consensus/std",
 ]
