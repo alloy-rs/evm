@@ -20,3 +20,4 @@ pub mod error;
 pub use error::*;
 pub mod tx;
 pub use tx::*;
+pub mod precompiles;
