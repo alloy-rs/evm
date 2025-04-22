@@ -242,3 +242,45 @@ pub trait Precompile {
     /// Execute the precompile with the given input data and gas limit.
     fn call(&self, data: &Bytes, gas: u64) -> PrecompileResult;
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use alloy_primitives::{address, Bytes};
+    use revm::precompile::PrecompileOutput;
+
+    #[test]
+    fn test_map_precompile() {
+        let eth_precompiles = EthPrecompiles::default();
+        let mut spec_precompiles = SpecPrecompiles::from(eth_precompiles);
+
+        // create a test input for the precompile (identity precompile)
+        let identity_address = address!("0x0000000000000000000000000000000000000004");
+        let test_input = Bytes::from_static(b"test data");
+        let gas_limit = 1000;
+
+        let precompile_fn = spec_precompiles.precompiles_mut().get_mut(&identity_address).unwrap();
+        let result = precompile_fn(&test_input, gas_limit).unwrap();
+        assert_eq!(result.bytes, test_input, "Identity precompile should return the input data");
+
+        // define a function to modify the precompile
+        // this will change the identity precompile to always return a fixed value
+        let constant_bytes = Bytes::from_static(b"constant value");
+
+        let modified_fn = |_, _| -> PrecompileResult {
+            Ok(PrecompileOutput {
+                gas_used: 10, // Low gas usage
+                bytes: Bytes::from_static(b"constant value"),
+            })
+        } as PrecompileFn;
+
+        spec_precompiles.map_precompile(&identity_address, move |_original| modified_fn);
+
+        let precompile_fn = spec_precompiles.precompiles_mut().get_mut(&identity_address).unwrap();
+        let result = precompile_fn(&test_input, gas_limit).unwrap();
+        assert_eq!(
+            result.bytes, constant_bytes,
+            "Modified precompile should return the constant value"
+        );
+    }
+}
