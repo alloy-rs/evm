@@ -102,9 +102,8 @@ impl<Spec> SpecPrecompiles<Spec> {
     /// Maps a precompile at the given address using the provided function.
     pub fn map_precompile<F>(&mut self, address: &Address, f: F)
     where
-        F: FnOnce(PrecompileFn) -> PrecompileFn + Send + Sync + 'static,
+        F: FnOnce(DynPrecompile) -> DynPrecompile + Send + Sync + 'static,
     {
-        // get the current precompiles as a dynamic representation
         let mut precompiles = self.precompiles_mut();
 
         match &self.precompiles {
@@ -115,22 +114,18 @@ impl<Spec> SpecPrecompiles<Spec> {
                 };
 
                 if let Some(precompile_fn) = static_precompiles.get(address) {
-                    // get the current precompile function and transform it
-                    let transformed = f(*precompile_fn);
+                    let dyn_precompile: DynPrecompile = (*precompile_fn).into();
 
-                    // update the precompile with the transformed one
-                    let dyn_precompile: DynPrecompile = transformed.into();
-                    precompiles.inner.insert(*address, dyn_precompile);
+                    let transformed = f(dyn_precompile);
+
+                    precompiles.inner.insert(*address, transformed);
                 }
             }
-            PrecompilesMap::Dynamic(_) => {
-                if precompiles.inner.contains_key(address) {
-                    let placeholder_fn = revm::precompile::identity::identity_run;
+            PrecompilesMap::Dynamic(dynamic) => {
+                if let Some(dyn_precompile) = dynamic.inner.get(address).cloned() {
+                    let transformed = f(dyn_precompile);
 
-                    let transformed = f(placeholder_fn);
-
-                    let dyn_transformed: DynPrecompile = transformed.into();
-                    precompiles.inner.insert(*address, dyn_transformed);
+                    precompiles.inner.insert(*address, transformed);
                 }
             }
         }
@@ -291,14 +286,15 @@ mod tests {
         // this will change the identity precompile to always return a fixed value
         let constant_bytes = Bytes::from_static(b"constant value");
 
-        let modified_fn = |_, _| -> PrecompileResult {
-            Ok(PrecompileOutput {
-                gas_used: 10, // Low gas usage
-                bytes: Bytes::from_static(b"constant value"),
-            })
-        } as PrecompileFn;
+        // define a function to modify the precompile to always return a constant value
+        spec_precompiles.map_precompile(&identity_address, move |_original_dyn| {
+            // create a new DynPrecompile that always returns our constant
+            let constant_fn = |_, _| -> PrecompileResult {
+                Ok(PrecompileOutput { gas_used: 10, bytes: Bytes::from_static(b"constant value") })
+            } as PrecompileFn;
 
-        spec_precompiles.map_precompile(&identity_address, move |_original| modified_fn);
+            constant_fn.into()
+        });
 
         // get the modified precompile and check it
         let precompiles = spec_precompiles.precompiles();
