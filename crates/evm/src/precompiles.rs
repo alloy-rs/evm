@@ -31,34 +31,67 @@ impl<Spec> SpecPrecompiles<Spec> {
         Self { precompiles: PrecompilesMap::Builtin(precompiles), spec }
     }
 
-    /// Returns the configured precompiles
-    pub fn precompiles(&self) -> &Precompiles {
+    /// Returns the configured precompiles as a PrecompilesMut
+    ///
+    /// This converts static Precompiles to a dynamic representation
+    /// that can be modified.
+    pub fn precompiles(&self) -> PrecompilesMut {
         match &self.precompiles {
-            PrecompilesMap::Builtin(cow) => cow,
-            PrecompilesMap::Dynamic(_) => {
-                todo!()
+            PrecompilesMap::Builtin(cow) => {
+                let mut dynamic = PrecompilesMut::default();
+
+                let precompiles = match cow {
+                    Cow::Borrowed(static_ref) => *static_ref,
+                    Cow::Owned(ref owned) => owned,
+                };
+
+                // convert all static precompiles to dynamic ones
+                for (addr, precompile_fn) in precompiles.inner() {
+                    let dyn_precompile: DynPrecompile = (*precompile_fn).into();
+                    dynamic.inner.insert(*addr, dyn_precompile);
+                    dynamic.addresses.insert(*addr);
+                }
+
+                dynamic
             }
+            PrecompilesMap::Dynamic(dynamic) => dynamic.clone(),
         }
     }
 
-    /// Returns mutable access to the precompiles.
-    pub fn precompiles_mut(&mut self) -> &mut Precompiles {
-        match &mut self.precompiles {
+    /// Returns mutable access to the precompiles as a PrecompilesMut.
+    ///
+    /// If the current representation is static, this will convert it to a dynamic
+    /// representation and store it for future use. If it's already dynamic, this
+    /// will return a new mutable instance with the same data.
+    ///
+    /// This does not return a direct reference to the internal precompiles, but instead
+    /// a new instance that can be modified and then later applied back
+    pub fn precompiles_mut(&mut self) -> PrecompilesMut {
+        match &self.precompiles {
             PrecompilesMap::Builtin(cow) => {
-                // Ensure we have a mutable Cow by cloning the borrowed data if needed
-                if let Cow::Borrowed(static_ref) = cow {
-                    *cow = Cow::Owned((*static_ref).clone());
+                let mut dynamic = PrecompilesMut::default();
+
+                let precompiles = match cow {
+                    Cow::Borrowed(static_ref) => *static_ref,
+                    Cow::Owned(ref owned) => owned,
+                };
+
+                // convert all static precompiles to dynamic ones
+                for (addr, precompile_fn) in precompiles.inner() {
+                    let dyn_precompile: DynPrecompile = (*precompile_fn).into();
+                    dynamic.inner.insert(*addr, dyn_precompile);
+                    dynamic.addresses.insert(*addr);
                 }
-                // Now we definitely have an owned value
-                match cow {
-                    Cow::Owned(ref mut owned) => owned,
-                    Cow::Borrowed(_) => unreachable!("We just ensured we have an owned value"),
-                }
+
+                dynamic
             }
-            PrecompilesMap::Dynamic(_) => {
-                todo!()
-            }
+            PrecompilesMap::Dynamic(dynamic) => dynamic.clone(),
         }
+    }
+
+    /// Sets the precompiles to the given dynamic representation.
+    pub fn set_precompiles(&mut self, precompiles: PrecompilesMut) {
+        self.precompiles = PrecompilesMap::Dynamic(precompiles);
     }
 
     /// Returns the configured spec.
@@ -71,11 +104,38 @@ impl<Spec> SpecPrecompiles<Spec> {
     where
         F: FnOnce(PrecompileFn) -> PrecompileFn + Send + Sync + 'static,
     {
-        if let Some(precompile) = self.precompiles_mut().get_mut(address) {
-            let transformed = f(*precompile);
+        // get the current precompiles as a dynamic representation
+        let mut precompiles = self.precompiles_mut();
 
-            *precompile = transformed;
+        match &self.precompiles {
+            PrecompilesMap::Builtin(cow) => {
+                let static_precompiles = match cow {
+                    Cow::Borrowed(static_ref) => *static_ref,
+                    Cow::Owned(ref owned) => owned,
+                };
+
+                if let Some(precompile_fn) = static_precompiles.get(address) {
+                    // get the current precompile function and transform it
+                    let transformed = f(*precompile_fn);
+
+                    // update the precompile with the transformed one
+                    let dyn_precompile: DynPrecompile = transformed.into();
+                    precompiles.inner.insert(*address, dyn_precompile);
+                }
+            }
+            PrecompilesMap::Dynamic(_) => {
+                if precompiles.inner.contains_key(address) {
+                    let placeholder_fn = revm::precompile::identity::identity_run;
+
+                    let transformed = f(placeholder_fn);
+
+                    let dyn_transformed: DynPrecompile = transformed.into();
+                    precompiles.inner.insert(*address, dyn_transformed);
+                }
+            }
         }
+
+        self.set_precompiles(precompiles);
     }
 
     /// Maps all precompiles using the provided function.
@@ -83,35 +143,18 @@ impl<Spec> SpecPrecompiles<Spec> {
     where
         F: FnMut(&Address, DynPrecompile) -> DynPrecompile,
     {
-        if let PrecompilesMap::Builtin(cow) = &self.precompiles {
-            let precompiles = match cow {
-                Cow::Borrowed(static_ref) => *static_ref,
-                Cow::Owned(ref owned) => owned,
-            };
+        let mut precompiles = self.precompiles_mut();
 
-            let mut dynamic = PrecompilesMut::default();
-
-            for (addr, precompile_fn) in precompiles.inner() {
-                // convert to DynPrecompile
-                let dyn_precompile: DynPrecompile = (*precompile_fn).into();
-                dynamic.inner.insert(*addr, dyn_precompile);
-                dynamic.addresses.insert(*addr);
-            }
-
-            // replace the precompiles map with the dynamic version
-            self.precompiles = PrecompilesMap::Dynamic(dynamic);
+        // apply the transformation to each precompile
+        let mut new_map = HashMap::new();
+        for (addr, precompile) in &precompiles.inner {
+            let transformed = f(addr, precompile.clone());
+            new_map.insert(*addr, transformed);
         }
 
-        if let PrecompilesMap::Dynamic(ref mut dynamic) = &mut self.precompiles {
-            let mut new_map = HashMap::new();
+        precompiles.inner = new_map;
 
-            for (addr, precompile) in &dynamic.inner {
-                let transformed = f(addr, precompile.clone());
-                new_map.insert(*addr, transformed);
-            }
-
-            dynamic.inner = new_map;
-        }
+        self.set_precompiles(precompiles);
     }
 
     /// Applies a new precompile at the given address.
@@ -119,42 +162,27 @@ impl<Spec> SpecPrecompiles<Spec> {
     where
         F: FnOnce(Option<DynPrecompile>) -> Option<DynPrecompile>,
     {
-        if let PrecompilesMap::Builtin(cow) = &self.precompiles {
-            let mut dynamic = PrecompilesMut::default();
+        let mut precompiles = self.precompiles_mut();
 
-            let precompiles = match cow {
-                Cow::Borrowed(static_ref) => *static_ref,
-                Cow::Owned(ref owned) => owned,
-            };
+        let current = precompiles.inner.get(address).cloned();
 
-            // convert all static precompiles to dynamic ones
-            for (addr, precompile_fn) in precompiles.inner() {
-                let dyn_precompile: DynPrecompile = (*precompile_fn).into();
-                dynamic.inner.insert(*addr, dyn_precompile);
-                dynamic.addresses.insert(*addr);
+        // apply the transformation function
+        let result = f(current);
+
+        match result {
+            Some(transformed) => {
+                // insert the transformed precompile
+                precompiles.inner.insert(*address, transformed);
+                precompiles.addresses.insert(*address);
             }
-
-            self.precompiles = PrecompilesMap::Dynamic(dynamic);
-        }
-
-        if let PrecompilesMap::Dynamic(ref mut dynamic) = &mut self.precompiles {
-            let current = dynamic.inner.get(address).cloned();
-
-            let result = f(current);
-
-            match result {
-                Some(transformed) => {
-                    // insert the transformed precompile
-                    dynamic.inner.insert(*address, transformed);
-                    dynamic.addresses.insert(*address);
-                }
-                None => {
-                    // remove the precompile if the transformation returned None
-                    dynamic.inner.remove(address);
-                    dynamic.addresses.remove(address);
-                }
+            None => {
+                // remove the precompile if the transformation returned None
+                precompiles.inner.remove(address);
+                precompiles.addresses.remove(address);
             }
         }
+
+        self.set_precompiles(precompiles);
     }
 }
 
@@ -223,12 +251,16 @@ impl DynPrecompile {
     }
 }
 
+/// A mutable representation of precompiles that allows for runtime modification.
+///
+/// This structure stores dynamic precompiles that can be modified at runtime,
+/// unlike the static `Precompiles` struct from revm.
 #[derive(Clone, Default)]
-struct PrecompilesMut {
+pub struct PrecompilesMut {
     /// Precompiles
-    inner: HashMap<Address, DynPrecompile>,
+    pub inner: HashMap<Address, DynPrecompile>,
     /// Addresses of precompile
-    addresses: HashSet<Address>,
+    pub addresses: HashSet<Address>,
 }
 
 impl core::fmt::Debug for PrecompilesMut {
@@ -259,8 +291,10 @@ mod tests {
         let test_input = Bytes::from_static(b"test data");
         let gas_limit = 1000;
 
-        let precompile_fn = spec_precompiles.precompiles_mut().get_mut(&identity_address).unwrap();
-        let result = precompile_fn(&test_input, gas_limit).unwrap();
+        // using the dynamic precompiles interface
+        let precompiles = spec_precompiles.precompiles_mut();
+        let dyn_precompile = precompiles.inner.get(&identity_address).unwrap();
+        let result = dyn_precompile.call(&test_input, gas_limit).unwrap();
         assert_eq!(result.bytes, test_input, "Identity precompile should return the input data");
 
         // define a function to modify the precompile
@@ -276,8 +310,10 @@ mod tests {
 
         spec_precompiles.map_precompile(&identity_address, move |_original| modified_fn);
 
-        let precompile_fn = spec_precompiles.precompiles_mut().get_mut(&identity_address).unwrap();
-        let result = precompile_fn(&test_input, gas_limit).unwrap();
+        // get the modified precompile and check it
+        let precompiles = spec_precompiles.precompiles();
+        let dyn_precompile = precompiles.inner.get(&identity_address).unwrap();
+        let result = dyn_precompile.call(&test_input, gas_limit).unwrap();
         assert_eq!(
             result.bytes, constant_bytes,
             "Modified precompile should return the constant value"
