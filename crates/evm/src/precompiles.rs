@@ -241,16 +241,6 @@ impl From<PrecompileFn> for DynPrecompile {
     }
 }
 
-impl DynPrecompile {
-    /// Wraps this precompile with a custom implementation.
-    pub fn wrap<P: Precompile + Send + Sync + 'static>(
-        self,
-        wrapper: impl FnOnce(Self) -> P,
-    ) -> Self {
-        Self(Arc::new(wrapper(self)))
-    }
-}
-
 /// A mutable representation of precompiles that allows for runtime modification.
 ///
 /// This structure stores dynamic precompiles that can be modified at runtime,
