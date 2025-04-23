@@ -1,6 +1,6 @@
 //! Helpers for dealing with Precompiles.
 
-use alloc::{borrow::Cow, sync::Arc};
+use alloc::{borrow::Cow, boxed::Box, string::String, sync::Arc};
 use alloy_primitives::{
     map::{HashMap, HashSet},
     Address, Bytes,
