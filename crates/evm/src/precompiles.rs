@@ -6,8 +6,10 @@ use alloy_primitives::{
     Address, Bytes,
 };
 use revm::{
-    handler::EthPrecompiles,
-    precompile::{PrecompileResult, Precompiles},
+    context::{Cfg, ContextTr},
+    handler::{EthPrecompiles, PrecompileProvider},
+    interpreter::{Gas, InputsImpl, InstructionResult, InterpreterResult},
+    precompile::{PrecompileError, PrecompileResult, PrecompileSpecId, Precompiles},
     primitives::hardfork::SpecId,
 };
 
@@ -28,23 +30,7 @@ impl<Spec> SpecPrecompiles<Spec> {
 
     /// Creates a new set of precompiles for a spec.
     pub fn new(precompiles: Cow<'static, Precompiles>, spec: Spec) -> Self {
-        // Convert static precompiles to dynamic immediately
-        let mut dynamic = DynPrecompiles::default();
-
-        // Get the static precompiles
-        let static_precompiles = match precompiles {
-            Cow::Borrowed(static_ref) => static_ref.clone(),
-            Cow::Owned(owned) => owned,
-        };
-
-        // Convert all static precompiles to dynamic ones
-        for (addr, precompile_fn) in static_precompiles.inner() {
-            let dyn_precompile: DynPrecompile = (*precompile_fn).into();
-            dynamic.inner.insert(*addr, dyn_precompile);
-            dynamic.addresses.insert(*addr);
-        }
-
-        Self { precompiles: dynamic, spec }
+        Self { precompiles: Self::as_dyn_precompiles(precompiles), spec }
     }
 
     /// Returns the configured precompiles as a read-only reference.
@@ -121,11 +107,97 @@ impl<Spec> SpecPrecompiles<Spec> {
             }
         }
     }
+
+    /// Converts the given static precompiles into their dynamic representation.
+    fn as_dyn_precompiles(precompiles: Cow<'static, Precompiles>) -> DynPrecompiles {
+        // Convert static precompiles to dynamic immediately
+        let mut dynamic = DynPrecompiles::default();
+
+        // Get the static precompiles
+        let static_precompiles = match precompiles {
+            Cow::Borrowed(static_ref) => static_ref.clone(),
+            Cow::Owned(owned) => owned,
+        };
+
+        // Convert all static precompiles to dynamic ones
+        for (addr, precompile_fn) in static_precompiles.inner() {
+            let dyn_precompile: DynPrecompile = (*precompile_fn).into();
+            dynamic.inner.insert(*addr, dyn_precompile);
+            dynamic.addresses.insert(*addr);
+        }
+
+        dynamic
+    }
 }
 
 impl From<EthPrecompiles> for SpecPrecompiles<SpecId> {
     fn from(value: EthPrecompiles) -> Self {
         Self::from_static(value.precompiles, value.spec)
+    }
+}
+
+impl<CTX: ContextTr> PrecompileProvider<CTX> for SpecPrecompiles<<CTX::Cfg as Cfg>::Spec>
+where
+    <CTX::Cfg as Cfg>::Spec: PartialEq,
+{
+    type Output = InterpreterResult;
+
+    fn set_spec(&mut self, spec: <CTX::Cfg as Cfg>::Spec) -> bool {
+        // generate new precompiles only on new spec
+        if spec == self.spec {
+            return false;
+        }
+
+        self.precompiles = Self::as_dyn_precompiles(Cow::Borrowed(Precompiles::new(
+            PrecompileSpecId::from_spec_id(spec.clone().into()),
+        )));
+        self.spec = spec;
+        true
+    }
+
+    fn run(
+        &mut self,
+        _context: &mut CTX,
+        address: &Address,
+        inputs: &InputsImpl,
+        _is_static: bool,
+        gas_limit: u64,
+    ) -> Result<Option<InterpreterResult>, String> {
+        let Some(precompile) = self.precompiles.inner.get(address) else {
+            return Ok(None);
+        };
+
+        let mut result = InterpreterResult {
+            result: InstructionResult::Return,
+            gas: Gas::new(gas_limit),
+            output: Bytes::new(),
+        };
+
+        match precompile.call(&inputs.input, gas_limit) {
+            Ok(output) => {
+                let underflow = result.gas.record_cost(output.gas_used);
+                assert!(underflow, "Gas underflow is not possible");
+                result.result = InstructionResult::Return;
+                result.output = output.bytes;
+            }
+            Err(PrecompileError::Fatal(e)) => return Err(e),
+            Err(e) => {
+                result.result = if e.is_oog() {
+                    InstructionResult::PrecompileOOG
+                } else {
+                    InstructionResult::PrecompileError
+                };
+            }
+        }
+        Ok(Some(result))
+    }
+
+    fn warm_addresses(&self) -> Box<impl Iterator<Item = Address>> {
+        Box::new(self.precompiles.addresses.iter().copied())
+    }
+
+    fn contains(&self, address: &Address) -> bool {
+        self.precompiles.inner.contains_key(address)
     }
 }
 
