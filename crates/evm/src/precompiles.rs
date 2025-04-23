@@ -30,7 +30,7 @@ impl<Spec> SpecPrecompiles<Spec> {
 
     /// Creates a new set of precompiles for a spec.
     pub fn new(precompiles: Cow<'static, Precompiles>, spec: Spec) -> Self {
-        Self { precompiles: as_dyn_precompiles(precompiles), spec }
+        Self { precompiles: into_dyn_precompiles(precompiles), spec }
     }
 
     /// Returns the configured precompiles as a read-only reference.
@@ -110,7 +110,7 @@ impl<Spec> SpecPrecompiles<Spec> {
 }
 
 /// Converts the given static precompiles into their dynamic representation.
-fn as_dyn_precompiles(precompiles: Cow<'static, Precompiles>) -> DynPrecompiles {
+fn into_dyn_precompiles(precompiles: Cow<'static, Precompiles>) -> DynPrecompiles {
     // Convert static precompiles to dynamic immediately
     let mut dynamic = DynPrecompiles::default();
 
@@ -148,7 +148,7 @@ where
             return false;
         }
 
-        self.precompiles = as_dyn_precompiles(Cow::Borrowed(Precompiles::new(
+        self.precompiles = into_dyn_precompiles(Cow::Borrowed(Precompiles::new(
             PrecompileSpecId::from_spec_id(spec.clone().into()),
         )));
         self.spec = spec;
