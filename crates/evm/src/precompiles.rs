@@ -15,85 +15,46 @@ use revm::{
 #[derive(Debug, Clone)]
 pub struct SpecPrecompiles<Spec> {
     /// The configured precompiles.
-    precompiles: PrecompilesMap,
+    precompiles: DynPrecompiles,
     /// The spec these precompiles belong to.
     spec: Spec,
 }
 
 impl<Spec> SpecPrecompiles<Spec> {
     /// Creates the [`SpecPrecompiles`] from a static reference.
-    pub const fn from_static(precompiles: &'static Precompiles, spec: Spec) -> Self {
-        Self { precompiles: PrecompilesMap::Builtin(Cow::Borrowed(precompiles)), spec }
+    pub fn from_static(precompiles: &'static Precompiles, spec: Spec) -> Self {
+        Self::new(Cow::Borrowed(precompiles), spec)
     }
 
     /// Creates a new set of precompiles for a spec.
     pub fn new(precompiles: Cow<'static, Precompiles>, spec: Spec) -> Self {
-        Self { precompiles: PrecompilesMap::Builtin(precompiles), spec }
+        // Convert static precompiles to dynamic immediately
+        let mut dynamic = DynPrecompiles::default();
+
+        // Get the static precompiles
+        let static_precompiles = match precompiles {
+            Cow::Borrowed(static_ref) => static_ref.clone(),
+            Cow::Owned(owned) => owned,
+        };
+
+        // Convert all static precompiles to dynamic ones
+        for (addr, precompile_fn) in static_precompiles.inner() {
+            let dyn_precompile: DynPrecompile = (*precompile_fn).into();
+            dynamic.inner.insert(*addr, dyn_precompile);
+            dynamic.addresses.insert(*addr);
+        }
+
+        Self { precompiles: dynamic, spec }
     }
 
-    /// Returns the configured precompiles as a PrecompilesMut
-    ///
-    /// If the current representation is static, this will convert it to a dynamic
-    /// representation and store it for future use. If it's already dynamic, this
-    /// will return a direct reference to the internal precompiles.
-    ///
-    /// This doesn't allow modification but avoids a clone of the precompiles.
-    pub fn precompiles(&mut self) -> &PrecompilesMut {
-        // If we have static precompiles, convert them to dynamic first
-        if let PrecompilesMap::Builtin(cow) = &self.precompiles {
-            let mut dynamic = PrecompilesMut::default();
-
-            let precompiles = match cow {
-                Cow::Borrowed(static_ref) => *static_ref,
-                Cow::Owned(ref owned) => owned,
-            };
-
-            // convert all static precompiles to dynamic ones
-            for (addr, precompile_fn) in precompiles.inner() {
-                let dyn_precompile: DynPrecompile = (*precompile_fn).into();
-                dynamic.inner.insert(*addr, dyn_precompile);
-                dynamic.addresses.insert(*addr);
-            }
-
-            // Store the dynamic precompiles
-            self.precompiles = PrecompilesMap::Dynamic(dynamic);
-        }
-
-        // Now we can safely return a reference to the dynamic precompiles
-        match &self.precompiles {
-            PrecompilesMap::Builtin(_) => unreachable!("We just converted static to dynamic"),
-            PrecompilesMap::Dynamic(dynamic) => dynamic,
-        }
+    /// Returns the configured precompiles as a read-only reference.
+    pub fn precompiles(&self) -> &DynPrecompiles {
+        &self.precompiles
     }
 
-    /// Returns mutable access to the precompiles as a PrecompilesMut.
-    ///
-    /// If the current representation is static, this will convert it to a dynamic
-    /// representation and store it for future use. If it's already dynamic, this
-    /// will return a direct mutable reference to the internal precompiles.
-    pub fn precompiles_mut(&mut self) -> &mut PrecompilesMut {
-        if let PrecompilesMap::Builtin(cow) = &self.precompiles {
-            let mut dynamic = PrecompilesMut::default();
-
-            let precompiles = match cow {
-                Cow::Borrowed(static_ref) => *static_ref,
-                Cow::Owned(ref owned) => owned,
-            };
-
-            // convert all static precompiles to dynamic ones
-            for (addr, precompile_fn) in precompiles.inner() {
-                let dyn_precompile: DynPrecompile = (*precompile_fn).into();
-                dynamic.inner.insert(*addr, dyn_precompile);
-                dynamic.addresses.insert(*addr);
-            }
-
-            self.precompiles = PrecompilesMap::Dynamic(dynamic);
-        }
-
-        match &mut self.precompiles {
-            PrecompilesMap::Builtin(_) => unreachable!("We just converted static to dynamic"),
-            PrecompilesMap::Dynamic(dynamic) => dynamic,
-        }
+    /// Returns mutable access to the precompiles as a DynPrecompiles.
+    pub fn precompiles_mut(&mut self) -> &mut DynPrecompiles {
+        &mut self.precompiles
     }
 
     /// Returns the configured spec.
@@ -168,24 +129,6 @@ impl From<EthPrecompiles> for SpecPrecompiles<SpecId> {
     }
 }
 
-#[derive(Clone)]
-enum PrecompilesMap {
-    Builtin(Cow<'static, Precompiles>),
-    Dynamic(PrecompilesMut),
-}
-
-impl core::fmt::Debug for PrecompilesMap {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            Self::Builtin(_) => f.debug_struct("PrecompilesMap::Builtin").finish(),
-            Self::Dynamic(precompiles) => f
-                .debug_struct("PrecompilesMap::Dynamic")
-                .field("addresses", &precompiles.addresses)
-                .finish(),
-        }
-    }
-}
-
 /// A dynamic precompile implementation that can be modified at runtime.
 #[derive(Clone)]
 pub struct DynPrecompile(pub(crate) Arc<dyn Precompile + Send + Sync>);
@@ -216,16 +159,16 @@ where
 /// This structure stores dynamic precompiles that can be modified at runtime,
 /// unlike the static `Precompiles` struct from revm.
 #[derive(Clone, Default)]
-pub struct PrecompilesMut {
+pub struct DynPrecompiles {
     /// Precompiles
     pub inner: HashMap<Address, DynPrecompile>,
     /// Addresses of precompile
     pub addresses: HashSet<Address>,
 }
 
-impl core::fmt::Debug for PrecompilesMut {
+impl core::fmt::Debug for DynPrecompiles {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("PrecompilesMut").field("addresses", &self.addresses).finish()
+        f.debug_struct("DynPrecompiles").field("addresses", &self.addresses).finish()
     }
 }
 
