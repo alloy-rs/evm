@@ -41,15 +41,15 @@ alloy-op-evm = { version = "0.5.0", path = "crates/op-evm", default-features = f
 # alloy
 alloy-eip2124 = { version = "0.2", default-features = false }
 alloy-chains = { version = "0.2.0", default-features = false }
-alloy-eips = { version = "0.14", default-features = false }
-alloy-consensus = { version = "0.14", default-features = false }
+alloy-eips = { version = "0.15", default-features = false }
+alloy-consensus = { version = "0.15", default-features = false }
 alloy-primitives = { version = "1.0.0", default-features = false }
 alloy-sol-types = { version = "1.0.0", default-features = false }
 alloy-hardforks = { version = "0.2" }
 
 # op-alloy
 alloy-op-hardforks = { version = "0.2" }
-op-alloy-consensus = { version = "0.14", default-features = false }
+op-alloy-consensus = { version = "0.15", default-features = false }
 
 # revm
 revm = { version = "22.0.0", default-features = false }
