@@ -9,28 +9,25 @@ use revm::{
     context::{Cfg, ContextTr},
     handler::{EthPrecompiles, PrecompileProvider},
     interpreter::{Gas, InputsImpl, InstructionResult, InterpreterResult},
-    precompile::{PrecompileError, PrecompileResult, PrecompileSpecId, Precompiles},
-    primitives::hardfork::SpecId,
+    precompile::{PrecompileError, PrecompileResult, Precompiles},
 };
 
 /// A set of Precompiles according to a spec.
 #[derive(Debug, Clone)]
-pub struct SpecPrecompiles<Spec> {
+pub struct SpecPrecompiles {
     /// The configured precompiles.
     precompiles: DynPrecompiles,
-    /// The spec these precompiles belong to.
-    spec: Spec,
 }
 
-impl<Spec> SpecPrecompiles<Spec> {
+impl SpecPrecompiles {
     /// Creates the [`SpecPrecompiles`] from a static reference.
-    pub fn from_static(precompiles: &'static Precompiles, spec: Spec) -> Self {
-        Self::new(Cow::Borrowed(precompiles), spec)
+    pub fn from_static(precompiles: &'static Precompiles) -> Self {
+        Self::new(Cow::Borrowed(precompiles))
     }
 
     /// Creates a new set of precompiles for a spec.
-    pub fn new(precompiles: Cow<'static, Precompiles>, spec: Spec) -> Self {
-        Self { precompiles: into_dyn_precompiles(precompiles), spec }
+    pub fn new(precompiles: Cow<'static, Precompiles>) -> Self {
+        Self { precompiles: into_dyn_precompiles(precompiles) }
     }
 
     /// Returns the configured precompiles as a read-only reference.
@@ -41,11 +38,6 @@ impl<Spec> SpecPrecompiles<Spec> {
     /// Returns mutable access to the precompiles as a DynPrecompiles.
     pub fn precompiles_mut(&mut self) -> &mut DynPrecompiles {
         &mut self.precompiles
-    }
-
-    /// Returns the configured spec.
-    pub const fn spec(&self) -> &Spec {
-        &self.spec
     }
 
     /// Maps a precompile at the given address using the provided function.
@@ -130,29 +122,17 @@ fn into_dyn_precompiles(precompiles: Cow<'static, Precompiles>) -> DynPrecompile
     dynamic
 }
 
-impl From<EthPrecompiles> for SpecPrecompiles<SpecId> {
+impl From<EthPrecompiles> for SpecPrecompiles {
     fn from(value: EthPrecompiles) -> Self {
-        Self::from_static(value.precompiles, value.spec)
+        Self::from_static(value.precompiles)
     }
 }
 
-impl<CTX: ContextTr> PrecompileProvider<CTX> for SpecPrecompiles<<CTX::Cfg as Cfg>::Spec>
-where
-    <CTX::Cfg as Cfg>::Spec: PartialEq,
-{
+impl<CTX: ContextTr> PrecompileProvider<CTX> for SpecPrecompiles {
     type Output = InterpreterResult;
 
-    fn set_spec(&mut self, spec: <CTX::Cfg as Cfg>::Spec) -> bool {
-        // generate new precompiles only on new spec
-        if spec == self.spec {
-            return false;
-        }
-
-        self.precompiles = into_dyn_precompiles(Cow::Borrowed(Precompiles::new(
-            PrecompileSpecId::from_spec_id(spec.clone().into()),
-        )));
-        self.spec = spec;
-        true
+    fn set_spec(&mut self, _spec: <CTX::Cfg as Cfg>::Spec) -> bool {
+        false
     }
 
     fn run(
