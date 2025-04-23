@@ -56,7 +56,7 @@ impl<Spec> SpecPrecompiles<Spec> {
         let precompiles = self.precompiles_mut();
 
         // Get the current precompile at the address
-        if let Some(dyn_precompile) = precompiles.inner.get(address).cloned() {
+        if let Some(dyn_precompile) = precompiles.inner.remove(address) {
             // Apply the transformation function
             let transformed = f(dyn_precompile);
 
