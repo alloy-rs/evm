@@ -223,8 +223,7 @@ impl Precompile for DynPrecompile {
 
 impl<F> From<F> for DynPrecompile
 where
-    F: Precompile + Send + Sync + 'static,
-    F: Fn(&Bytes, u64) -> PrecompileResult,
+    F: Fn(&Bytes, u64) -> PrecompileResult + Precompile + Send + Sync + 'static,
 {
     fn from(f: F) -> Self {
         Self(Arc::new(f))
