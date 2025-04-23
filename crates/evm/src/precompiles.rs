@@ -12,14 +12,19 @@ use revm::{
     precompile::{PrecompileError, PrecompileResult, Precompiles},
 };
 
-/// A set of Precompiles according to a spec.
-#[derive(Debug, Clone)]
-pub struct SpecPrecompiles {
-    /// The configured precompiles.
-    precompiles: PrecompilesMap,
+/// A mapping of precompile contracts that can be either static (builtin) or dynamic.
+///
+/// This is an optimization that allows us to keep using the static precompiles
+/// until we need to modify them, at which point we convert to the dynamic representation.
+#[derive(Clone)]
+pub enum PrecompilesMap {
+    /// Static builtin precompiles.
+    Builtin(Cow<'static, Precompiles>),
+    /// Dynamic precompiles that can be modified at runtime.
+    Dynamic(DynPrecompiles),
 }
 
-impl SpecPrecompiles {
+impl PrecompilesMap {
     /// Creates the [`SpecPrecompiles`] from a static reference.
     pub fn from_static(precompiles: &'static Precompiles) -> Self {
         Self::new(Cow::Borrowed(precompiles))
@@ -27,17 +32,17 @@ impl SpecPrecompiles {
 
     /// Creates a new set of precompiles for a spec.
     pub fn new(precompiles: Cow<'static, Precompiles>) -> Self {
-        Self { precompiles: PrecompilesMap::Builtin(precompiles) }
+        Self::Builtin(precompiles)
     }
 
     /// Returns the configured precompiles as a read-only reference.
-    pub fn precompiles(&self) -> &PrecompilesMap {
-        &self.precompiles
+    pub fn precompiles(&self) -> &Self {
+        self
     }
 
     /// Returns mutable access to the precompiles as a DynPrecompiles.
-    pub fn precompiles_mut(&mut self) -> &mut PrecompilesMap {
-        &mut self.precompiles
+    pub fn precompiles_mut(&mut self) -> &mut Self {
+        self
     }
 
     /// Maps a precompile at the given address using the provided function.
@@ -47,7 +52,7 @@ impl SpecPrecompiles {
     {
         self.ensure_dynamic_precompiles();
 
-        if let PrecompilesMap::Dynamic(ref mut dyn_precompiles) = self.precompiles_mut() {
+        if let Self::Dynamic(ref mut dyn_precompiles) = self.precompiles_mut() {
             let inner = &mut dyn_precompiles.inner;
             // get the current precompile at the address
             if let Some(dyn_precompile) = inner.remove(address) {
@@ -67,7 +72,7 @@ impl SpecPrecompiles {
     {
         self.ensure_dynamic_precompiles();
 
-        if let PrecompilesMap::Dynamic(ref mut dyn_precompiles) = self.precompiles_mut() {
+        if let Self::Dynamic(ref mut dyn_precompiles) = self.precompiles_mut() {
             // apply the transformation to each precompile
             let mut new_map = HashMap::new();
             for (addr, precompile) in &dyn_precompiles.inner {
@@ -86,7 +91,7 @@ impl SpecPrecompiles {
     {
         self.ensure_dynamic_precompiles();
 
-        if let PrecompilesMap::Dynamic(ref mut dyn_precompiles) = self.precompiles_mut() {
+        if let Self::Dynamic(ref mut dyn_precompiles) = self.precompiles_mut() {
             let current = dyn_precompiles.inner.get(address).cloned();
 
             // apply the transformation function
@@ -110,7 +115,7 @@ impl SpecPrecompiles {
     /// Ensures that precompiles are in their dynamic representation.
     /// If they are already dynamic, this is a no-op.
     fn ensure_dynamic_precompiles(&mut self) {
-        if let PrecompilesMap::Builtin(ref precompiles_cow) = self.precompiles {
+        if let Self::Builtin(ref precompiles_cow) = self {
             let mut dynamic = DynPrecompiles::default();
 
             let static_precompiles = match precompiles_cow {
@@ -124,37 +129,10 @@ impl SpecPrecompiles {
                 dynamic.addresses.insert(*addr);
             }
 
-            self.precompiles = PrecompilesMap::Dynamic(dynamic);
+            *self = Self::Dynamic(dynamic);
         }
     }
-}
 
-impl From<EthPrecompiles> for SpecPrecompiles {
-    fn from(value: EthPrecompiles) -> Self {
-        Self::from_static(value.precompiles)
-    }
-}
-
-// TODO: uncomment when OpPrecompiles exposes precompiles.
-//impl From<OpPrecompiles> for SpecPrecompiles {
-//    fn from(value: OpPrecompiles) -> Self {
-//        Self::from_static(value.precompiles())
-//    }
-//}
-
-/// A mapping of precompile contracts that can be either static (builtin) or dynamic.
-///
-/// This is an optimization that allows us to keep using the static precompiles
-/// until we need to modify them, at which point we convert to the dynamic representation.
-#[derive(Clone)]
-pub enum PrecompilesMap {
-    /// Static builtin precompiles.
-    Builtin(Cow<'static, Precompiles>),
-    /// Dynamic precompiles that can be modified at runtime.
-    Dynamic(DynPrecompiles),
-}
-
-impl PrecompilesMap {
     /// Returns all precompile addresses.
     fn addresses(&self) -> Vec<Address> {
         match self {
@@ -162,31 +140,7 @@ impl PrecompilesMap {
             Self::Dynamic(dyn_precompiles) => dyn_precompiles.addresses.iter().copied().collect(),
         }
     }
-}
 
-impl PartialEq for PrecompilesMap {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::Builtin(_), Self::Builtin(_)) => true,
-            (Self::Dynamic(a), Self::Dynamic(b)) => a.addresses == b.addresses,
-            _ => false,
-        }
-    }
-}
-
-impl core::fmt::Debug for PrecompilesMap {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            Self::Builtin(_) => f.debug_struct("PrecompilesMap::Builtin").finish(),
-            Self::Dynamic(precompiles) => f
-                .debug_struct("PrecompilesMap::Dynamic")
-                .field("addresses", &precompiles.addresses)
-                .finish(),
-        }
-    }
-}
-
-impl SpecPrecompiles {
     /// Handles a precompile call result, updating the interpreter result.
     fn handle_precompile_result(
         result: &mut InterpreterResult,
@@ -213,7 +167,42 @@ impl SpecPrecompiles {
     }
 }
 
-impl<CTX: ContextTr> PrecompileProvider<CTX> for SpecPrecompiles {
+impl From<EthPrecompiles> for PrecompilesMap {
+    fn from(value: EthPrecompiles) -> Self {
+        Self::from_static(value.precompiles)
+    }
+}
+
+// TODO: uncomment when OpPrecompiles exposes precompiles.
+//impl From<OpPrecompiles> for SpecPrecompiles {
+//    fn from(value: OpPrecompiles) -> Self {
+//        Self::from_static(value.precompiles())
+//    }
+//}
+
+impl PartialEq for PrecompilesMap {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Builtin(_), Self::Builtin(_)) => true,
+            (Self::Dynamic(a), Self::Dynamic(b)) => a.addresses == b.addresses,
+            _ => false,
+        }
+    }
+}
+
+impl core::fmt::Debug for PrecompilesMap {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::Builtin(_) => f.debug_struct("PrecompilesMap::Builtin").finish(),
+            Self::Dynamic(precompiles) => f
+                .debug_struct("PrecompilesMap::Dynamic")
+                .field("addresses", &precompiles.addresses)
+                .finish(),
+        }
+    }
+}
+
+impl<CTX: ContextTr> PrecompileProvider<CTX> for PrecompilesMap {
     type Output = InterpreterResult;
 
     fn set_spec(&mut self, _spec: <CTX::Cfg as Cfg>::Spec) -> bool {
@@ -229,9 +218,9 @@ impl<CTX: ContextTr> PrecompileProvider<CTX> for SpecPrecompiles {
         gas_limit: u64,
     ) -> Result<Option<InterpreterResult>, String> {
         // Check if the address has a precompile
-        let has_precompile = match &self.precompiles {
-            PrecompilesMap::Builtin(precompiles) => precompiles.contains(address),
-            PrecompilesMap::Dynamic(dyn_precompiles) => dyn_precompiles.inner.contains_key(address),
+        let has_precompile = match &self {
+            Self::Builtin(precompiles) => precompiles.contains(address),
+            Self::Dynamic(dyn_precompiles) => dyn_precompiles.inner.contains_key(address),
         };
 
         if !has_precompile {
@@ -245,15 +234,15 @@ impl<CTX: ContextTr> PrecompileProvider<CTX> for SpecPrecompiles {
         };
 
         // Get the precompile result based on which variant we have
-        let precompile_result = match &self.precompiles {
-            PrecompilesMap::Builtin(precompiles) => {
+        let precompile_result = match &self {
+            Self::Builtin(precompiles) => {
                 if let Some(precompile_fn) = precompiles.get(address) {
                     precompile_fn(&inputs.input, gas_limit)
                 } else {
                     return Ok(Some(result)); // Should never happen due to has_precompile check
                 }
             }
-            PrecompilesMap::Dynamic(dyn_precompiles) => {
+            Self::Dynamic(dyn_precompiles) => {
                 if let Some(precompile) = dyn_precompiles.inner.get(address) {
                     precompile.call(&inputs.input, gas_limit)
                 } else {
@@ -270,14 +259,14 @@ impl<CTX: ContextTr> PrecompileProvider<CTX> for SpecPrecompiles {
 
     fn warm_addresses(&self) -> Box<impl Iterator<Item = Address>> {
         // Get the addresses from the precompiles and convert to an iterator
-        let addresses = self.precompiles.addresses();
+        let addresses = self.addresses();
         Box::new(addresses.into_iter())
     }
 
     fn contains(&self, address: &Address) -> bool {
-        match &self.precompiles {
-            PrecompilesMap::Builtin(precompiles) => precompiles.contains(address),
-            PrecompilesMap::Dynamic(dyn_precompiles) => dyn_precompiles.inner.contains_key(address),
+        match &self {
+            Self::Builtin(precompiles) => precompiles.contains(address),
+            Self::Dynamic(dyn_precompiles) => dyn_precompiles.inner.contains_key(address),
         }
     }
 }
@@ -349,7 +338,7 @@ mod tests {
     #[test]
     fn test_map_precompile() {
         let eth_precompiles = EthPrecompiles::default();
-        let mut spec_precompiles = SpecPrecompiles::from(eth_precompiles);
+        let mut spec_precompiles = PrecompilesMap::from(eth_precompiles);
 
         // create a test input for the precompile (identity precompile)
         let identity_address = address!("0x0000000000000000000000000000000000000004");
