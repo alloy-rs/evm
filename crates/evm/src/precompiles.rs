@@ -180,16 +180,6 @@ impl From<EthPrecompiles> for PrecompilesMap {
 //    }
 //}
 
-impl PartialEq for PrecompilesMap {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::Builtin(_), Self::Builtin(_)) => true,
-            (Self::Dynamic(a), Self::Dynamic(b)) => a.addresses == b.addresses,
-            _ => false,
-        }
-    }
-}
-
 impl core::fmt::Debug for PrecompilesMap {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
