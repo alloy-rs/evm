@@ -12,6 +12,63 @@ use revm::{
     precompile::{PrecompileError, PrecompileResult, Precompiles},
 };
 
+/// Helper enum to combine different iterator types or return values with the same type.
+enum Either<L, R> {
+    Left(L),
+    Right(R),
+}
+
+/// A wrapper for function pointers that implements the Precompile trait.
+struct PrecompileFnWrapper<'a>(
+    pub(crate) &'a (dyn Fn(&Bytes, u64) -> PrecompileResult + Send + Sync),
+);
+
+impl<'a> Precompile for PrecompileFnWrapper<'a> {
+    fn call(&self, data: &Bytes, gas: u64) -> PrecompileResult {
+        (self.0)(data, gas)
+    }
+}
+
+impl<L, R, T> Iterator for Either<L, R>
+where
+    L: Iterator<Item = T>,
+    R: Iterator<Item = T>,
+{
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Self::Left(iter) => iter.next(),
+            Self::Right(iter) => iter.next(),
+        }
+    }
+}
+
+impl<T, L, R> core::ops::Deref for Either<L, R>
+where
+    L: core::ops::Deref<Target = T>,
+    R: core::ops::Deref<Target = T>,
+{
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::Left(value) => value.deref(),
+            Self::Right(value) => value.deref(),
+        }
+    }
+}
+
+// Direct implementation of Precompile for Both<DynPrecompile> and Both<PrecompileFnWrapper>
+impl Precompile for Either<PrecompileFnWrapper<'_>, &DynPrecompile> {
+    fn call(&self, data: &Bytes, gas: u64) -> PrecompileResult {
+        match self {
+            Self::Left(p) => p.call(data, gas),
+            Self::Right(p) => p.call(data, gas),
+        }
+    }
+}
+
 /// A mapping of precompile contracts that can be either static (builtin) or dynamic.
 ///
 /// This is an optimization that allows us to keep using the static precompiles
@@ -134,35 +191,20 @@ impl PrecompilesMap {
     }
 
     /// Returns an iterator over references to precompile addresses.
-    fn addresses(&self) -> Box<dyn Iterator<Item = &Address> + '_> {
+    pub fn addresses(&self) -> impl Iterator<Item = &Address> {
         match self {
-            Self::Builtin(precompiles) => Box::new(precompiles.addresses()),
-            Self::Dynamic(dyn_precompiles) => Box::new(dyn_precompiles.addresses.iter()),
+            Self::Builtin(precompiles) => Either::Left(precompiles.addresses()),
+            Self::Dynamic(dyn_precompiles) => Either::Right(dyn_precompiles.addresses.iter()),
         }
     }
 
-    /// Handles a precompile call result, updating the interpreter result.
-    fn handle_precompile_result(
-        result: &mut InterpreterResult,
-        precompile_result: PrecompileResult,
-    ) -> Result<(), String> {
-        match precompile_result {
-            Ok(output) => {
-                let underflow = result.gas.record_cost(output.gas_used);
-                assert!(underflow, "Gas underflow is not possible");
-                result.result = InstructionResult::Return;
-                result.output = output.bytes;
-                Ok(())
+    /// Gets a reference to the precompile at the given address.
+    pub fn get(&self, address: &Address) -> Option<impl Precompile + '_> {
+        match self {
+            Self::Builtin(precompiles) => {
+                precompiles.get(address).map(|f| Either::Left(PrecompileFnWrapper(f)))
             }
-            Err(PrecompileError::Fatal(e)) => Err(e),
-            Err(e) => {
-                result.result = if e.is_oog() {
-                    InstructionResult::PrecompileOOG
-                } else {
-                    InstructionResult::PrecompileError
-                };
-                Ok(())
-            }
+            Self::Dynamic(dyn_precompiles) => dyn_precompiles.inner.get(address).map(Either::Right),
         }
     }
 }
@@ -207,13 +249,10 @@ impl<CTX: ContextTr> PrecompileProvider<CTX> for PrecompilesMap {
         _is_static: bool,
         gas_limit: u64,
     ) -> Result<Option<InterpreterResult>, String> {
-        // Check if the address has a precompile
-        let has_precompile = match &self {
-            Self::Builtin(precompiles) => precompiles.contains(address),
-            Self::Dynamic(dyn_precompiles) => dyn_precompiles.inner.contains_key(address),
-        };
+        // Get the precompile at the address
+        let precompile = self.get(address);
 
-        if !has_precompile {
+        if precompile.is_none() {
             return Ok(None);
         }
 
@@ -223,26 +262,26 @@ impl<CTX: ContextTr> PrecompileProvider<CTX> for PrecompilesMap {
             output: Bytes::new(),
         };
 
-        // Get the precompile result based on which variant we have
-        let precompile_result = match &self {
-            Self::Builtin(precompiles) => {
-                if let Some(precompile_fn) = precompiles.get(address) {
-                    precompile_fn(&inputs.input, gas_limit)
-                } else {
-                    return Ok(Some(result)); // Should never happen due to has_precompile check
-                }
+        // Execute the precompile
+        let precompile_result =
+            precompile.expect("None case already handled").call(&inputs.input, gas_limit);
+
+        match precompile_result {
+            Ok(output) => {
+                let underflow = result.gas.record_cost(output.gas_used);
+                assert!(underflow, "Gas underflow is not possible");
+                result.result = InstructionResult::Return;
+                result.output = output.bytes;
             }
-            Self::Dynamic(dyn_precompiles) => {
-                if let Some(precompile) = dyn_precompiles.inner.get(address) {
-                    precompile.call(&inputs.input, gas_limit)
+            Err(PrecompileError::Fatal(e)) => return Err(e),
+            Err(e) => {
+                result.result = if e.is_oog() {
+                    InstructionResult::PrecompileOOG
                 } else {
-                    return Ok(Some(result)); // Should never happen due to has_precompile check
-                }
+                    InstructionResult::PrecompileError
+                };
             }
         };
-
-        // Handle the precompile result
-        Self::handle_precompile_result(&mut result, precompile_result)?;
 
         Ok(Some(result))
     }
@@ -252,10 +291,7 @@ impl<CTX: ContextTr> PrecompileProvider<CTX> for PrecompilesMap {
     }
 
     fn contains(&self, address: &Address) -> bool {
-        match &self {
-            Self::Builtin(precompiles) => precompiles.contains(address),
-            Self::Dynamic(dyn_precompiles) => dyn_precompiles.inner.contains_key(address),
-        }
+        self.get(address).is_some()
     }
 }
 
@@ -395,5 +431,42 @@ mod tests {
         let result = dyn_precompile.call(&test_input, gas_limit).unwrap();
         assert_eq!(result.gas_used, 15);
         assert_eq!(result.bytes, expected_output);
+    }
+
+    #[test]
+    fn test_get_precompile() {
+        let eth_precompiles = EthPrecompiles::default();
+        let spec_precompiles = PrecompilesMap::from(eth_precompiles);
+
+        let identity_address = address!("0x0000000000000000000000000000000000000004");
+        let test_input = Bytes::from_static(b"test data");
+        let gas_limit = 1000;
+
+        let precompile = spec_precompiles.get(&identity_address);
+        assert!(precompile.is_some(), "Identity precompile should exist");
+
+        let result = precompile.unwrap().call(&test_input, gas_limit).unwrap();
+        assert_eq!(result.bytes, test_input, "Identity precompile should return the input data");
+
+        let nonexistent_address = address!("0x0000000000000000000000000000000000000099");
+        assert!(
+            spec_precompiles.get(&nonexistent_address).is_none(),
+            "Non-existent precompile should not be found"
+        );
+
+        let mut dynamic_precompiles = spec_precompiles;
+        dynamic_precompiles.ensure_dynamic_precompiles();
+
+        let dyn_precompile = dynamic_precompiles.get(&identity_address);
+        assert!(
+            dyn_precompile.is_some(),
+            "Identity precompile should exist after conversion to dynamic"
+        );
+
+        let result = dyn_precompile.unwrap().call(&test_input, gas_limit).unwrap();
+        assert_eq!(
+            result.bytes, test_input,
+            "Identity precompile should return the input data after conversion to dynamic"
+        );
     }
 }
