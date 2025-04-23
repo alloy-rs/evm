@@ -7,7 +7,7 @@ use alloy_primitives::{
 };
 use revm::{
     handler::EthPrecompiles,
-    precompile::{PrecompileFn, PrecompileResult, Precompiles},
+    precompile::{PrecompileResult, Precompiles},
     primitives::hardfork::SpecId,
 };
 
@@ -221,18 +221,13 @@ impl Precompile for DynPrecompile {
     }
 }
 
-impl From<PrecompileFn> for DynPrecompile {
-    fn from(f: PrecompileFn) -> Self {
-        // Create a wrapper struct to convert the function pointer to a dynamic trait object
-        struct PrecompileFnWrapper(PrecompileFn);
-
-        impl Precompile for PrecompileFnWrapper {
-            fn call(&self, data: &Bytes, gas: u64) -> PrecompileResult {
-                (self.0)(data, gas)
-            }
-        }
-
-        Self(Arc::new(PrecompileFnWrapper(f)))
+impl<F> From<F> for DynPrecompile
+where
+    F: Precompile + Send + Sync + 'static,
+    F: Fn(&Bytes, u64) -> PrecompileResult,
+{
+    fn from(f: F) -> Self {
+        Self(Arc::new(f))
     }
 }
 
@@ -258,6 +253,15 @@ impl core::fmt::Debug for PrecompilesMut {
 pub trait Precompile {
     /// Execute the precompile with the given input data and gas limit.
     fn call(&self, data: &Bytes, gas: u64) -> PrecompileResult;
+}
+
+impl<F> Precompile for F
+where
+    F: Fn(&Bytes, u64) -> PrecompileResult + Send + Sync,
+{
+    fn call(&self, data: &Bytes, gas: u64) -> PrecompileResult {
+        self(data, gas)
+    }
 }
 
 #[cfg(test)]
@@ -289,11 +293,10 @@ mod tests {
         // define a function to modify the precompile to always return a constant value
         spec_precompiles.map_precompile(&identity_address, move |_original_dyn| {
             // create a new DynPrecompile that always returns our constant
-            let constant_fn = |_, _| -> PrecompileResult {
+            |_data: &Bytes, _gas: u64| -> PrecompileResult {
                 Ok(PrecompileOutput { gas_used: 10, bytes: Bytes::from_static(b"constant value") })
-            } as PrecompileFn;
-
-            constant_fn.into()
+            }
+            .into()
         });
 
         // get the modified precompile and check it
@@ -304,5 +307,25 @@ mod tests {
             result.bytes, constant_bytes,
             "Modified precompile should return the constant value"
         );
+    }
+
+    #[test]
+    fn test_closure_precompile() {
+        let test_input = Bytes::from_static(b"test data");
+        let expected_output = Bytes::from_static(b"processed: test data");
+        let gas_limit = 1000;
+
+        // define a closure that implements the precompile functionality
+        let closure_precompile = |data: &Bytes, _gas: u64| -> PrecompileResult {
+            let mut output = b"processed: ".to_vec();
+            output.extend_from_slice(data.as_ref());
+            Ok(PrecompileOutput { gas_used: 15, bytes: Bytes::from(output) })
+        };
+
+        let dyn_precompile: DynPrecompile = closure_precompile.into();
+
+        let result = dyn_precompile.call(&test_input, gas_limit).unwrap();
+        assert_eq!(result.gas_used, 15);
+        assert_eq!(result.bytes, expected_output);
     }
 }
