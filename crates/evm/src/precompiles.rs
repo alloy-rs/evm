@@ -1,6 +1,6 @@
 //! Helpers for dealing with Precompiles.
 
-use alloc::{borrow::Cow, boxed::Box, string::String, sync::Arc, vec::Vec};
+use alloc::{borrow::Cow, boxed::Box, string::String, sync::Arc};
 use alloy_primitives::{
     map::{HashMap, HashSet},
     Address, Bytes,
@@ -133,11 +133,11 @@ impl PrecompilesMap {
         }
     }
 
-    /// Returns all precompile addresses.
-    fn addresses(&self) -> Vec<Address> {
+    /// Returns an iterator over references to precompile addresses.
+    fn addresses(&self) -> Box<dyn Iterator<Item = &Address> + '_> {
         match self {
-            Self::Builtin(precompiles) => precompiles.addresses().copied().collect(),
-            Self::Dynamic(dyn_precompiles) => dyn_precompiles.addresses.iter().copied().collect(),
+            Self::Builtin(precompiles) => Box::new(precompiles.addresses()),
+            Self::Dynamic(dyn_precompiles) => Box::new(dyn_precompiles.addresses.iter()),
         }
     }
 
@@ -248,9 +248,7 @@ impl<CTX: ContextTr> PrecompileProvider<CTX> for PrecompilesMap {
     }
 
     fn warm_addresses(&self) -> Box<impl Iterator<Item = Address>> {
-        // Get the addresses from the precompiles and convert to an iterator
-        let addresses = self.addresses();
-        Box::new(addresses.into_iter())
+        Box::new(self.addresses().copied())
     }
 
     fn contains(&self, address: &Address) -> bool {
