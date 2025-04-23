@@ -161,9 +161,9 @@ where
 #[derive(Clone, Default)]
 pub struct DynPrecompiles {
     /// Precompiles
-    pub inner: HashMap<Address, DynPrecompile>,
+    inner: HashMap<Address, DynPrecompile>,
     /// Addresses of precompile
-    pub addresses: HashSet<Address>,
+    addresses: HashSet<Address>,
 }
 
 impl core::fmt::Debug for DynPrecompiles {
