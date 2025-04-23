@@ -30,7 +30,7 @@ impl<Spec> SpecPrecompiles<Spec> {
 
     /// Creates a new set of precompiles for a spec.
     pub fn new(precompiles: Cow<'static, Precompiles>, spec: Spec) -> Self {
-        Self { precompiles: Self::as_dyn_precompiles(precompiles), spec }
+        Self { precompiles: as_dyn_precompiles(precompiles), spec }
     }
 
     /// Returns the configured precompiles as a read-only reference.
@@ -107,27 +107,27 @@ impl<Spec> SpecPrecompiles<Spec> {
             }
         }
     }
+}
 
-    /// Converts the given static precompiles into their dynamic representation.
-    fn as_dyn_precompiles(precompiles: Cow<'static, Precompiles>) -> DynPrecompiles {
-        // Convert static precompiles to dynamic immediately
-        let mut dynamic = DynPrecompiles::default();
+/// Converts the given static precompiles into their dynamic representation.
+fn as_dyn_precompiles(precompiles: Cow<'static, Precompiles>) -> DynPrecompiles {
+    // Convert static precompiles to dynamic immediately
+    let mut dynamic = DynPrecompiles::default();
 
-        // Get the static precompiles
-        let static_precompiles = match precompiles {
-            Cow::Borrowed(static_ref) => static_ref.clone(),
-            Cow::Owned(owned) => owned,
-        };
+    // Get the static precompiles
+    let static_precompiles = match precompiles {
+        Cow::Borrowed(static_ref) => static_ref.clone(),
+        Cow::Owned(owned) => owned,
+    };
 
-        // Convert all static precompiles to dynamic ones
-        for (addr, precompile_fn) in static_precompiles.inner() {
-            let dyn_precompile: DynPrecompile = (*precompile_fn).into();
-            dynamic.inner.insert(*addr, dyn_precompile);
-            dynamic.addresses.insert(*addr);
-        }
-
-        dynamic
+    // Convert all static precompiles to dynamic ones
+    for (addr, precompile_fn) in static_precompiles.inner() {
+        let dyn_precompile: DynPrecompile = (*precompile_fn).into();
+        dynamic.inner.insert(*addr, dyn_precompile);
+        dynamic.addresses.insert(*addr);
     }
+
+    dynamic
 }
 
 impl From<EthPrecompiles> for SpecPrecompiles<SpecId> {
@@ -148,7 +148,7 @@ where
             return false;
         }
 
-        self.precompiles = Self::as_dyn_precompiles(Cow::Borrowed(Precompiles::new(
+        self.precompiles = as_dyn_precompiles(Cow::Borrowed(Precompiles::new(
             PrecompileSpecId::from_spec_id(spec.clone().into()),
         )));
         self.spec = spec;
