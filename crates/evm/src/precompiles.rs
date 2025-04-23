@@ -44,21 +44,6 @@ where
     }
 }
 
-impl<T, L, R> core::ops::Deref for Either<L, R>
-where
-    L: core::ops::Deref<Target = T>,
-    R: core::ops::Deref<Target = T>,
-{
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        match self {
-            Self::Left(value) => value.deref(),
-            Self::Right(value) => value.deref(),
-        }
-    }
-}
-
 // Direct implementation of Precompile for Both<DynPrecompile> and Both<PrecompileFnWrapper>
 impl Precompile for Either<PrecompileFnWrapper<'_>, &DynPrecompile> {
     fn call(&self, data: &Bytes, gas: u64) -> PrecompileResult {
