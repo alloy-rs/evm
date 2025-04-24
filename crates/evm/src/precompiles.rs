@@ -1,6 +1,7 @@
 //! Helpers for dealing with Precompiles.
 
 use alloc::{borrow::Cow, boxed::Box, string::String, sync::Arc};
+use alloy_consensus::transaction::Either;
 use alloy_primitives::{
     map::{HashMap, HashSet},
     Address, Bytes,
@@ -11,48 +12,6 @@ use revm::{
     interpreter::{Gas, InputsImpl, InstructionResult, InterpreterResult},
     precompile::{PrecompileError, PrecompileResult, Precompiles},
 };
-
-/// Helper enum to combine different iterator types or return values with the same type.
-enum Either<L, R> {
-    Left(L),
-    Right(R),
-}
-
-/// A wrapper for function pointers that implements the Precompile trait.
-struct PrecompileFnWrapper<'a>(
-    pub(crate) &'a (dyn Fn(&Bytes, u64) -> PrecompileResult + Send + Sync),
-);
-
-impl<'a> Precompile for PrecompileFnWrapper<'a> {
-    fn call(&self, data: &Bytes, gas: u64) -> PrecompileResult {
-        (self.0)(data, gas)
-    }
-}
-
-impl<L, R, T> Iterator for Either<L, R>
-where
-    L: Iterator<Item = T>,
-    R: Iterator<Item = T>,
-{
-    type Item = T;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self {
-            Self::Left(iter) => iter.next(),
-            Self::Right(iter) => iter.next(),
-        }
-    }
-}
-
-// Direct implementation of Precompile for Both<DynPrecompile> and Both<PrecompileFnWrapper>
-impl Precompile for Either<PrecompileFnWrapper<'_>, &DynPrecompile> {
-    fn call(&self, data: &Bytes, gas: u64) -> PrecompileResult {
-        match self {
-            Self::Left(p) => p.call(data, gas),
-            Self::Right(p) => p.call(data, gas),
-        }
-    }
-}
 
 /// A mapping of precompile contracts that can be either static (builtin) or dynamic.
 ///
@@ -186,9 +145,7 @@ impl PrecompilesMap {
     /// Gets a reference to the precompile at the given address.
     pub fn get(&self, address: &Address) -> Option<impl Precompile + '_> {
         match self {
-            Self::Builtin(precompiles) => {
-                precompiles.get(address).map(|f| Either::Left(PrecompileFnWrapper(f)))
-            }
+            Self::Builtin(precompiles) => precompiles.get(address).map(Either::Left),
             Self::Dynamic(dyn_precompiles) => dyn_precompiles.inner.get(address).map(Either::Right),
         }
     }
@@ -290,12 +247,6 @@ impl core::fmt::Debug for DynPrecompile {
     }
 }
 
-impl Precompile for DynPrecompile {
-    fn call(&self, data: &Bytes, gas: u64) -> PrecompileResult {
-        self.0.call(data, gas)
-    }
-}
-
 impl<F> From<F> for DynPrecompile
 where
     F: Fn(&Bytes, u64) -> PrecompileResult + Precompile + Send + Sync + 'static,
@@ -335,6 +286,27 @@ where
 {
     fn call(&self, data: &Bytes, gas: u64) -> PrecompileResult {
         self(data, gas)
+    }
+}
+
+impl Precompile for DynPrecompile {
+    fn call(&self, data: &Bytes, gas: u64) -> PrecompileResult {
+        self.0.call(data, gas)
+    }
+}
+
+impl Precompile for &DynPrecompile {
+    fn call(&self, data: &Bytes, gas: u64) -> PrecompileResult {
+        self.0.call(data, gas)
+    }
+}
+
+impl<A: Precompile, B: Precompile> Precompile for Either<A, B> {
+    fn call(&self, data: &Bytes, gas: u64) -> PrecompileResult {
+        match self {
+            Self::Left(p) => p.call(data, gas),
+            Self::Right(p) => p.call(data, gas),
+        }
     }
 }
 
