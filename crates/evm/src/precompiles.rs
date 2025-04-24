@@ -26,7 +26,7 @@ pub enum PrecompilesMap {
 }
 
 impl PrecompilesMap {
-    /// Creates the [`SpecPrecompiles`] from a static reference.
+    /// Creates the [`PrecompilesMap`] from a static reference.
     pub fn from_static(precompiles: &'static Precompiles) -> Self {
         Self::new(Cow::Borrowed(precompiles))
     }
