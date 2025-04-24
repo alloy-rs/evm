@@ -1,6 +1,6 @@
 //! Ethereum EVM implementation.
 
-use crate::{env::EvmEnv, evm::EvmFactory, Database, Evm};
+use crate::{env::EvmEnv, evm::EvmFactory, precompiles::PrecompilesMap, Database, Evm};
 use alloc::vec::Vec;
 use alloy_primitives::{Address, Bytes, TxKind, U256};
 use core::{
@@ -219,12 +219,13 @@ where
 pub struct EthEvmFactory;
 
 impl EvmFactory for EthEvmFactory {
-    type Evm<DB: Database, I: Inspector<EthEvmContext<DB>>> = EthEvm<DB, I>;
+    type Evm<DB: Database, I: Inspector<EthEvmContext<DB>>> = EthEvm<DB, I, Self::Precompiles>;
     type Context<DB: Database> = Context<BlockEnv, TxEnv, CfgEnv, DB>;
     type Tx = TxEnv;
     type Error<DBError: core::error::Error + Send + Sync + 'static> = EVMError<DBError>;
     type HaltReason = HaltReason;
     type Spec = SpecId;
+    type Precompiles = PrecompilesMap;
 
     fn create_evm<DB: Database>(&self, db: DB, input: EvmEnv) -> Self::Evm<DB, NoOpInspector> {
         EthEvm {
@@ -232,7 +233,10 @@ impl EvmFactory for EthEvmFactory {
                 .with_block(input.block_env)
                 .with_cfg(input.cfg_env)
                 .with_db(db)
-                .build_mainnet_with_inspector(NoOpInspector {}),
+                .build_mainnet_with_inspector(NoOpInspector {})
+                .with_precompiles(PrecompilesMap::from_static(
+                    EthPrecompiles::default().precompiles,
+                )),
             inspect: false,
         }
     }
@@ -248,7 +252,10 @@ impl EvmFactory for EthEvmFactory {
                 .with_block(input.block_env)
                 .with_cfg(input.cfg_env)
                 .with_db(db)
-                .build_mainnet_with_inspector(inspector),
+                .build_mainnet_with_inspector(inspector)
+                .with_precompiles(PrecompilesMap::from_static(
+                    EthPrecompiles::default().precompiles,
+                )),
             inspect: true,
         }
     }

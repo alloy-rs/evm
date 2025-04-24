@@ -148,6 +148,7 @@ pub trait EvmFactory {
         HaltReason = Self::HaltReason,
         Error = Self::Error<DB::Error>,
         Spec = Self::Spec,
+        Precompiles = Self::Precompiles,
     >;
 
     /// The EVM context for inspectors
@@ -160,6 +161,8 @@ pub trait EvmFactory {
     type HaltReason: HaltReasonTr + Send + Sync + 'static;
     /// The EVM specification identifier, see [`Evm::Spec`].
     type Spec: Debug + Copy + Send + Sync + 'static;
+    /// Precompiles used by the EVM.
+    type Precompiles;
 
     /// Creates a new instance of an EVM.
     fn create_evm<DB: Database>(
