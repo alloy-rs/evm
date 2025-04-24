@@ -51,18 +51,15 @@ impl PrecompilesMap {
     where
         F: FnOnce(DynPrecompile) -> DynPrecompile + Send + Sync + 'static,
     {
-        self.ensure_dynamic_precompiles();
+        let dyn_precompiles = self.ensure_dynamic_precompiles();
 
-        if let Self::Dynamic(ref mut dyn_precompiles) = self.precompiles_mut() {
-            let inner = &mut dyn_precompiles.inner;
-            // get the current precompile at the address
-            if let Some(dyn_precompile) = inner.remove(address) {
-                // apply the transformation function
-                let transformed = f(dyn_precompile);
+        // get the current precompile at the address
+        if let Some(dyn_precompile) = dyn_precompiles.inner.remove(address) {
+            // apply the transformation function
+            let transformed = f(dyn_precompile);
 
-                // update the precompile at the address
-                inner.insert(*address, transformed);
-            }
+            // update the precompile at the address
+            dyn_precompiles.inner.insert(*address, transformed);
         }
     }
 
@@ -71,18 +68,16 @@ impl PrecompilesMap {
     where
         F: FnMut(&Address, DynPrecompile) -> DynPrecompile,
     {
-        self.ensure_dynamic_precompiles();
+        let dyn_precompiles = self.ensure_dynamic_precompiles();
 
-        if let Self::Dynamic(ref mut dyn_precompiles) = self.precompiles_mut() {
-            // apply the transformation to each precompile
-            let mut new_map = HashMap::new();
-            for (addr, precompile) in &dyn_precompiles.inner {
-                let transformed = f(addr, precompile.clone());
-                new_map.insert(*addr, transformed);
-            }
-
-            dyn_precompiles.inner = new_map;
+        // apply the transformation to each precompile
+        let mut new_map = HashMap::new();
+        for (addr, precompile) in &dyn_precompiles.inner {
+            let transformed = f(addr, precompile.clone());
+            new_map.insert(*addr, transformed);
         }
+
+        dyn_precompiles.inner = new_map;
     }
 
     /// Applies a new precompile at the given address.
@@ -90,32 +85,30 @@ impl PrecompilesMap {
     where
         F: FnOnce(Option<DynPrecompile>) -> Option<DynPrecompile>,
     {
-        self.ensure_dynamic_precompiles();
+        let dyn_precompiles = self.ensure_dynamic_precompiles();
+        let current = dyn_precompiles.inner.get(address).cloned();
 
-        if let Self::Dynamic(ref mut dyn_precompiles) = self.precompiles_mut() {
-            let current = dyn_precompiles.inner.get(address).cloned();
+        // apply the transformation function
+        let result = f(current);
 
-            // apply the transformation function
-            let result = f(current);
-
-            match result {
-                Some(transformed) => {
-                    // insert the transformed precompile
-                    dyn_precompiles.inner.insert(*address, transformed);
-                    dyn_precompiles.addresses.insert(*address);
-                }
-                None => {
-                    // remove the precompile if the transformation returned None
-                    dyn_precompiles.inner.remove(address);
-                    dyn_precompiles.addresses.remove(address);
-                }
+        match result {
+            Some(transformed) => {
+                // insert the transformed precompile
+                dyn_precompiles.inner.insert(*address, transformed);
+                dyn_precompiles.addresses.insert(*address);
+            }
+            None => {
+                // remove the precompile if the transformation returned None
+                dyn_precompiles.inner.remove(address);
+                dyn_precompiles.addresses.remove(address);
             }
         }
     }
 
     /// Ensures that precompiles are in their dynamic representation.
     /// If they are already dynamic, this is a no-op.
-    fn ensure_dynamic_precompiles(&mut self) {
+    /// Returns a mutable reference to the dynamic precompiles.
+    pub fn ensure_dynamic_precompiles(&mut self) -> &mut DynPrecompiles {
         if let Self::Builtin(ref precompiles_cow) = self {
             let mut dynamic = DynPrecompiles::default();
 
@@ -131,6 +124,11 @@ impl PrecompilesMap {
             }
 
             *self = Self::Dynamic(dynamic);
+        }
+
+        match self {
+            Self::Dynamic(dynamic) => dynamic,
+            _ => unreachable!("We just ensured that this is a Dynamic variant"),
         }
     }
 
