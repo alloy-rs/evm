@@ -42,6 +42,8 @@ pub trait Evm {
     /// Identifier of the EVM specification. EVM is expected to use this identifier to determine
     /// which features are enabled.
     type Spec: Debug + Copy + Send + Sync + 'static;
+    /// Precompiles used by the EVM.
+    type Precompiles;
 
     /// Reference to [`BlockEnv`].
     fn block(&self) -> &BlockEnv;
@@ -132,6 +134,9 @@ pub trait Evm {
     fn disable_inspector(&mut self) {
         self.set_inspector_enabled(false)
     }
+
+    /// Mutable getter of precompiles.
+    fn precompiles_mut(&mut self) -> &mut Self::Precompiles;
 }
 
 /// A type responsible for creating instances of an ethereum virtual machine given a certain input.

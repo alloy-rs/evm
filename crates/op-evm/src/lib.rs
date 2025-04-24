@@ -101,6 +101,7 @@ where
     type Error = EVMError<DB::Error, OpTransactionError>;
     type HaltReason = OpHaltReason;
     type Spec = OpSpecId;
+    type Precompiles = P;
 
     fn block(&self) -> &BlockEnv {
         &self.block
@@ -204,6 +205,10 @@ where
 
     fn set_inspector_enabled(&mut self, enabled: bool) {
         self.inspect = enabled;
+    }
+
+    fn precompiles_mut(&mut self) -> &mut Self::Precompiles {
+        &mut self.inner.0.precompiles
     }
 }
 
