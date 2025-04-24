@@ -157,7 +157,7 @@ impl From<EthPrecompiles> for PrecompilesMap {
     }
 }
 
-// TODO: uncomment when OpPrecompiles exposes precompiles.
+// TODO: uncomment when OpPrecompiles exposes precompiles https://github.com/bluealloy/revm/pull/2444
 //impl From<OpPrecompiles> for SpecPrecompiles {
 //    fn from(value: OpPrecompiles) -> Self {
 //        Self::from_static(value.precompiles())
