@@ -36,16 +36,6 @@ impl PrecompilesMap {
         Self::Builtin(precompiles)
     }
 
-    /// Returns the configured precompiles as a read-only reference.
-    pub fn precompiles(&self) -> &Self {
-        self
-    }
-
-    /// Returns mutable access to the precompiles as a DynPrecompiles.
-    pub fn precompiles_mut(&mut self) -> &mut Self {
-        self
-    }
-
     /// Maps a precompile at the given address using the provided function.
     pub fn map_precompile<F>(&mut self, address: &Address, f: F)
     where
@@ -329,8 +319,7 @@ mod tests {
         spec_precompiles.ensure_dynamic_precompiles();
 
         // using the dynamic precompiles interface
-        let precompiles = spec_precompiles.precompiles_mut();
-        let dyn_precompile = match precompiles {
+        let dyn_precompile = match &spec_precompiles {
             PrecompilesMap::Dynamic(dyn_precompiles) => {
                 dyn_precompiles.inner.get(&identity_address).unwrap()
             }
@@ -354,8 +343,7 @@ mod tests {
         });
 
         // get the modified precompile and check it
-        let precompiles = spec_precompiles.precompiles();
-        let dyn_precompile = match precompiles {
+        let dyn_precompile = match &spec_precompiles {
             PrecompilesMap::Dynamic(dyn_precompiles) => {
                 dyn_precompiles.inner.get(&identity_address).unwrap()
             }
