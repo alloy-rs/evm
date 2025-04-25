@@ -47,17 +47,17 @@ pub struct OpEvm<DB: Database, I, P = OpPrecompiles> {
 impl<DB: Database, I, P> OpEvm<DB, I, P> {
     /// Provides a reference to the EVM context.
     pub const fn ctx(&self) -> &OpContext<DB> {
-        &self.inner.0.data.ctx
+        &self.inner.0.ctx
     }
 
     /// Provides a mutable reference to the EVM context.
     pub fn ctx_mut(&mut self) -> &mut OpContext<DB> {
-        &mut self.inner.0.data.ctx
+        &mut self.inner.0.ctx
     }
 
     /// Provides a mutable reference to the EVM inspector.
     pub fn inspector_mut(&mut self) -> &mut I {
-        &mut self.inner.0.data.inspector
+        &mut self.inner.0.inspector
     }
 }
 
@@ -153,6 +153,7 @@ where
                 max_fee_per_blob_gas: 0,
                 tx_type: OpTxType::Deposit as u8,
                 authorization_list: Default::default(),
+                initcodes: Vec::new(),
             },
             // The L1 fee is not charged for the EIP-4788 transaction, submit zero bytes for the
             // enveloped tx size.
@@ -198,7 +199,7 @@ where
     }
 
     fn finish(self) -> (Self::DB, EvmEnv<Self::Spec>) {
-        let Context { block: block_env, cfg: cfg_env, journaled_state, .. } = self.inner.0.data.ctx;
+        let Context { block: block_env, cfg: cfg_env, journaled_state, .. } = self.inner.0.ctx;
 
         (journaled_state.database, EvmEnv { block_env, cfg_env })
     }

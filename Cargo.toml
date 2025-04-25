@@ -61,3 +61,7 @@ derive_more = { version = "2", default-features = false, features = ["full"] }
 serde = { version = "1", default-features = false, features = ["derive"] }
 thiserror = { version = "2.0.0", default-features = false }
 serde_json = "1"
+
+[patch.crates-io]
+revm = { git = "https://github.com/bluealloy/revm", rev = "f7693cc67df716498c8e2555349ef8b91d864cbd" }
+op-revm = { git = "https://github.com/bluealloy/revm", rev = "f7693cc67df716498c8e2555349ef8b91d864cbd" }

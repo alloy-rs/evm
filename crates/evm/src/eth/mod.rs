@@ -72,17 +72,17 @@ impl<DB: Database, I, PRECOMPILE> EthEvm<DB, I, PRECOMPILE> {
 
     /// Provides a reference to the EVM context.
     pub const fn ctx(&self) -> &EthEvmContext<DB> {
-        &self.inner.data.ctx
+        &self.inner.ctx
     }
 
     /// Provides a mutable reference to the EVM context.
     pub fn ctx_mut(&mut self) -> &mut EthEvmContext<DB> {
-        &mut self.inner.data.ctx
+        &mut self.inner.ctx
     }
 
     /// Provides a mutable reference to the EVM inspector.
     pub fn inspector_mut(&mut self) -> &mut I {
-        &mut self.inner.data.inspector
+        &mut self.inner.inspector
     }
 }
 
@@ -160,6 +160,7 @@ where
             max_fee_per_blob_gas: 0,
             tx_type: 0,
             authorization_list: Default::default(),
+            initcodes: Vec::new(),
         };
 
         let mut gas_limit = tx.gas_limit;
@@ -200,7 +201,7 @@ where
     }
 
     fn finish(self) -> (Self::DB, EvmEnv<Self::Spec>) {
-        let Context { block: block_env, cfg: cfg_env, journaled_state, .. } = self.inner.data.ctx;
+        let Context { block: block_env, cfg: cfg_env, journaled_state, .. } = self.inner.ctx;
 
         (journaled_state.database, EvmEnv { block_env, cfg_env })
     }
