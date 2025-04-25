@@ -272,30 +272,50 @@ mod tests {
 
     #[test]
     fn test_precompiles_with_correct_spec() {
-        // Test with different spec IDs to ensure precompiles are correctly initialized
+        // create tests where precompile should be available for later specs but not earlier ones
         let specs_to_test = [
-            (SpecId::FRONTIER, address!("0x0000000000000000000000000000000000000001")), /* ECRECOVER only in Frontier */
-            (SpecId::BYZANTIUM, address!("0x0000000000000000000000000000000000000005")), /* MODEXP added in Byzantium */
-            (SpecId::ISTANBUL, address!("0x0000000000000000000000000000000000000009")), /* BLAKE2F added in Istanbul */
+            // MODEXP (0x05) was added in Byzantium, should not exist in Frontier
+            (
+                address!("0x0000000000000000000000000000000000000005"),
+                SpecId::FRONTIER,  // Early spec - should NOT have this precompile
+                SpecId::BYZANTIUM, // Later spec - should have this precompile
+                "MODEXP",
+            ),
+            // BLAKE2F (0x09) was added in Istanbul, should not exist in Byzantium
+            (
+                address!("0x0000000000000000000000000000000000000009"),
+                SpecId::BYZANTIUM, // Early spec - should NOT have this precompile
+                SpecId::ISTANBUL,  // Later spec - should have this precompile
+                "BLAKE2F",
+            ),
         ];
 
-        for (spec, precompile_addr) in specs_to_test {
-            // Setup EVM environment with the specific spec
-            let mut cfg_env = CfgEnv::default();
-            cfg_env.spec = spec;
-            cfg_env.chain_id = 1;
+        for (precompile_addr, early_spec, later_spec, name) in specs_to_test {
+            let mut early_cfg_env = CfgEnv::default();
+            early_cfg_env.spec = early_spec;
+            early_cfg_env.chain_id = 1;
 
-            let env = EvmEnv { block_env: BlockEnv::default(), cfg_env };
-
-            // Create EVM with the factory
+            let early_env = EvmEnv { block_env: BlockEnv::default(), cfg_env: early_cfg_env };
             let factory = EthEvmFactory;
-            let mut evm = factory.create_evm(EmptyDB::default(), env);
+            let mut early_evm = factory.create_evm(EmptyDB::default(), early_env);
 
-            // Test that the precompile provider contains the expected precompile
-            // Using get() method from PrecompilesMap instead of contains()
+            // precompile should NOT be available in early spec
             assert!(
-                evm.precompiles_mut().get(&precompile_addr).is_some(),
-                "Precompile at {precompile_addr:?} should be available for spec {spec:?}"
+                early_evm.precompiles_mut().get(&precompile_addr).is_none(),
+                "{name} precompile at {precompile_addr:?} should NOT be available for early spec {early_spec:?}"
+            );
+
+            let mut later_cfg_env = CfgEnv::default();
+            later_cfg_env.spec = later_spec;
+            later_cfg_env.chain_id = 1;
+
+            let later_env = EvmEnv { block_env: BlockEnv::default(), cfg_env: later_cfg_env };
+            let mut later_evm = factory.create_evm(EmptyDB::default(), later_env);
+
+            // precompile should be available in later spec
+            assert!(
+                later_evm.precompiles_mut().get(&precompile_addr).is_some(),
+                "{name} precompile at {precompile_addr:?} should be available for later spec {later_spec:?}"
             );
         }
     }
