@@ -62,7 +62,8 @@ impl PrecompilesMap {
 
         // apply the transformation to each precompile
         let entries = dyn_precompiles.inner.drain();
-        let mut new_map = HashMap::with_capacity(entries.size_hint().0);
+        let mut new_map =
+            HashMap::with_capacity_and_hasher(entries.size_hint().0, Default::default());
         for (addr, precompile) in entries {
             let transformed = f(&addr, precompile);
             new_map.insert(addr, transformed);
