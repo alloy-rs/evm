@@ -13,6 +13,7 @@ use revm::{
     handler::{instructions::EthInstructions, EthPrecompiles, PrecompileProvider},
     inspector::NoOpInspector,
     interpreter::{interpreter::EthInterpreter, InterpreterResult},
+    precompile::{PrecompileSpecId, Precompiles},
     primitives::hardfork::SpecId,
     Context, ExecuteEvm, InspectEvm, Inspector, MainBuilder, MainContext,
 };
@@ -228,15 +229,16 @@ impl EvmFactory for EthEvmFactory {
     type Precompiles = PrecompilesMap;
 
     fn create_evm<DB: Database>(&self, db: DB, input: EvmEnv) -> Self::Evm<DB, NoOpInspector> {
+        let spec_id = input.cfg_env.spec;
         EthEvm {
             inner: Context::mainnet()
                 .with_block(input.block_env)
                 .with_cfg(input.cfg_env)
                 .with_db(db)
                 .build_mainnet_with_inspector(NoOpInspector {})
-                .with_precompiles(PrecompilesMap::from_static(
-                    EthPrecompiles::default().precompiles,
-                )),
+                .with_precompiles(PrecompilesMap::from_static(Precompiles::new(
+                    PrecompileSpecId::from_spec_id(spec_id),
+                ))),
             inspect: false,
         }
     }
@@ -247,16 +249,54 @@ impl EvmFactory for EthEvmFactory {
         input: EvmEnv,
         inspector: I,
     ) -> Self::Evm<DB, I> {
+        let spec_id = input.cfg_env.spec;
         EthEvm {
             inner: Context::mainnet()
                 .with_block(input.block_env)
                 .with_cfg(input.cfg_env)
                 .with_db(db)
                 .build_mainnet_with_inspector(inspector)
-                .with_precompiles(PrecompilesMap::from_static(
-                    EthPrecompiles::default().precompiles,
-                )),
+                .with_precompiles(PrecompilesMap::from_static(Precompiles::new(
+                    PrecompileSpecId::from_spec_id(spec_id),
+                ))),
             inspect: true,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use alloy_primitives::address;
+    use revm::{database_interface::EmptyDB, primitives::hardfork::SpecId};
+
+    #[test]
+    fn test_precompiles_with_correct_spec() {
+        // Test with different spec IDs to ensure precompiles are correctly initialized
+        let specs_to_test = [
+            (SpecId::FRONTIER, address!("0x0000000000000000000000000000000000000001")), /* ECRECOVER only in Frontier */
+            (SpecId::BYZANTIUM, address!("0x0000000000000000000000000000000000000005")), /* MODEXP added in Byzantium */
+            (SpecId::ISTANBUL, address!("0x0000000000000000000000000000000000000009")), /* BLAKE2F added in Istanbul */
+        ];
+
+        for (spec, precompile_addr) in specs_to_test {
+            // Setup EVM environment with the specific spec
+            let mut cfg_env = CfgEnv::default();
+            cfg_env.spec = spec;
+            cfg_env.chain_id = 1;
+
+            let env = EvmEnv { block_env: BlockEnv::default(), cfg_env };
+
+            // Create EVM with the factory
+            let factory = EthEvmFactory;
+            let mut evm = factory.create_evm(EmptyDB::default(), env);
+
+            // Test that the precompile provider contains the expected precompile
+            // Using get() method from PrecompilesMap instead of contains()
+            assert!(
+                evm.precompiles_mut().get(&precompile_addr).is_some(),
+                "Precompile at {precompile_addr:?} should be available for spec {spec:?}"
+            );
         }
     }
 }
