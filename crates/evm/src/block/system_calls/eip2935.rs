@@ -38,11 +38,7 @@ pub(crate) fn transact_blockhashes_contract_call<Halt>(
         return Ok(None);
     }
 
-    let res = match evm.transact_system_call(
-        alloy_eips::eip4788::SYSTEM_ADDRESS,
-        HISTORY_STORAGE_ADDRESS,
-        parent_block_hash.0.into(),
-    ) {
+    let res = match evm.transact_system_call(HISTORY_STORAGE_ADDRESS, parent_block_hash.0.into()) {
         Ok(res) => res,
         Err(e) => {
             return Err(
