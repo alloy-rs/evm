@@ -1,5 +1,7 @@
 //! Abstraction of an executable transaction.
 
+#[cfg(not(feature = "op"))]
+use alloy_consensus::transaction::Either;
 use alloy_consensus::{
     transaction::Recovered, EthereumTxEnvelope, TxEip1559, TxEip2930, TxEip4844, TxEip7702,
     TxLegacy,
