@@ -239,7 +239,7 @@ impl core::fmt::Debug for DynPrecompile {
 
 impl<F> From<F> for DynPrecompile
 where
-    F: Fn(&Bytes, u64) -> PrecompileResult + Precompile + Send + Sync + 'static,
+    F: FnOnce(&Bytes, u64) -> PrecompileResult + Precompile + Send + Sync + 'static,
 {
     fn from(f: F) -> Self {
         Self(Arc::new(f))
