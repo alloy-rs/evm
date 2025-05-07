@@ -153,7 +153,6 @@ where
                 max_fee_per_blob_gas: 0,
                 tx_type: OpTxType::Deposit as u8,
                 authorization_list: Default::default(),
-                initcodes: Vec::new(),
             },
             // The L1 fee is not charged for the EIP-4788 transaction, submit zero bytes for the
             // enveloped tx size.

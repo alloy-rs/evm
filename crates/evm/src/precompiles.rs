@@ -1,5 +1,7 @@
 //! Helpers for dealing with Precompiles.
 
+use core::cell::Ref;
+
 use alloc::{borrow::Cow, boxed::Box, string::String, sync::Arc};
 use alloy_consensus::transaction::Either;
 use alloy_primitives::{
@@ -8,11 +10,10 @@ use alloy_primitives::{
 };
 use op_revm::precompiles::OpPrecompiles;
 use revm::{
-    context::{Cfg, ContextTr},
+    context::{Cfg, ContextTr, LocalContextTr},
     handler::{EthPrecompiles, PrecompileProvider},
     interpreter::{CallInput, Gas, InputsImpl, InstructionResult, InterpreterResult},
     precompile::{PrecompileError, PrecompileResult, Precompiles},
-    revm_context::LocalContextTr,
 };
 
 /// A mapping of precompile contracts that can be either static (builtin) or dynamic.
@@ -196,8 +197,7 @@ impl<CTX: ContextTr> PrecompileProvider<CTX> for PrecompilesMap {
         };
 
         // Execute the precompile
-
-        let r;
+        let r: Ref<'_, [u8]>;
         let input_bytes = match &inputs.input {
             CallInput::SharedBuffer(range) => {
                 if let Some(slice) = context.local().shared_memory_buffer_slice(range.clone()) {
