@@ -160,7 +160,6 @@ where
             max_fee_per_blob_gas: 0,
             tx_type: 0,
             authorization_list: Default::default(),
-            initcodes: Vec::new(),
         };
 
         let mut gas_limit = tx.gas_limit;

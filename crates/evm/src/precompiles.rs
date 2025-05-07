@@ -237,9 +237,9 @@ impl core::fmt::Debug for DynPrecompile {
     }
 }
 
-impl<F> From<F> for DynPrecompile
+impl<'a, F> From<F> for DynPrecompile
 where
-    F: FnOnce(&Bytes, u64) -> PrecompileResult + Precompile + Send + Sync + 'static,
+    F: FnOnce(&'a [u8], u64) -> PrecompileResult + Precompile + Send + Sync + 'static,
 {
     fn from(f: F) -> Self {
         Self(Arc::new(f))
@@ -267,32 +267,32 @@ impl core::fmt::Debug for DynPrecompiles {
 /// Trait for implementing precompiled contracts.
 pub trait Precompile {
     /// Execute the precompile with the given input data and gas limit.
-    fn call(&self, data: &Bytes, gas: u64) -> PrecompileResult;
+    fn call(&self, data: &[u8], gas: u64) -> PrecompileResult;
 }
 
 impl<F> Precompile for F
 where
-    F: Fn(&Bytes, u64) -> PrecompileResult + Send + Sync,
+    F: Fn(&[u8], u64) -> PrecompileResult + Send + Sync,
 {
-    fn call(&self, data: &Bytes, gas: u64) -> PrecompileResult {
+    fn call(&self, data: &[u8], gas: u64) -> PrecompileResult {
         self(data, gas)
     }
 }
 
 impl Precompile for DynPrecompile {
-    fn call(&self, data: &Bytes, gas: u64) -> PrecompileResult {
+    fn call(&self, data: &[u8], gas: u64) -> PrecompileResult {
         self.0.call(data, gas)
     }
 }
 
 impl Precompile for &DynPrecompile {
-    fn call(&self, data: &Bytes, gas: u64) -> PrecompileResult {
+    fn call(&self, data: &[u8], gas: u64) -> PrecompileResult {
         self.0.call(data, gas)
     }
 }
 
 impl<A: Precompile, B: Precompile> Precompile for Either<A, B> {
-    fn call(&self, data: &Bytes, gas: u64) -> PrecompileResult {
+    fn call(&self, data: &[u8], gas: u64) -> PrecompileResult {
         match self {
             Self::Left(p) => p.call(data, gas),
             Self::Right(p) => p.call(data, gas),
@@ -337,7 +337,7 @@ mod tests {
         // define a function to modify the precompile to always return a constant value
         spec_precompiles.map_precompile(&identity_address, move |_original_dyn| {
             // create a new DynPrecompile that always returns our constant
-            |_data: &Bytes, _gas: u64| -> PrecompileResult {
+            |_data: &[u8], _gas: u64| -> PrecompileResult {
                 Ok(PrecompileOutput { gas_used: 10, bytes: Bytes::from_static(b"constant value") })
             }
             .into()
@@ -365,7 +365,7 @@ mod tests {
         let gas_limit = 1000;
 
         // define a closure that implements the precompile functionality
-        let closure_precompile = |data: &Bytes, _gas: u64| -> PrecompileResult {
+        let closure_precompile = |data: &[u8], _gas: u64| -> PrecompileResult {
             let mut output = b"processed: ".to_vec();
             output.extend_from_slice(data.as_ref());
             Ok(PrecompileOutput { gas_used: 15, bytes: Bytes::from(output) })
