@@ -6,7 +6,6 @@ use alloy_primitives::{
     map::{HashMap, HashSet},
     Address, Bytes,
 };
-use op_revm::precompiles::OpPrecompiles;
 use revm::{
     context::{Cfg, ContextTr, LocalContextTr},
     handler::{EthPrecompiles, PrecompileProvider},
@@ -145,12 +144,6 @@ impl PrecompilesMap {
 impl From<EthPrecompiles> for PrecompilesMap {
     fn from(value: EthPrecompiles) -> Self {
         Self::from_static(value.precompiles)
-    }
-}
-
-impl From<OpPrecompiles> for PrecompilesMap {
-    fn from(value: OpPrecompiles) -> Self {
-        Self::from_static(value.precompiles())
     }
 }
 
