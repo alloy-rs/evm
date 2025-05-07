@@ -62,8 +62,7 @@ pub fn post_block_withdrawals_balance_increments(
     block_timestamp: u64,
     withdrawals: &[Withdrawal],
 ) -> HashMap<Address, u128> {
-    let mut balance_increments =
-        HashMap::with_capacity_and_hasher(withdrawals.len(), Default::default());
+    let mut balance_increments = HashMap::with_capacity(withdrawals.len());
     insert_post_block_withdrawals_balance_increments(
         spec,
         block_timestamp,

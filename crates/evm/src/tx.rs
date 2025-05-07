@@ -1,16 +1,12 @@
 //! Abstraction of an executable transaction.
 
-#[cfg(not(feature = "op"))]
-use alloy_consensus::transaction::Either;
 use alloy_consensus::{
     transaction::Recovered, EthereumTxEnvelope, TxEip1559, TxEip2930, TxEip4844, TxEip7702,
     TxLegacy,
 };
 use alloy_eips::{eip2718::WithEncoded, Typed2718};
 use alloy_primitives::{Address, Bytes, TxKind};
-use revm::context::TxEnv;
-#[cfg(feature = "op")]
-use revm::context_interface::{either::Either, transaction::Transaction as RevmTransaction};
+use revm::{context::TxEnv, context_interface::either::Either};
 
 /// Trait marking types that can be converted into a transaction environment.
 pub trait IntoTxEnv<TxEnv> {
@@ -25,7 +21,10 @@ impl IntoTxEnv<Self> for TxEnv {
 }
 
 #[cfg(feature = "op")]
-impl<T: RevmTransaction> IntoTxEnv<Self> for op_revm::OpTransaction<T> {
+impl<T> IntoTxEnv<Self> for op_revm::OpTransaction<T>
+where
+    T: revm::context_interface::transaction::Transaction,
+{
     fn into_tx_env(self) -> Self {
         self
     }
