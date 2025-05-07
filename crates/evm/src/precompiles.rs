@@ -6,11 +6,13 @@ use alloy_primitives::{
     map::{HashMap, HashSet},
     Address, Bytes,
 };
+use op_revm::precompiles::OpPrecompiles;
 use revm::{
     context::{Cfg, ContextTr},
     handler::{EthPrecompiles, PrecompileProvider},
-    interpreter::{Gas, InputsImpl, InstructionResult, InterpreterResult},
+    interpreter::{CallInput, Gas, InputsImpl, InstructionResult, InterpreterResult},
     precompile::{PrecompileError, PrecompileResult, Precompiles},
+    revm_context::LocalContextTr,
 };
 
 /// A mapping of precompile contracts that can be either static (builtin) or dynamic.
@@ -147,12 +149,11 @@ impl From<EthPrecompiles> for PrecompilesMap {
     }
 }
 
-// TODO: uncomment when OpPrecompiles exposes precompiles https://github.com/bluealloy/revm/pull/2444
-//impl From<OpPrecompiles> for SpecPrecompiles {
-//    fn from(value: OpPrecompiles) -> Self {
-//        Self::from_static(value.precompiles())
-//    }
-//}
+impl From<OpPrecompiles> for PrecompilesMap {
+    fn from(value: OpPrecompiles) -> Self {
+        Self::from_static(value.precompiles())
+    }
+}
 
 impl core::fmt::Debug for PrecompilesMap {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -175,7 +176,7 @@ impl<CTX: ContextTr> PrecompileProvider<CTX> for PrecompilesMap {
 
     fn run(
         &mut self,
-        _context: &mut CTX,
+        context: &mut CTX,
         address: &Address,
         inputs: &InputsImpl,
         _is_static: bool,
@@ -195,8 +196,22 @@ impl<CTX: ContextTr> PrecompileProvider<CTX> for PrecompilesMap {
         };
 
         // Execute the precompile
+
+        let r;
+        let input_bytes = match &inputs.input {
+            CallInput::SharedBuffer(range) => {
+                if let Some(slice) = context.local().shared_memory_buffer_slice(range.clone()) {
+                    r = slice;
+                    r.as_ref()
+                } else {
+                    &[]
+                }
+            }
+            CallInput::Bytes(bytes) => bytes.0.iter().as_slice(),
+        };
+
         let precompile_result =
-            precompile.expect("None case already handled").call(&inputs.input, gas_limit);
+            precompile.expect("None case already handled").call(input_bytes, gas_limit);
 
         match precompile_result {
             Ok(output) => {
