@@ -52,8 +52,8 @@ alloy-op-hardforks = { version = "0.2" }
 op-alloy-consensus = { version = "0.15", default-features = false }
 
 # revm
-revm = { version = "22.0.0", default-features = false }
-op-revm = { version = "3.0.1", default-features = false }
+revm = { version = "23.0.0", default-features = false }
+op-revm = { version = "3.1.0", default-features = false }
 
 # misc
 auto_impl = "1"
@@ -62,6 +62,3 @@ serde = { version = "1", default-features = false, features = ["derive"] }
 thiserror = { version = "2.0.0", default-features = false }
 serde_json = "1"
 
-[patch.crates-io]
-revm = { git = "https://github.com/bluealloy/revm", rev = "f7693cc67df716498c8e2555349ef8b91d864cbd" }
-op-revm = { git = "https://github.com/bluealloy/revm", rev = "f7693cc67df716498c8e2555349ef8b91d864cbd" }
