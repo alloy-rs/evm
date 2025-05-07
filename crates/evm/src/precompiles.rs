@@ -1,7 +1,5 @@
 //! Helpers for dealing with Precompiles.
 
-use core::cell::Ref;
-
 use alloc::{borrow::Cow, boxed::Box, string::String, sync::Arc};
 use alloy_consensus::transaction::Either;
 use alloy_primitives::{
@@ -197,14 +195,15 @@ impl<CTX: ContextTr> PrecompileProvider<CTX> for PrecompilesMap {
         };
 
         // Execute the precompile
-        let r: Ref<'_, [u8]>;
+        let r;
         let input_bytes = match &inputs.input {
             CallInput::SharedBuffer(range) => {
-                if let Some(slice) = context.local().shared_memory_buffer_slice(range.clone()) {
-                    r = slice;
-                    r.as_ref()
-                } else {
-                    &[]
+                match context.local().shared_memory_buffer_slice(range.clone()) {
+                    Some(slice) => {
+                        r = slice;
+                        r.as_ref()
+                    }
+                    None => &[],
                 }
             }
             CallInput::Bytes(bytes) => bytes.0.iter().as_slice(),
