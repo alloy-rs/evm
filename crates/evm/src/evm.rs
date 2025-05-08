@@ -44,6 +44,8 @@ pub trait Evm {
     type Spec: Debug + Copy + Send + Sync + 'static;
     /// Precompiles used by the EVM.
     type Precompiles;
+    /// Evm inspector.
+    type Inspector;
 
     /// Reference to [`BlockEnv`].
     fn block(&self) -> &BlockEnv;
@@ -137,6 +139,9 @@ pub trait Evm {
 
     /// Mutable getter of precompiles.
     fn precompiles_mut(&mut self) -> &mut Self::Precompiles;
+
+    /// Mutable getter of inspector.
+    fn inspector_mut(&mut self) -> &mut Self::Inspector;
 }
 
 /// A type responsible for creating instances of an ethereum virtual machine given a certain input.
@@ -149,6 +154,7 @@ pub trait EvmFactory {
         Error = Self::Error<DB::Error>,
         Spec = Self::Spec,
         Precompiles = Self::Precompiles,
+        Inspector = I,
     >;
 
     /// The EVM context for inspectors

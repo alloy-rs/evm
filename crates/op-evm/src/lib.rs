@@ -102,6 +102,7 @@ where
     type HaltReason = OpHaltReason;
     type Spec = OpSpecId;
     type Precompiles = P;
+    type Inspector = I;
 
     fn block(&self) -> &BlockEnv {
         &self.block
@@ -209,6 +210,10 @@ where
 
     fn precompiles_mut(&mut self) -> &mut Self::Precompiles {
         &mut self.inner.0.precompiles
+    }
+
+    fn inspector_mut(&mut self) -> &mut Self::Inspector {
+        &mut self.inner.0.inspector
     }
 }
 
