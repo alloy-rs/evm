@@ -1,10 +1,14 @@
 //! Abstraction of an executable transaction.
 
 use alloy_consensus::{
-    transaction::Recovered, EthereumTxEnvelope, TxEip1559, TxEip2930, TxEip4844, TxEip7702,
-    TxLegacy,
+    crypto::secp256k1, transaction::Recovered, EthereumTxEnvelope, TxEip1559, TxEip2930, TxEip4844,
+    TxEip7702, TxLegacy,
 };
-use alloy_eips::{eip2718::WithEncoded, Typed2718};
+use alloy_eips::{
+    eip2718::WithEncoded,
+    eip7702::{RecoveredAuthority, RecoveredAuthorization},
+    Typed2718,
+};
 use alloy_primitives::{Address, Bytes, TxKind};
 use revm::{context::TxEnv, context_interface::either::Either};
 
@@ -210,7 +214,17 @@ impl FromRecoveredTx<TxEip7702> for TxEnv {
             access_list: access_list.clone(),
             authorization_list: authorization_list
                 .iter()
-                .map(|auth| Either::Left(auth.clone()))
+                .map(|auth| {
+                    Either::Right(RecoveredAuthorization::new_unchecked(
+                        auth.inner().clone(),
+                        auth.signature()
+                            .ok()
+                            .and_then(|signature| {
+                                secp256k1::recover_signer(&signature, auth.signature_hash()).ok()
+                            })
+                            .map_or(RecoveredAuthority::Invalid, RecoveredAuthority::Valid),
+                    ))
+                })
                 .collect(),
             ..Default::default()
         }
