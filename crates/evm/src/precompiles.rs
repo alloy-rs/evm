@@ -198,7 +198,7 @@ impl<CTX: ContextTr> PrecompileProvider<CTX> for PrecompilesMap {
                     None => &[],
                 }
             }
-            CallInput::Bytes(bytes) => bytes.0.iter().as_slice(),
+            CallInput::Bytes(bytes) => bytes.as_ref(),
         };
 
         let precompile_result =
