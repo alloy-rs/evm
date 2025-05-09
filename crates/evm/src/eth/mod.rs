@@ -36,13 +36,13 @@ pub type EthEvmContext<DB> = Context<BlockEnv, TxEnv, CfgEnv, DB>;
 /// [`RevmEvm`] type.
 #[expect(missing_debug_implementations)]
 pub struct EthEvm<DB: Database, I, PRECOMPILE = EthPrecompiles> {
-    inner: RevmEvm<
+    pub(crate) inner: RevmEvm<
         EthEvmContext<DB>,
         I,
         EthInstructions<EthInterpreter, EthEvmContext<DB>>,
         PRECOMPILE,
     >,
-    inspect: bool,
+    pub(crate) inspect: bool,
 }
 
 impl<DB: Database, I, PRECOMPILE> EthEvm<DB, I, PRECOMPILE> {
