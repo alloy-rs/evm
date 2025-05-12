@@ -1,7 +1,5 @@
 //! Helpers for dealing with Precompiles.
 
-use core::cell::Ref;
-
 use alloc::{borrow::Cow, boxed::Box, string::String, sync::Arc};
 use alloy_consensus::transaction::Either;
 use alloy_primitives::{
