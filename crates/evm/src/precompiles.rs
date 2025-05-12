@@ -190,11 +190,16 @@ impl<CTX: ContextTr> PrecompileProvider<CTX> for PrecompilesMap {
         };
 
         // Execute the precompile
-        let mut _guard: Option<Ref<'_, [u8]>> = None;
-        let input_bytes: &[u8] = match &inputs.input {
+        let r;
+        let input_bytes = match &inputs.input {
             CallInput::SharedBuffer(range) => {
-                _guard = context.local().shared_memory_buffer_slice(range.clone());
-                _guard.as_deref().unwrap_or(&[])
+                match context.local().shared_memory_buffer_slice(range.clone()) {
+                    Some(slice) => {
+                        r = slice;
+                        &*r
+                    }
+                    None => &[],
+                }
             }
             CallInput::Bytes(bytes) => bytes.as_ref(),
         };
