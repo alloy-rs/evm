@@ -7,9 +7,7 @@ use alloy_primitives::{
     Address, Bytes,
 };
 use revm::{
-    context::{
-        Cfg, ContextTr, LocalContextTr,
-    },
+    context::{Cfg, ContextTr, LocalContextTr},
     handler::{EthPrecompiles, PrecompileProvider},
     interpreter::{CallInput, Gas, InputsImpl, InstructionResult, InterpreterResult},
     precompile::{PrecompileError, PrecompileResult, Precompiles},

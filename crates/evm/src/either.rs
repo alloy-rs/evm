@@ -1,6 +1,6 @@
+use crate::{Evm, EvmEnv};
 use alloy_primitives::{Address, Bytes};
 use revm::context::{either, BlockEnv};
-use crate::{Evm, EvmEnv};
 
 impl<L, R> Evm for either::Either<L, R>
 where
