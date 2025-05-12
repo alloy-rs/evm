@@ -1,26 +1,19 @@
 //! Helpers for dealing with Precompiles.
 
-use crate::{eth::EthEvmContext, Database, EthEvm, Evm, EvmEnv, EvmFactory};
 use alloc::{borrow::Cow, boxed::Box, string::String, sync::Arc};
 use alloy_consensus::transaction::Either;
 use alloy_primitives::{
     map::{HashMap, HashSet},
     Address, Bytes,
 };
-use revm::{context::LocalContextTr, interpreter::CallInput};
 use revm::{
     context::{
-        result::{EVMError, HaltReason},
-        BlockEnv, Cfg, CfgEnv, ContextTr, TxEnv,
+        Cfg, ContextTr, LocalContextTr,
     },
     handler::{EthPrecompiles, PrecompileProvider},
-    inspector::NoOpInspector,
-    interpreter::{Gas, InputsImpl, InstructionResult, InterpreterResult},
-    precompile::{PrecompileError, PrecompileResult, PrecompileSpecId, Precompiles},
-    primitives::hardfork::SpecId,
-    Context, Inspector, MainBuilder, MainContext,
+    interpreter::{CallInput, Gas, InputsImpl, InstructionResult, InterpreterResult},
+    precompile::{PrecompileError, PrecompileResult, Precompiles},
 };
-use std::fmt::Debug;
 
 /// A mapping of precompile contracts that can be either static (builtin) or dynamic.
 ///
@@ -314,189 +307,6 @@ impl<A: Precompile, B: Precompile> Precompile for Either<A, B> {
             Self::Right(p) => p.call(data, gas),
         }
     }
-}
-
-impl<L, R> EvmFactory for Either<L, R>
-where
-    L: Evm,
-    R: Evm,
-{
-    type Evm<DB: Database, I: Inspector<EthEvmContext<DB>>> = EthEvm<DB, I, Self::Precompiles>;
-    type Context<DB: Database> = Context<BlockEnv, TxEnv, CfgEnv, DB>;
-    type Tx = TxEnv;
-    type Error<DBError: core::error::Error + Send + Sync + 'static> = EVMError<DBError>;
-    type HaltReason = HaltReason;
-    type Spec = SpecId;
-    type Precompiles = PrecompilesMap;
-
-    fn create_evm<DB: Database>(&self, db: DB, input: EvmEnv) -> Self::Evm<DB, NoOpInspector> {
-        let spec_id = input.cfg_env.spec;
-        match self {
-            Self::Left(_) | Self::Right(_) => EthEvm {
-                inner: Context::mainnet()
-                    .with_block(input.block_env)
-                    .with_cfg(input.cfg_env)
-                    .with_db(db)
-                    .build_mainnet_with_inspector(NoOpInspector {})
-                    .with_precompiles(PrecompilesMap::from_static(Precompiles::new(
-                        PrecompileSpecId::from_spec_id(spec_id),
-                    ))),
-                inspect: false,
-            },
-        }
-    }
-
-    fn create_evm_with_inspector<DB: crate::Database, I: Inspector<Self::Context<DB>>>(
-        &self,
-        db: DB,
-        input: EvmEnv<Self::Spec>,
-        inspector: I,
-    ) -> Self::Evm<DB, I> {
-        let spec_id = input.cfg_env.spec;
-        match self {
-            Self::Left(_) | Self::Right(_) => EthEvm {
-                inner: Context::mainnet()
-                    .with_block(input.block_env)
-                    .with_cfg(input.cfg_env)
-                    .with_db(db)
-                    .build_mainnet_with_inspector(inspector)
-                    .with_precompiles(PrecompilesMap::from_static(Precompiles::new(
-                        PrecompileSpecId::from_spec_id(spec_id),
-                    ))),
-                inspect: true,
-            },
-        }
-    }
-}
-
-impl<L, R, DB, I, PRECOMPILE> Evm for Either<L, R>
-where
-    DB: Database,
-    I: Inspector<EthEvmContext<DB>>,
-    PRECOMPILE: PrecompileProvider<EthEvmContext<DB>, Output = InterpreterResult>,
-    L: Evm + Debug + Clone + Into<EthEvm<DB, I, PRECOMPILE>>,
-    R: Evm + Debug + Clone + Into<EthEvm<DB, I, PRECOMPILE>>,
-{
-    type DB = DB;
-    type Tx = TxEnv;
-    type Error = EVMError<DB::Error>;
-    type HaltReason = HaltReason;
-    type Spec = SpecId;
-    type Precompiles = PRECOMPILE;
-    type Inspector = I;
-
-    fn block(&self) -> &BlockEnv {
-        let evm = into_evm::<L, R, DB, I, PRECOMPILE>(self);
-        let block_env = <BlockEnv as Clone>::clone(&evm.block);
-        &block_env
-    }
-
-    fn chain_id(&self) -> u64 {
-        let evm = into_evm::<L, R, DB, I, PRECOMPILE>(self);
-        evm.chain_id()
-    }
-
-    fn transact_raw(
-        &mut self,
-        tx: Self::Tx,
-    ) -> Result<revm::context::result::ResultAndState<Self::HaltReason>, Self::Error> {
-        let mut evm = into_evm::<L, R, DB, I, PRECOMPILE>(self);
-        evm.transact_raw(tx)
-    }
-
-    fn transact(
-        &mut self,
-        tx: impl crate::IntoTxEnv<Self::Tx>,
-    ) -> Result<revm::context::result::ResultAndState<Self::HaltReason>, Self::Error> {
-        let mut evm = into_evm::<L, R, DB, I, PRECOMPILE>(self);
-        evm.transact(tx)
-    }
-
-    fn transact_system_call(
-        &mut self,
-        caller: Address,
-        contract: Address,
-        data: Bytes,
-    ) -> Result<revm::context::result::ResultAndState<Self::HaltReason>, Self::Error> {
-        let mut evm = into_evm::<L, R, DB, I, PRECOMPILE>(self);
-        evm.transact_system_call(caller, contract, data)
-    }
-
-    fn transact_commit(
-        &mut self,
-        tx: impl crate::IntoTxEnv<Self::Tx>,
-    ) -> Result<revm::context::result::ExecutionResult<Self::HaltReason>, Self::Error>
-    where
-        Self::DB: revm::DatabaseCommit,
-    {
-        let mut evm = into_evm::<L, R, DB, I, PRECOMPILE>(self);
-        evm.transact_commit(tx)
-    }
-
-    fn enable_inspector(&mut self) {
-        let mut evm = into_evm::<L, R, DB, I, PRECOMPILE>(&self);
-        evm.enable_inspector()
-    }
-
-    fn disable_inspector(&mut self) {
-        let mut evm = into_evm::<L, R, DB, I, PRECOMPILE>(&self);
-        evm.disable_inspector()
-    }
-
-    fn into_db(self) -> Self::DB
-    where
-        Self: Sized,
-    {
-        let mut evm = into_evm::<L, R, DB, I, PRECOMPILE>(&self);
-        evm.into_db()
-    }
-
-    fn into_env(self) -> EvmEnv<Self::Spec>
-    where
-        Self: Sized,
-    {
-        let mut evm = into_evm::<L, R, DB, I, PRECOMPILE>(&self);
-        evm.into_env()
-    }
-
-    fn db_mut(&mut self) -> &mut Self::DB {
-        let mut evm = into_evm::<L, R, DB, I, PRECOMPILE>(self);
-        evm.db_mut()
-    }
-
-    fn finish(self) -> (Self::DB, EvmEnv<Self::Spec>)
-    where
-        Self: Sized,
-    {
-        let mut evm = into_evm::<L, R, DB, I, PRECOMPILE>(&self);
-        evm.finish()
-    }
-
-    fn set_inspector_enabled(&mut self, enabled: bool) {
-        let mut evm = into_evm::<L, R, DB, I, PRECOMPILE>(&self);
-        evm.set_inspector_enabled(enabled);
-    }
-
-    fn precompiles_mut(&mut self) -> &mut Self::Precompiles {
-        let mut evm = into_evm::<L, R, DB, I, PRECOMPILE>(&self);
-        evm.precompiles_mut()
-    }
-
-    fn inspector_mut(&mut self) -> &mut Self::Inspector {
-        let mut evm = into_evm::<L, R, DB, I, PRECOMPILE>(&self);
-        evm.inspector_mut()
-    }
-}
-
-fn into_evm<L, R, DB, I, PRECOMPILE>(either: &Either<L, R>) -> EthEvm<DB, I, PRECOMPILE>
-where
-    DB: Database,
-    I: Inspector<EthEvmContext<DB>>,
-    PRECOMPILE: PrecompileProvider<EthEvmContext<DB>, Output = InterpreterResult>,
-    L: Evm + Debug + Clone + Into<EthEvm<DB, I, PRECOMPILE>>,
-    R: Evm + Debug + Clone + Into<EthEvm<DB, I, PRECOMPILE>>,
-{
-    <Either<L, R> as Clone>::clone(&either).either_into::<EthEvm<DB, I, PRECOMPILE>>()
 }
 
 #[cfg(test)]
