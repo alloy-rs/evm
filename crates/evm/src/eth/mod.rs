@@ -129,10 +129,10 @@ where
 
     fn transact_system_call(
         &mut self,
-        callee: Address,
+        contract: Address,
         data: Bytes,
     ) -> Result<ResultAndState, Self::Error> {
-        self.inner.transact_system_call(data, callee)
+        self.inner.transact_system_call(contract, data)
     }
 
     fn db_mut(&mut self) -> &mut Self::DB {

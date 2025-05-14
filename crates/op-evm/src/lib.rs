@@ -9,9 +9,8 @@
 
 extern crate alloc;
 
-use alloc::vec::Vec;
 use alloy_evm::{precompiles::PrecompilesMap, Database, Evm, EvmEnv, EvmFactory};
-use alloy_primitives::{Address, Bytes, TxKind, U256};
+use alloy_primitives::{Address, Bytes};
 use core::{
     fmt::Debug,
     ops::{Deref, DerefMut},
@@ -120,10 +119,10 @@ where
 
     fn transact_system_call(
         &mut self,
-        callee: Address,
+        contract: Address,
         data: Bytes,
     ) -> Result<ResultAndState<Self::HaltReason>, Self::Error> {
-        self.inner.transact_system_call(data, callee)
+        self.inner.transact_system_call(contract, data)
     }
 
     fn db_mut(&mut self) -> &mut Self::DB {
