@@ -47,11 +47,10 @@ where
 
     fn transact_system_call(
         &mut self,
-        caller: Address,
         contract: Address,
         data: Bytes,
     ) -> Result<revm::context::result::ResultAndState<Self::HaltReason>, Self::Error> {
-        either::for_both!(self, evm => evm.transact_system_call(caller, contract, data))
+        either::for_both!(self, evm => evm.transact_system_call(contract, data))
     }
 
     fn db_mut(&mut self) -> &mut Self::DB {

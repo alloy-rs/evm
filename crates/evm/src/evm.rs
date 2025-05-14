@@ -75,7 +75,6 @@ pub trait Evm {
     /// covering edge cases when beneficiary is set to the system contract address.
     fn transact_system_call(
         &mut self,
-        caller: Address,
         contract: Address,
         data: Bytes,
     ) -> Result<ResultAndState<Self::HaltReason>, Self::Error>;
