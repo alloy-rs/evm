@@ -1,6 +1,6 @@
 //! Abstraction over EVM.
 
-use crate::{EvmEnv, EvmError, IntoTxEnv};
+use crate::{tracing::TxTracer, EvmEnv, EvmError, IntoTxEnv};
 use alloy_primitives::{Address, Bytes};
 use core::{error::Error, fmt::Debug, hash::Hash};
 use revm::{
@@ -194,3 +194,18 @@ pub trait EvmFactory {
         inspector: I,
     ) -> Self::Evm<DB, I>;
 }
+
+/// An extension trait for [`EvmFactory`] providing useful non-overridable methods.
+pub trait EvmFactoryExt: EvmFactory {
+    /// Creates a new [`TxTracer`] instance with the given database, input and fused inspector.
+    fn create_tracer<DB: Database, I: Inspector<Self::Context<DB>> + Clone>(
+        &self,
+        db: DB,
+        input: EvmEnv<Self::Spec>,
+        fused_inspector: I,
+    ) -> TxTracer<Self::Evm<DB, I>> {
+        TxTracer::new(self.create_evm_with_inspector(db, input, fused_inspector))
+    }
+}
+
+impl<T: EvmFactory> EvmFactoryExt for T {}
