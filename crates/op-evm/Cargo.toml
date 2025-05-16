@@ -52,5 +52,6 @@ serde = [
     "alloy-eips/serde",
     "alloy-consensus/serde",
     "alloy-op-hardforks/serde",
-    "op-alloy-consensus/serde"
+    "op-alloy-consensus/serde",
+	"alloy-evm/serde"
 ]
