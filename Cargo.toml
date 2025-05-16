@@ -62,3 +62,5 @@ serde = { version = "1", default-features = false, features = ["derive"] }
 thiserror = { version = "2.0.0", default-features = false }
 serde_json = "1"
 
+[patch.crates-io]
+op-alloy-consensus = { git = "https://github.com/Rimeeeeee/op-alloy", branch = "mint-nonoptional" }
