@@ -2,7 +2,7 @@
 
 use crate::{EvmEnv, EvmError, IntoTxEnv};
 use alloy_primitives::{Address, Bytes};
-use core::{error::Error, fmt::Debug};
+use core::{error::Error, fmt::Debug, hash::Hash};
 use revm::{
     context::{result::ExecutionResult, BlockEnv},
     context_interface::{
@@ -41,7 +41,7 @@ pub trait Evm {
     type HaltReason: HaltReasonTr + Send + Sync + 'static;
     /// Identifier of the EVM specification. EVM is expected to use this identifier to determine
     /// which features are enabled.
-    type Spec: Debug + Copy + Send + Sync + 'static;
+    type Spec: Debug + Copy + Hash + Eq + Send + Sync + Default + 'static;
     /// Precompiles used by the EVM.
     type Precompiles;
     /// Evm inspector.
@@ -165,7 +165,7 @@ pub trait EvmFactory {
     /// Halt reason. See [`Evm::HaltReason`].
     type HaltReason: HaltReasonTr + Send + Sync + 'static;
     /// The EVM specification identifier, see [`Evm::Spec`].
-    type Spec: Debug + Copy + Send + Sync + 'static;
+    type Spec: Debug + Copy + Hash + Eq + Send + Sync + Default + 'static;
     /// Precompiles used by the EVM.
     type Precompiles;
 
