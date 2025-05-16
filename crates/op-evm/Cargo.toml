@@ -39,3 +39,18 @@ std = [
 	"alloy-eips/std",
 	"op-alloy-consensus/std"
 ]
+
+dev = [
+    "revm/dev",
+    "op-revm/dev"
+]
+
+serde = [
+    "revm/serde",
+    "op-revm/serde",
+    "alloy-primitives/serde",
+    "alloy-eips/serde",
+    "alloy-consensus/serde",
+    "alloy-op-hardforks/serde",
+    "op-alloy-consensus/serde"
+]

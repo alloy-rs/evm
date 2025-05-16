@@ -27,6 +27,7 @@ op-alloy-consensus = { workspace = true, optional = true }
 auto_impl.workspace = true
 derive_more.workspace = true
 thiserror.workspace = true
+serde.workspace = true
 
 [dev-dependencies]
 alloy-primitives = { workspace = true, features = ["serde"] }
@@ -49,4 +50,20 @@ std = [
     "thiserror/std",
     "op-alloy-consensus?/std"
 ]
+
+dev = [
+    "revm/dev",
+    "op-revm?/dev"
+]
+
+serde = [
+    "revm/serde",
+    "op-revm?/serde",
+    "alloy-primitives/serde",
+    "alloy-eips/serde",
+    "alloy-consensus/serde",
+    "alloy-hardforks/serde",
+    "op-alloy-consensus?/serde"
+]
+
 op = ["op-revm", "op-alloy-consensus"]
