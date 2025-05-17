@@ -52,7 +52,7 @@ std = [
     "serde?/std"
 ]
 
-dev = [
+revm_dev = [
     "revm/dev",
     "op-revm?/dev"
 ]

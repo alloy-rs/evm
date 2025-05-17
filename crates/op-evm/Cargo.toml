@@ -40,7 +40,7 @@ std = [
 	"op-alloy-consensus/std"
 ]
 
-dev = [
+revm_dev = [
     "revm/dev",
     "op-revm/dev"
 ]
