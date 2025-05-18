@@ -42,7 +42,8 @@ std = [
 
 revm_dev = [
     "revm/dev",
-    "op-revm/dev"
+    "op-revm/dev",
+	"alloy-evm/revm_dev",
 ]
 
 serde = [
