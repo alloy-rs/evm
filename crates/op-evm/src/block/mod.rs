@@ -122,7 +122,7 @@ where
         &mut self,
         tx: impl ExecutableTx<Self>,
         f: impl FnOnce(&ExecutionResult<<Self::Evm as Evm>::HaltReason>) -> CommitChanges,
-    ) -> Result<u64, BlockExecutionError> {
+    ) -> Result<Option<u64>, BlockExecutionError> {
         let is_deposit = tx.tx().ty() == DEPOSIT_TRANSACTION_TYPE;
 
         // The sum of the transaction’s gas limit, Tg, and the gas utilized in this block prior,
@@ -158,7 +158,7 @@ where
             self.evm.transact(tx).map_err(move |err| BlockExecutionError::evm(err, hash))?;
 
         if !f(&result).should_commit() {
-            return Ok(0);
+            return Ok(None);
         }
 
         self.system_caller.on_state(StateChangeSource::Transaction(self.receipts.len()), &state);
@@ -204,7 +204,7 @@ where
 
         self.evm.db_mut().commit(state);
 
-        Ok(gas_used)
+        Ok(Some(gas_used))
     }
 
     fn finish(

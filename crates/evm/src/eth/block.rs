@@ -109,7 +109,7 @@ where
         &mut self,
         tx: impl ExecutableTx<Self>,
         f: impl FnOnce(&ExecutionResult<<Self::Evm as Evm>::HaltReason>) -> CommitChanges,
-    ) -> Result<u64, BlockExecutionError> {
+    ) -> Result<Option<u64>, BlockExecutionError> {
         // The sum of the transaction's gas limit, Tg, and the gas utilized in this block prior,
         // must be no greater than the block's gasLimit.
         let block_available_gas = self.evm.block().gas_limit - self.gas_used;
@@ -129,7 +129,7 @@ where
             .map_err(|err| BlockExecutionError::evm(err, tx.tx().trie_hash()))?;
 
         if !f(&result).should_commit() {
-            return Ok(0);
+            return Ok(None);
         }
 
         self.system_caller.on_state(StateChangeSource::Transaction(self.receipts.len()), &state);
@@ -151,7 +151,7 @@ where
         // Commit the state changes.
         self.evm.db_mut().commit(state);
 
-        Ok(gas_used)
+        Ok(Some(gas_used))
     }
 
     fn finish(
