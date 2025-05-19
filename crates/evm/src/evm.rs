@@ -137,8 +137,14 @@ pub trait Evm {
         self.set_inspector_enabled(false)
     }
 
+    /// Getter of precompiles.
+    fn precompiles(&self) -> &Self::Precompiles;
+
     /// Mutable getter of precompiles.
     fn precompiles_mut(&mut self) -> &mut Self::Precompiles;
+
+    /// Getter of inspector.
+    fn inspector(&self) -> &Self::Inspector;
 
     /// Mutable getter of inspector.
     fn inspector_mut(&mut self) -> &mut Self::Inspector;

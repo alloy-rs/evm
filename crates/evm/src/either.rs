@@ -101,8 +101,16 @@ where
         either::for_both!(self, evm => evm.disable_inspector())
     }
 
+    fn precompiles(&self) -> &Self::Precompiles {
+        either::for_both!(self, evm => evm.precompiles())
+    }
+
     fn precompiles_mut(&mut self) -> &mut Self::Precompiles {
         either::for_both!(self, evm => evm.precompiles_mut())
+    }
+
+    fn inspector(&self) -> &Self::Inspector {
+        either::for_both!(self, evm => evm.inspector())
     }
 
     fn inspector_mut(&mut self) -> &mut Self::Inspector {
