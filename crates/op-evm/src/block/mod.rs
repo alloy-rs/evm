@@ -8,7 +8,7 @@ use alloy_evm::{
     block::{
         state_changes::{balance_increment_state, post_block_balance_increments},
         BlockExecutionError, BlockExecutionResult, BlockExecutor, BlockExecutorFactory,
-        BlockExecutorFor, BlockValidationError, ExecutableTx, OnStateHook,
+        BlockExecutorFor, BlockValidationError, CommitChanges, ExecutableTx, OnStateHook,
         StateChangePostBlockSource, StateChangeSource, SystemCaller,
     },
     eth::receipt_builder::ReceiptBuilderCtx,
@@ -21,7 +21,11 @@ use op_alloy_consensus::OpDepositReceipt;
 use op_revm::transaction::deposit::DEPOSIT_TRANSACTION_TYPE;
 pub use receipt_builder::OpAlloyReceiptBuilder;
 use receipt_builder::OpReceiptBuilder;
-use revm::{context::result::ResultAndState, database::State, DatabaseCommit, Inspector};
+use revm::{
+    context::result::{ExecutionResult, ResultAndState},
+    database::State,
+    DatabaseCommit, Inspector,
+};
 
 mod canyon;
 pub mod receipt_builder;
@@ -114,11 +118,11 @@ where
         Ok(())
     }
 
-    fn execute_transaction_with_result_closure(
+    fn execute_transaction_with_commit_condition(
         &mut self,
         tx: impl ExecutableTx<Self>,
-        f: impl FnOnce(&revm::context::result::ExecutionResult<<Self::Evm as Evm>::HaltReason>),
-    ) -> Result<u64, BlockExecutionError> {
+        f: impl FnOnce(&ExecutionResult<<Self::Evm as Evm>::HaltReason>) -> CommitChanges,
+    ) -> Result<Option<u64>, BlockExecutionError> {
         let is_deposit = tx.tx().ty() == DEPOSIT_TRANSACTION_TYPE;
 
         // The sum of the transaction’s gas limit, Tg, and the gas utilized in this block prior,
@@ -150,14 +154,14 @@ where
         let hash = tx.tx().trie_hash();
 
         // Execute transaction.
-        let result_and_state =
+        let ResultAndState { result, state } =
             self.evm.transact(tx).map_err(move |err| BlockExecutionError::evm(err, hash))?;
 
-        self.system_caller
-            .on_state(StateChangeSource::Transaction(self.receipts.len()), &result_and_state.state);
-        let ResultAndState { result, state } = result_and_state;
+        if !f(&result).should_commit() {
+            return Ok(None);
+        }
 
-        f(&result);
+        self.system_caller.on_state(StateChangeSource::Transaction(self.receipts.len()), &state);
 
         let gas_used = result.gas_used();
 
@@ -200,7 +204,7 @@ where
 
         self.evm.db_mut().commit(state);
 
-        Ok(gas_used)
+        Ok(Some(gas_used))
     }
 
     fn finish(
