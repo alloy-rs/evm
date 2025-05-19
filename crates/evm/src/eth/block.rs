@@ -10,7 +10,7 @@ use crate::{
     block::{
         state_changes::{balance_increment_state, post_block_balance_increments},
         BlockExecutionError, BlockExecutionResult, BlockExecutor, BlockExecutorFactory,
-        BlockExecutorFor, BlockValidationError, ExecutableTx, OnStateHook,
+        BlockExecutorFor, BlockValidationError, ExecutableTx, OnStateHook, ShouldCommit,
         StateChangePostBlockSource, StateChangeSource, SystemCaller,
     },
     Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded,
@@ -105,10 +105,10 @@ where
         Ok(())
     }
 
-    fn execute_transaction_with_result_closure(
+    fn execute_transaction_with_commit_condition(
         &mut self,
         tx: impl ExecutableTx<Self>,
-        f: impl FnOnce(&ExecutionResult<<Self::Evm as Evm>::HaltReason>),
+        f: impl FnOnce(&ExecutionResult<<Self::Evm as Evm>::HaltReason>) -> ShouldCommit,
     ) -> Result<u64, BlockExecutionError> {
         // The sum of the transaction's gas limit, Tg, and the gas utilized in this block prior,
         // must be no greater than the block's gasLimit.
@@ -123,15 +123,16 @@ where
         }
 
         // Execute transaction.
-        let result_and_state = self
+        let ResultAndState { result, state } = self
             .evm
             .transact(tx)
             .map_err(|err| BlockExecutionError::evm(err, tx.tx().trie_hash()))?;
-        self.system_caller
-            .on_state(StateChangeSource::Transaction(self.receipts.len()), &result_and_state.state);
-        let ResultAndState { result, state } = result_and_state;
 
-        f(&result);
+        if !f(&result).should_commit() {
+            return Ok(0);
+        }
+
+        self.system_caller.on_state(StateChangeSource::Transaction(self.receipts.len()), &state);
 
         let gas_used = result.gas_used();
 

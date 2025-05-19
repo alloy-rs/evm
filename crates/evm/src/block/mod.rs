@@ -43,6 +43,23 @@ impl<E: BlockExecutor, T> ExecutableTx<E> for T where
 {
 }
 
+/// Marks whether transaction should be commited into block executor's state.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[must_use]
+pub enum ShouldCommit {
+    /// Transaction should be commited into block executor's state.
+    Yes,
+    /// Transaction should not be commited.
+    No,
+}
+
+impl ShouldCommit {
+    /// Returns `true` if transaction should be commited into block executor's state.
+    pub fn should_commit(self) -> bool {
+        matches!(self, Self::Yes)
+    }
+}
+
 /// A type that knows how to execute a single block.
 ///
 /// The current abstraction assumes that block execution consists of the following steps:
@@ -81,6 +98,20 @@ pub trait BlockExecutor {
         &mut self,
         tx: impl ExecutableTx<Self>,
         f: impl FnOnce(&ExecutionResult<<Self::Evm as Evm>::HaltReason>),
+    ) -> Result<u64, BlockExecutionError> {
+        self.execute_transaction_with_commit_condition(tx, |res| {
+            f(res);
+            ShouldCommit::Yes
+        })
+    }
+
+    /// Executes a single transaction and applies execution result to internal state. Invokes the
+    /// given closure with an internal [`ExecutionResult`] produced by the EVM, and commits the
+    /// transaction to the state on [`ShouldCommit::Yes`].
+    fn execute_transaction_with_commit_condition(
+        &mut self,
+        tx: impl ExecutableTx<Self>,
+        f: impl FnOnce(&ExecutionResult<<Self::Evm as Evm>::HaltReason>) -> ShouldCommit,
     ) -> Result<u64, BlockExecutionError>;
 
     /// Applies any necessary changes after executing the block's transactions, completes execution
