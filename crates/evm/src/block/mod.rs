@@ -46,14 +46,14 @@ impl<E: BlockExecutor, T> ExecutableTx<E> for T where
 /// Marks whether transaction should be commited into block executor's state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[must_use]
-pub enum ShouldCommit {
+pub enum CommitChanges {
     /// Transaction should be commited into block executor's state.
     Yes,
     /// Transaction should not be commited.
     No,
 }
 
-impl ShouldCommit {
+impl CommitChanges {
     /// Returns `true` if transaction should be commited into block executor's state.
     pub fn should_commit(self) -> bool {
         matches!(self, Self::Yes)
@@ -101,7 +101,7 @@ pub trait BlockExecutor {
     ) -> Result<u64, BlockExecutionError> {
         self.execute_transaction_with_commit_condition(tx, |res| {
             f(res);
-            ShouldCommit::Yes
+            CommitChanges::Yes
         })
     }
 
@@ -111,7 +111,7 @@ pub trait BlockExecutor {
     fn execute_transaction_with_commit_condition(
         &mut self,
         tx: impl ExecutableTx<Self>,
-        f: impl FnOnce(&ExecutionResult<<Self::Evm as Evm>::HaltReason>) -> ShouldCommit,
+        f: impl FnOnce(&ExecutionResult<<Self::Evm as Evm>::HaltReason>) -> CommitChanges,
     ) -> Result<u64, BlockExecutionError>;
 
     /// Applies any necessary changes after executing the block's transactions, completes execution
