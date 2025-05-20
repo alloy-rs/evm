@@ -44,20 +44,17 @@ pub(crate) fn transact_beacon_root_contract_call<Halt>(
         return Ok(None);
     }
 
-    let res = match evm.transact_system_call(
-        alloy_eips::eip4788::SYSTEM_ADDRESS,
-        BEACON_ROOTS_ADDRESS,
-        parent_beacon_block_root.0.into(),
-    ) {
-        Ok(res) => res,
-        Err(e) => {
-            return Err(BlockValidationError::BeaconRootContractCall {
-                parent_beacon_block_root: Box::new(parent_beacon_block_root),
-                message: e.to_string(),
+    let res =
+        match evm.transact_system_call(BEACON_ROOTS_ADDRESS, parent_beacon_block_root.0.into()) {
+            Ok(res) => res,
+            Err(e) => {
+                return Err(BlockValidationError::BeaconRootContractCall {
+                    parent_beacon_block_root: Box::new(parent_beacon_block_root),
+                    message: e.to_string(),
+                }
+                .into())
             }
-            .into())
-        }
-    };
+        };
 
     Ok(Some(res))
 }
