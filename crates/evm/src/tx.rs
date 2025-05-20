@@ -356,13 +356,13 @@ mod op {
     use op_revm::{transaction::deposit::DepositTransactionParts, OpTransaction};
     use revm::context::TxEnv;
 
-    impl FromTxWithEncoded<OpTxEnvelope> for OpTransaction<TxEnv> {
-        fn from_encoded_tx(tx: &OpTxEnvelope, caller: Address, encoded: Bytes) -> Self {
-            let base = match tx {
-                OpTxEnvelope::Legacy(tx) => TxEnv::from_recovered_tx(tx.tx(), caller),
-                OpTxEnvelope::Eip1559(tx) => TxEnv::from_recovered_tx(tx.tx(), caller),
-                OpTxEnvelope::Eip2930(tx) => TxEnv::from_recovered_tx(tx.tx(), caller),
-                OpTxEnvelope::Eip7702(tx) => TxEnv::from_recovered_tx(tx.tx(), caller),
+    impl FromRecoveredTx<OpTxEnvelope> for TxEnv {
+        fn from_recovered_tx(tx: &OpTxEnvelope, caller: Address) -> Self {
+            match tx {
+                OpTxEnvelope::Legacy(tx) => Self::from_recovered_tx(tx.tx(), caller),
+                OpTxEnvelope::Eip1559(tx) => Self::from_recovered_tx(tx.tx(), caller),
+                OpTxEnvelope::Eip2930(tx) => Self::from_recovered_tx(tx.tx(), caller),
+                OpTxEnvelope::Eip7702(tx) => Self::from_recovered_tx(tx.tx(), caller),
                 OpTxEnvelope::Deposit(tx) => {
                     let TxDeposit {
                         to,
@@ -374,7 +374,7 @@ mod op {
                         mint: _,
                         is_system_transaction: _,
                     } = tx.inner();
-                    TxEnv {
+                    Self {
                         tx_type: tx.ty(),
                         caller,
                         gas_limit: *gas_limit,
@@ -384,7 +384,19 @@ mod op {
                         ..Default::default()
                     }
                 }
-            };
+            }
+        }
+    }
+
+    impl FromTxWithEncoded<OpTxEnvelope> for TxEnv {
+        fn from_encoded_tx(tx: &OpTxEnvelope, caller: Address, _encoded: Bytes) -> Self {
+            Self::from_recovered_tx(tx, caller)
+        }
+    }
+
+    impl FromTxWithEncoded<OpTxEnvelope> for OpTransaction<TxEnv> {
+        fn from_encoded_tx(tx: &OpTxEnvelope, caller: Address, encoded: Bytes) -> Self {
+            let base = TxEnv::from_recovered_tx(tx, caller);
 
             let deposit = if let OpTxEnvelope::Deposit(tx) = tx {
                 DepositTransactionParts {
