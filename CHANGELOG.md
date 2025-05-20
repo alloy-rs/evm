@@ -5,26 +5,51 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.1](https://github.com/alloy-rs/evm/releases/tag/v0.9.1) - 2025-05-20
+
+### Features
+
+- Implement `FromTxWithEncoded` and `FromRecoveredTx` from `OpTxEnvelope` for `TxEnv` ([#94](https://github.com/alloy-rs/evm/issues/94))
+
 ## [0.9.0](https://github.com/alloy-rs/evm/releases/tag/v0.9.0) - 2025-05-20
-
-### Bug Fixes
-
-- `r.as_ref()` the trait `AsRef<[_; 0]>` is not implemented for `[u8]` ([#86](https://github.com/alloy-rs/evm/issues/86))
-
-### Dependencies
-
-- Bump alloy 1.0.0 ([#87](https://github.com/alloy-rs/evm/issues/87))
 
 ### Features
 
 - Add non-mutable getters for `inspector` and `precompiles` ([#93](https://github.com/alloy-rs/evm/issues/93))
 - `BlockExecutor::execute_transaction_with_commit_condition` ([#92](https://github.com/alloy-rs/evm/issues/92))
+
+### Miscellaneous Tasks
+
+- Release 0.9.0
+
+## [0.8.1](https://github.com/alloy-rs/evm/releases/tag/v0.8.1) - 2025-05-16
+
+### Features
+
 - Extend Evm::Spec bounds with Hash and PartialEq ([#88](https://github.com/alloy-rs/evm/issues/88))
 
 ### Miscellaneous Tasks
 
 - Release 0.8.1
+
+## [0.8.0](https://github.com/alloy-rs/evm/releases/tag/v0.8.0) - 2025-05-13
+
+### Dependencies
+
+- Bump alloy 1.0.0 ([#87](https://github.com/alloy-rs/evm/issues/87))
+
+### Miscellaneous Tasks
+
 - Release 0.8.0
+
+## [0.7.2](https://github.com/alloy-rs/evm/releases/tag/v0.7.2) - 2025-05-12
+
+### Bug Fixes
+
+- `r.as_ref()` the trait `AsRef<[_; 0]>` is not implemented for `[u8]` ([#86](https://github.com/alloy-rs/evm/issues/86))
+
+### Miscellaneous Tasks
+
 - Release 0.7.2
 
 ### Styling
