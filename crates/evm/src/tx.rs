@@ -388,6 +388,30 @@ mod op {
         }
     }
 
+    impl FromRecoveredTx<TxDeposit> for TxEnv {
+        fn from_recovered_tx(tx: &TxDeposit, caller: Address) -> Self {
+            let TxDeposit {
+                to,
+                value,
+                gas_limit,
+                input,
+                source_hash: _,
+                from: _,
+                mint: _,
+                is_system_transaction: _,
+            } = tx;
+            Self {
+                tx_type: tx.ty(),
+                caller,
+                gas_limit: *gas_limit,
+                kind: *to,
+                value: *value,
+                data: input.clone(),
+                ..Default::default()
+            }
+        }
+    }
+
     impl FromTxWithEncoded<OpTxEnvelope> for TxEnv {
         fn from_encoded_tx(tx: &OpTxEnvelope, caller: Address, _encoded: Bytes) -> Self {
             Self::from_recovered_tx(tx, caller)
