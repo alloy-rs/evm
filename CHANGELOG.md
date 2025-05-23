@@ -5,11 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0](https://github.com/alloy-rs/evm/releases/tag/v0.10.0) - 2025-05-23
+
+### Dependencies
+
+- [`deps`] Bump revm to `24.0.0` and op-revm to `5.0.0` ([#98](https://github.com/alloy-rs/evm/issues/98))
+
+### Features
+
+- Implement from_recovered_tx for txDeposit nativel ([#96](https://github.com/alloy-rs/evm/issues/96))
+
+### Miscellaneous Tasks
+
+- Preparing for mint nonoptional in reth ([#91](https://github.com/alloy-rs/evm/issues/91))
+
 ## [0.9.1](https://github.com/alloy-rs/evm/releases/tag/v0.9.1) - 2025-05-20
 
 ### Features
 
 - Implement `FromTxWithEncoded` and `FromRecoveredTx` from `OpTxEnvelope` for `TxEnv` ([#94](https://github.com/alloy-rs/evm/issues/94))
+
+### Miscellaneous Tasks
+
+- Release 0.9.1
 
 ## [0.9.0](https://github.com/alloy-rs/evm/releases/tag/v0.9.0) - 2025-05-20
 
