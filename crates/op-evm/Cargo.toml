@@ -43,7 +43,7 @@ std = [
 revm_dev = [
     "revm/dev",
     "op-revm/dev",
-	"alloy-evm/revm_dev",
+    "alloy-evm/revm_dev",
 ]
 
 serde = [
@@ -54,5 +54,5 @@ serde = [
     "alloy-consensus/serde",
     "alloy-op-hardforks/serde",
     "op-alloy-consensus/serde",
-	"alloy-evm/serde"
+    "alloy-evm/serde"
 ]
