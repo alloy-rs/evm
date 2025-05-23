@@ -49,7 +49,7 @@ alloy-hardforks = { version = "0.2" }
 
 # op-alloy
 alloy-op-hardforks = { version = "0.2" }
-op-alloy-consensus = { version = "0.16", default-features = false }
+op-alloy-consensus = { version = "0.17", default-features = false }
 
 # revm
 revm = { version = "23.1.0", default-features = false }
@@ -61,6 +61,3 @@ derive_more = { version = "2", default-features = false, features = ["full"] }
 serde = { version = "1", default-features = false, features = ["derive"] }
 thiserror = { version = "2.0.0", default-features = false }
 serde_json = "1"
-
-[patch.crates-io]
-op-alloy-consensus = { git = "https://github.com/Rimeeeeee/op-alloy", branch = "mint-nonoptional" }
