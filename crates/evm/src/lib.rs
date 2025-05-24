@@ -21,6 +21,7 @@ pub use error::*;
 pub mod tx;
 pub use tx::*;
 pub mod precompiles;
+pub mod tracing;
 
 mod either;
 
