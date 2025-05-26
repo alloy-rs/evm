@@ -1,10 +1,10 @@
 //! Helpers for tracing.
 
-use crate::{
-    block::{BlockExecutionError, BlockExecutor, ExecutableTx},
-    Evm, IntoTxEnv,
+use crate::{Evm, IntoTxEnv};
+use revm::{
+    context::result::{ExecutionResult, ResultAndState},
+    DatabaseCommit,
 };
-use revm::context::result::ResultAndState;
 
 /// A helper type for tracing transactions.
 #[derive(Debug, Clone)]
@@ -17,15 +17,19 @@ pub struct TxTracer<E: Evm> {
 #[derive(Debug, Clone)]
 pub struct TraceOutput<H, I> {
     /// Inner EVM output.
-    pub result: ResultAndState<H>,
+    pub result: ExecutionResult<H>,
     /// Inspector state at the end of the execution.
     pub inspector: I,
 }
 
-impl<E: Evm<Inspector: Clone>> TxTracer<E> {
+impl<E: Evm<Inspector: Clone, DB: DatabaseCommit>> TxTracer<E> {
     /// Creates a new [`TxTracer`] instance.
     pub fn new(mut evm: E) -> Self {
         Self { fused_inspector: evm.inspector_mut().clone(), evm }
+    }
+
+    fn fuse_inspector(&mut self) -> E::Inspector {
+        core::mem::replace(self.evm.inspector_mut(), self.fused_inspector.clone())
     }
 
     /// Executes a transaction, and returns its outcome along with the inspector state.
@@ -33,57 +37,41 @@ impl<E: Evm<Inspector: Clone>> TxTracer<E> {
         &mut self,
         tx: impl IntoTxEnv<E::Tx>,
     ) -> Result<TraceOutput<E::HaltReason, E::Inspector>, E::Error> {
-        let result = self.evm.transact(tx);
-        let inspector = core::mem::replace(self.evm.inspector_mut(), self.fused_inspector.clone());
+        let result = self.evm.transact_commit(tx);
+        let inspector = self.fuse_inspector();
         Ok(TraceOutput { result: result?, inspector })
     }
-}
 
-/// A helper type for tracing entire blocks.
-#[derive(derive_more::Debug)]
-#[debug(bound(<E::Evm as Evm>::Inspector: core::fmt::Debug))]
-pub struct BlockTracer<E: BlockExecutor> {
-    executor: E,
-    fused_inspector: <E::Evm as Evm>::Inspector,
-}
-
-impl<E: BlockExecutor<Evm: Evm<Inspector: Clone>>> BlockTracer<E> {
-    /// Creates a new [`BlockTracer`] instance.
-    pub fn new(mut executor: E) -> Self {
-        Self { fused_inspector: executor.evm_mut().inspector_mut().clone(), executor }
-    }
-
-    fn fuse_inspector(&mut self) -> <E::Evm as Evm>::Inspector {
-        core::mem::replace(self.executor.evm_mut().inspector_mut(), self.fused_inspector.clone())
-    }
-
-    /// Executes a block with the configured inspector and applies the closure to each transaction
-    /// result.
-    pub fn trace_block<T: ExecutableTx<E>, O>(
-        mut self,
-        transactions: impl IntoIterator<Item = T>,
-        f: impl Fn(T, u64, <E::Evm as Evm>::Inspector) -> O,
-    ) -> Result<Vec<O>, BlockExecutionError>
+    /// Executes multiple transactions, applies the closure to each transaction result, and returns
+    /// the outcomes.
+    pub fn trace_many<T, O>(
+        &mut self,
+        txs: impl IntoIterator<Item = T>,
+        mut f: impl FnMut(T, ResultAndState<E::HaltReason>, E::Inspector, &mut E::DB) -> O,
+    ) -> Result<Vec<O>, E::Error>
     where
-        E::Evm: Evm<Inspector: Clone>,
+        T: IntoTxEnv<E::Tx> + Clone,
     {
-        // Apply pre-execution changes with the inspector disabled.
-        self.executor.evm_mut().disable_inspector();
-        self.executor.apply_pre_execution_changes()?;
-        self.executor.evm_mut().enable_inspector();
+        self.try_trace_many(txs, |tx, result, inspector, db| Ok(f(tx, result, inspector, db)))
+    }
 
+    /// Same as [`TxTracer::trace_many`], but operates on closures returning [`Result`]s.
+    pub fn try_trace_many<T, O, Err>(
+        &mut self,
+        txs: impl IntoIterator<Item = T>,
+        mut f: impl FnMut(T, ResultAndState<E::HaltReason>, E::Inspector, &mut E::DB) -> Result<O, Err>,
+    ) -> Result<Vec<O>, Err>
+    where
+        T: IntoTxEnv<E::Tx> + Clone,
+        Err: From<E::Error>,
+    {
         let mut outputs = Vec::new();
 
-        // Execute all transactions.
-        for tx in transactions {
-            let gas_used = self.executor.execute_transaction(tx)?;
+        for tx in txs {
+            let result = self.evm.transact(tx.clone());
             let inspector = self.fuse_inspector();
-            outputs.push(f(tx, gas_used, inspector));
+            outputs.push(f(tx, result?, inspector, self.evm.db_mut())?);
         }
-
-        // Apply post-execution changes with the inspector disabled.
-        self.executor.evm_mut().disable_inspector();
-        self.executor.apply_post_execution_changes()?;
 
         Ok(outputs)
     }

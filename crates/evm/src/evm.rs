@@ -198,12 +198,16 @@ pub trait EvmFactory {
 /// An extension trait for [`EvmFactory`] providing useful non-overridable methods.
 pub trait EvmFactoryExt: EvmFactory {
     /// Creates a new [`TxTracer`] instance with the given database, input and fused inspector.
-    fn create_tracer<DB: Database, I: Inspector<Self::Context<DB>> + Clone>(
+    fn create_tracer<DB, I>(
         &self,
         db: DB,
         input: EvmEnv<Self::Spec>,
         fused_inspector: I,
-    ) -> TxTracer<Self::Evm<DB, I>> {
+    ) -> TxTracer<Self::Evm<DB, I>>
+    where
+        DB: Database + DatabaseCommit,
+        I: Inspector<Self::Context<DB>> + Clone,
+    {
         TxTracer::new(self.create_evm_with_inspector(db, input, fused_inspector))
     }
 }
