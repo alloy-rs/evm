@@ -44,35 +44,32 @@ impl<E: Evm<Inspector: Clone, DB: DatabaseCommit>> TxTracer<E> {
 
     /// Executes multiple transactions, applies the closure to each transaction result, and returns
     /// the outcomes.
-    pub fn trace_many<T, O>(
-        &mut self,
-        txs: impl IntoIterator<Item = T>,
-        mut f: impl FnMut(T, ResultAndState<E::HaltReason>, E::Inspector, &mut E::DB) -> O,
-    ) -> Result<Vec<O>, E::Error>
+    pub fn trace_many<'a, T, O>(
+        &'a mut self,
+        txs: impl IntoIterator<Item = T, IntoIter: 'a>,
+        mut f: impl FnMut(T, ResultAndState<E::HaltReason>, E::Inspector, &mut E::DB) -> O + 'a,
+    ) -> impl Iterator<Item = Result<O, E::Error>> + 'a
     where
         T: IntoTxEnv<E::Tx> + Clone,
     {
-        self.try_trace_many(txs, |tx, result, inspector, db| Ok(f(tx, result, inspector, db)))
+        self.try_trace_many(txs, move |tx, result, inspector, db| Ok(f(tx, result, inspector, db)))
     }
 
     /// Same as [`TxTracer::trace_many`], but operates on closures returning [`Result`]s.
-    pub fn try_trace_many<T, O, Err>(
-        &mut self,
-        txs: impl IntoIterator<Item = T>,
-        mut f: impl FnMut(T, ResultAndState<E::HaltReason>, E::Inspector, &mut E::DB) -> Result<O, Err>,
-    ) -> Result<Vec<O>, Err>
+    pub fn try_trace_many<'a, T, O, Err>(
+        &'a mut self,
+        txs: impl IntoIterator<Item = T, IntoIter: 'a>,
+        mut f: impl FnMut(T, ResultAndState<E::HaltReason>, E::Inspector, &mut E::DB) -> Result<O, Err>
+            + 'a,
+    ) -> impl Iterator<Item = Result<O, Err>> + 'a
     where
         T: IntoTxEnv<E::Tx> + Clone,
         Err: From<E::Error>,
     {
-        let mut outputs = Vec::new();
-
-        for tx in txs {
+        txs.into_iter().map(move |tx| {
             let result = self.evm.transact(tx.clone());
             let inspector = self.fuse_inspector();
-            outputs.push(f(tx, result?, inspector, self.evm.db_mut())?);
-        }
-
-        Ok(outputs)
+            f(tx, result?, inspector, self.evm.db_mut())
+        })
     }
 }
