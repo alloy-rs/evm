@@ -3,6 +3,7 @@
 use crate::{Evm, IntoTxEnv};
 use revm::{
     context::result::{ExecutionResult, ResultAndState},
+    state::EvmState,
     DatabaseCommit,
 };
 
@@ -47,19 +48,28 @@ impl<E: Evm<Inspector: Clone, DB: DatabaseCommit>> TxTracer<E> {
     pub fn trace_many<'a, T, O>(
         &'a mut self,
         txs: impl IntoIterator<Item = T, IntoIter: 'a>,
-        mut f: impl FnMut(T, ResultAndState<E::HaltReason>, E::Inspector, &mut E::DB) -> O + 'a,
+        mut f: impl FnMut(T, ExecutionResult<E::HaltReason>, &EvmState, E::Inspector, &mut E::DB) -> O
+            + 'a,
     ) -> impl Iterator<Item = Result<O, E::Error>> + 'a
     where
         T: IntoTxEnv<E::Tx> + Clone,
     {
-        self.try_trace_many(txs, move |tx, result, inspector, db| Ok(f(tx, result, inspector, db)))
+        self.try_trace_many(txs, move |tx, result, state, inspector, db| {
+            Ok(f(tx, result, state, inspector, db))
+        })
     }
 
     /// Same as [`TxTracer::trace_many`], but operates on closures returning [`Result`]s.
     pub fn try_trace_many<'a, T, O, Err>(
         &'a mut self,
         txs: impl IntoIterator<Item = T, IntoIter: 'a>,
-        mut f: impl FnMut(T, ResultAndState<E::HaltReason>, E::Inspector, &mut E::DB) -> Result<O, Err>
+        mut f: impl FnMut(
+                T,
+                ExecutionResult<E::HaltReason>,
+                &EvmState,
+                E::Inspector,
+                &mut E::DB,
+            ) -> Result<O, Err>
             + 'a,
     ) -> impl Iterator<Item = Result<O, Err>> + 'a
     where
@@ -69,7 +79,11 @@ impl<E: Evm<Inspector: Clone, DB: DatabaseCommit>> TxTracer<E> {
         txs.into_iter().map(move |tx| {
             let result = self.evm.transact(tx.clone());
             let inspector = self.fuse_inspector();
-            f(tx, result?, inspector, self.evm.db_mut())
+            let ResultAndState { result, state } = result?;
+            let output = f(tx, result, &state, inspector, self.evm.db_mut());
+            self.evm.db_mut().commit(state);
+
+            output
         })
     }
 }
