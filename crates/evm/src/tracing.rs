@@ -14,6 +14,21 @@ pub struct TxTracer<E: Evm> {
     fused_inspector: E::Inspector,
 }
 
+/// Container type for context exposed in [`TxTracer`].
+#[derive(Debug)]
+pub struct TracingCtx<'a, T, E: Evm> {
+    /// The transaction that was just executed.
+    pub tx: T,
+    /// Result of transaction execution.
+    pub result: ExecutionResult<E::HaltReason>,
+    /// State changes after transaction.
+    pub state: &'a EvmState,
+    /// Inspector state after transaction.
+    pub inspector: E::Inspector,
+    /// Database used when executing the transaction, _before_ committing the state changes.
+    pub db: &'a mut E::DB,
+}
+
 /// Output of tracing a transaction.
 #[derive(Debug, Clone)]
 pub struct TraceOutput<H, I> {
@@ -48,29 +63,19 @@ impl<E: Evm<Inspector: Clone, DB: DatabaseCommit>> TxTracer<E> {
     pub fn trace_many<'a, T, O>(
         &'a mut self,
         txs: impl IntoIterator<Item = T, IntoIter: 'a>,
-        mut f: impl FnMut(T, ExecutionResult<E::HaltReason>, &EvmState, E::Inspector, &mut E::DB) -> O
-            + 'a,
+        mut f: impl FnMut(TracingCtx<'_, T, E>) -> O + 'a,
     ) -> impl Iterator<Item = Result<O, E::Error>> + 'a
     where
         T: IntoTxEnv<E::Tx> + Clone,
     {
-        self.try_trace_many(txs, move |tx, result, state, inspector, db| {
-            Ok(f(tx, result, state, inspector, db))
-        })
+        self.try_trace_many(txs, move |ctx| Ok(f(ctx)))
     }
 
     /// Same as [`TxTracer::trace_many`], but operates on closures returning [`Result`]s.
     pub fn try_trace_many<'a, T, O, Err>(
         &'a mut self,
         txs: impl IntoIterator<Item = T, IntoIter: 'a>,
-        mut f: impl FnMut(
-                T,
-                ExecutionResult<E::HaltReason>,
-                &EvmState,
-                E::Inspector,
-                &mut E::DB,
-            ) -> Result<O, Err>
-            + 'a,
+        mut f: impl FnMut(TracingCtx<'_, T, E>) -> Result<O, Err> + 'a,
     ) -> impl Iterator<Item = Result<O, Err>> + 'a
     where
         T: IntoTxEnv<E::Tx> + Clone,
@@ -80,7 +85,8 @@ impl<E: Evm<Inspector: Clone, DB: DatabaseCommit>> TxTracer<E> {
             let result = self.evm.transact(tx.clone());
             let inspector = self.fuse_inspector();
             let ResultAndState { result, state } = result?;
-            let output = f(tx, result, &state, inspector, self.evm.db_mut());
+            let output =
+                f(TracingCtx { tx, result, state: &state, inspector, db: self.evm.db_mut() });
             self.evm.db_mut().commit(state);
 
             output
