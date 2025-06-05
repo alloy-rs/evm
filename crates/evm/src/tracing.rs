@@ -61,6 +61,7 @@ impl<E: Evm<Inspector: Clone, DB: DatabaseCommit>> TxTracer<E> {
 
     /// Executes multiple transactions, applies the closure to each transaction result, and returns
     /// the outcomes.
+    #[expect(clippy::type_complexity)]
     pub fn trace_many<Txs, T, F, O>(
         &mut self,
         txs: Txs,
