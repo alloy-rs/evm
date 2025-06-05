@@ -1,5 +1,7 @@
 //! Helpers for tracing.
 
+use core::{fmt::Debug, iter::Peekable};
+
 use crate::{Evm, IntoTxEnv};
 use revm::{
     context::result::{ExecutionResult, ResultAndState},
@@ -60,36 +62,85 @@ impl<E: Evm<Inspector: Clone, DB: DatabaseCommit>> TxTracer<E> {
 
     /// Executes multiple transactions, applies the closure to each transaction result, and returns
     /// the outcomes.
-    pub fn trace_many<'a, T, O>(
-        &'a mut self,
-        txs: impl IntoIterator<Item = T, IntoIter: 'a>,
-        mut f: impl FnMut(TracingCtx<'_, T, E>) -> O + 'a,
-    ) -> impl Iterator<Item = Result<O, E::Error>> + 'a
+    pub fn trace_many<Txs, T, F, O>(
+        &mut self,
+        txs: Txs,
+        mut f: F,
+    ) -> TracerIter<'_, E, Txs::IntoIter, impl FnMut(TracingCtx<'_, T, E>) -> Result<O, E::Error>>
     where
         T: IntoTxEnv<E::Tx> + Clone,
+        Txs: IntoIterator<Item = T>,
+        F: FnMut(TracingCtx<'_, Txs::Item, E>) -> O,
     {
         self.try_trace_many(txs, move |ctx| Ok(f(ctx)))
     }
 
     /// Same as [`TxTracer::trace_many`], but operates on closures returning [`Result`]s.
-    pub fn try_trace_many<'a, T, O, Err>(
-        &'a mut self,
-        txs: impl IntoIterator<Item = T, IntoIter: 'a>,
-        mut f: impl FnMut(TracingCtx<'_, T, E>) -> Result<O, Err> + 'a,
-    ) -> impl Iterator<Item = Result<O, Err>> + 'a
+    pub fn try_trace_many<Txs, T, F, O, Err>(
+        &mut self,
+        txs: Txs,
+        hook: F,
+    ) -> TracerIter<'_, E, Txs::IntoIter, F>
     where
         T: IntoTxEnv<E::Tx> + Clone,
+        Txs: IntoIterator<Item = T>,
+        F: FnMut(TracingCtx<'_, T, E>) -> Result<O, Err>,
         Err: From<E::Error>,
     {
-        txs.into_iter().map(move |tx| {
-            let result = self.evm.transact(tx.clone());
-            let inspector = self.fuse_inspector();
-            let ResultAndState { result, state } = result?;
-            let output =
-                f(TracingCtx { tx, result, state: &state, inspector, db: self.evm.db_mut() });
-            self.evm.db_mut().commit(state);
+        TracerIter { inner: self, txs: txs.into_iter().peekable(), hook, skip_last_commit: false }
+    }
+}
 
-            output
-        })
+/// Iterator used by tracer.
+#[derive(derive_more::Debug)]
+#[debug(bound(E::Inspector: Debug))]
+pub struct TracerIter<'a, E: Evm, Txs: Iterator, F> {
+    inner: &'a mut TxTracer<E>,
+    txs: Peekable<Txs>,
+    hook: F,
+    skip_last_commit: bool,
+}
+
+impl<E: Evm, Txs: Iterator, F> TracerIter<'_, E, Txs, F> {
+    /// Sets whether to skip the last commit.
+    pub fn skip_last_commit(mut self) -> Self {
+        self.skip_last_commit = true;
+        self
+    }
+}
+
+impl<'a, E, T, Txs, F, O, Err> Iterator for TracerIter<'a, E, Txs, F>
+where
+    E: Evm<DB: DatabaseCommit, Inspector: Clone>,
+    T: IntoTxEnv<E::Tx> + Clone,
+    Txs: Iterator<Item = T>,
+    Err: From<E::Error>,
+    F: FnMut(TracingCtx<'_, T, E>) -> Result<O, Err>,
+{
+    type Item = Result<O, Err>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let tx = self.txs.next()?;
+        let result = self.inner.evm.transact(tx.clone());
+
+        let inspector = self.inner.fuse_inspector();
+        let Ok(ResultAndState { result, state }) = result else {
+            return None;
+        };
+        let output = (self.hook)(TracingCtx {
+            tx,
+            result,
+            state: &state,
+            inspector,
+            db: self.inner.evm.db_mut(),
+        });
+
+        // Only commit next transaction if `skip_last_commit` is disabled or there is a next
+        // transaction.
+        if !self.skip_last_commit || self.txs.peek().is_some() {
+            self.inner.evm.db_mut().commit(state);
+        }
+
+        Some(output)
     }
 }
