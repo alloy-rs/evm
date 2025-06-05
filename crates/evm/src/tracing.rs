@@ -87,7 +87,7 @@ impl<E: Evm<Inspector: Clone, DB: DatabaseCommit>> TxTracer<E> {
         F: FnMut(TracingCtx<'_, T, E>) -> Result<O, Err>,
         Err: From<E::Error>,
     {
-        TracerIter { inner: self, txs: txs.into_iter().peekable(), hook, skip_last_commit: false }
+        TracerIter { inner: self, txs: txs.into_iter().peekable(), hook, skip_last_commit: true }
     }
 }
 
@@ -102,9 +102,12 @@ pub struct TracerIter<'a, E: Evm, Txs: Iterator, F> {
 }
 
 impl<E: Evm, Txs: Iterator, F> TracerIter<'_, E, Txs, F> {
-    /// Sets whether to skip the last commit.
-    pub fn skip_last_commit(mut self) -> Self {
-        self.skip_last_commit = true;
+    /// Flips the `skip_last_commit` flag thus making sure all transaction are commited.
+    ///
+    /// We are skipping last commit by default as it's expected that when tracing users are mostly
+    /// interested in tracer output rather than in a state after it.
+    pub fn commit_last_tx(mut self) -> Self {
+        self.skip_last_commit = false;
         self
     }
 }
