@@ -1,8 +1,7 @@
 //! Helpers for tracing.
 
-use core::{fmt::Debug, iter::Peekable};
-
 use crate::{Evm, IntoTxEnv};
+use core::{fmt::Debug, iter::Peekable};
 use revm::{
     context::result::{ExecutionResult, ResultAndState},
     state::EvmState,
