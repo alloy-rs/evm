@@ -9,6 +9,7 @@ use alloy_eips::eip2935::HISTORY_STORAGE_ADDRESS;
 use alloy_hardforks::EthereumHardforks;
 use alloy_primitives::B256;
 use revm::context_interface::result::ResultAndState;
+use revm::state::EvmState;
 
 /// Applies the pre-block call to the [EIP-2935] blockhashes contract, using the given block,
 /// chain specification, and EVM.
@@ -27,14 +28,14 @@ pub(crate) fn transact_blockhashes_contract_call<Halt>(
     spec: impl EthereumHardforks,
     parent_block_hash: B256,
     evm: &mut impl Evm<HaltReason = Halt>,
-) -> Result<Option<ResultAndState<Halt>>, BlockExecutionError> {
-    if !spec.is_prague_active_at_timestamp(evm.block().timestamp) {
+) -> Result<Option<ResultAndState<Halt, EvmState>>, BlockExecutionError> {
+    if !spec.is_prague_active_at_timestamp(evm.block().timestamp.saturating_to()) {
         return Ok(None);
     }
 
     // if the block number is zero (genesis block) then no system transaction may occur as per
     // EIP-2935
-    if evm.block().number == 0 {
+    if evm.block().number.is_zero() {
         return Ok(None);
     }
 

@@ -12,6 +12,7 @@ use revm::{
     inspector::{JournalExt, NoOpInspector},
     DatabaseCommit, Inspector,
 };
+use revm::state::EvmState;
 
 /// Helper trait to bound [`revm::Database::Error`] with common requirements.
 pub trait Database: revm::Database<Error: Error + Send + Sync + 'static> {}
@@ -57,14 +58,14 @@ pub trait Evm {
     fn transact_raw(
         &mut self,
         tx: Self::Tx,
-    ) -> Result<ResultAndState<Self::HaltReason>, Self::Error>;
+    ) -> Result<ResultAndState<Self::HaltReason, EvmState>, Self::Error>;
 
     /// Same as [`Evm::transact_raw`], but takes a [`IntoTxEnv`] implementation, thus allowing to
     /// support transacting with an external type.
     fn transact(
         &mut self,
         tx: impl IntoTxEnv<Self::Tx>,
-    ) -> Result<ResultAndState<Self::HaltReason>, Self::Error> {
+    ) -> Result<ResultAndState<Self::HaltReason, EvmState>, Self::Error> {
         self.transact_raw(tx.into_tx_env())
     }
 
@@ -78,7 +79,7 @@ pub trait Evm {
         caller: Address,
         contract: Address,
         data: Bytes,
-    ) -> Result<ResultAndState<Self::HaltReason>, Self::Error>;
+    ) -> Result<ResultAndState<Self::HaltReason, EvmState>, Self::Error>;
 
     /// Returns a mutable reference to the underlying database.
     fn db_mut(&mut self) -> &mut Self::DB;

@@ -9,6 +9,7 @@ use alloy_eips::eip7251::CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS;
 use alloy_primitives::Bytes;
 use core::fmt::Debug;
 use revm::context_interface::result::{ExecutionResult, ResultAndState};
+use revm::state::EvmState;
 
 /// Applies the post-block call to the EIP-7251 consolidation requests contract.
 ///
@@ -19,7 +20,7 @@ use revm::context_interface::result::{ExecutionResult, ResultAndState};
 #[inline]
 pub(crate) fn transact_consolidation_requests_contract_call<Halt>(
     evm: &mut impl Evm<HaltReason = Halt>,
-) -> Result<ResultAndState<Halt>, BlockExecutionError> {
+) -> Result<ResultAndState<Halt, EvmState>, BlockExecutionError> {
     // Execute EIP-7251 consolidation requests contract message data.
     //
     // This requirement for the consolidation requests contract call defined by
