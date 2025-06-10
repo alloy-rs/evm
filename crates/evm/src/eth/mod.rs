@@ -8,7 +8,7 @@ use core::{
     ops::{Deref, DerefMut},
 };
 use revm::{
-    context::{result::ExecutionResult, BlockEnv, CfgEnv, Evm as RevmEvm, TxEnv},
+    context::{BlockEnv, CfgEnv, Evm as RevmEvm, TxEnv},
     context_interface::result::{EVMError, HaltReason, ResultAndState},
     handler::{instructions::EthInstructions, EthPrecompiles, PrecompileProvider},
     inspector::NoOpInspector,
@@ -122,7 +122,7 @@ where
     fn transact_raw(
         &mut self,
         tx: Self::Tx,
-    ) -> Result<ResultAndState<ExecutionResult<Self::HaltReason>>, Self::Error> {
+    ) -> Result<ResultAndState<Self::HaltReason>, Self::Error> {
         if self.inspect {
             self.inner.inspect_tx(tx)
         } else {
@@ -135,7 +135,7 @@ where
         caller: Address,
         contract: Address,
         data: Bytes,
-    ) -> Result<ResultAndState<ExecutionResult<Self::HaltReason>>, Self::Error> {
+    ) -> Result<ResultAndState<Self::HaltReason>, Self::Error> {
         let tx = TxEnv {
             caller,
             kind: TxKind::Call(contract),

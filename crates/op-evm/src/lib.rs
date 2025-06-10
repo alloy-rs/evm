@@ -22,7 +22,7 @@ use op_revm::{
     OpTransaction, OpTransactionError,
 };
 use revm::{
-    context::{result::ExecutionResult, BlockEnv, TxEnv},
+    context::{BlockEnv, TxEnv},
     context_interface::result::{EVMError, ResultAndState},
     handler::{instructions::EthInstructions, PrecompileProvider},
     inspector::NoOpInspector,
@@ -110,7 +110,7 @@ where
     fn transact_raw(
         &mut self,
         tx: Self::Tx,
-    ) -> Result<ResultAndState<ExecutionResult<Self::HaltReason>>, Self::Error> {
+    ) -> Result<ResultAndState<Self::HaltReason>, Self::Error> {
         if self.inspect {
             self.inner.inspect_tx(tx)
         } else {
@@ -123,7 +123,7 @@ where
         caller: Address,
         contract: Address,
         data: Bytes,
-    ) -> Result<ResultAndState<ExecutionResult<Self::HaltReason>>, Self::Error> {
+    ) -> Result<ResultAndState<Self::HaltReason>, Self::Error> {
         let tx = OpTransaction {
             base: TxEnv {
                 caller,
