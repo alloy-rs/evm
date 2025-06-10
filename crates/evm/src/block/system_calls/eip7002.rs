@@ -8,10 +8,7 @@ use alloc::format;
 use alloy_eips::eip7002::WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS;
 use alloy_primitives::Bytes;
 use core::fmt::Debug;
-use revm::{
-    context_interface::result::{ExecutionResult, ResultAndState},
-    state::EvmState,
-};
+use revm::context_interface::result::{ExecutionResult, ResultAndState};
 
 /// Applies the post-block call to the EIP-7002 withdrawal requests contract.
 ///
@@ -21,7 +18,7 @@ use revm::{
 #[inline]
 pub(crate) fn transact_withdrawal_requests_contract_call<Halt>(
     evm: &mut impl Evm<HaltReason = Halt>,
-) -> Result<ResultAndState<ExecutionResult<Halt>, EvmState>, BlockExecutionError> {
+) -> Result<ResultAndState<ExecutionResult<Halt>>, BlockExecutionError> {
     // Execute EIP-7002 withdrawal requests contract message data.
     //
     // This requirement for the withdrawal requests contract call defined by

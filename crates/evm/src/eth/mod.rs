@@ -15,8 +15,7 @@ use revm::{
     interpreter::{interpreter::EthInterpreter, InterpreterResult},
     precompile::{PrecompileSpecId, Precompiles},
     primitives::hardfork::SpecId,
-    state::EvmState,
-    Context, ExecuteEvm, Inspector, MainBuilder, MainContext,
+    Context, ExecuteEvm, InspectEvm, Inspector, MainBuilder, MainContext,
 };
 
 mod block;
@@ -123,10 +122,12 @@ where
     fn transact_raw(
         &mut self,
         tx: Self::Tx,
-    ) -> Result<ResultAndState<ExecutionResult<Self::HaltReason>, EvmState>, Self::Error> {
-        // Use transact_finalize for both inspect and non-inspect paths
-        // In revm v25, inspection is handled internally by the EVM
-        self.inner.transact_finalize(tx)
+    ) -> Result<ResultAndState<ExecutionResult<Self::HaltReason>>, Self::Error> {
+        if self.inspect {
+            self.inner.inspect_tx(tx)
+        } else {
+            self.inner.transact(tx)
+        }
     }
 
     fn transact_system_call(
@@ -134,7 +135,7 @@ where
         caller: Address,
         contract: Address,
         data: Bytes,
-    ) -> Result<ResultAndState<ExecutionResult<Self::HaltReason>, EvmState>, Self::Error> {
+    ) -> Result<ResultAndState<ExecutionResult<Self::HaltReason>>, Self::Error> {
         let tx = TxEnv {
             caller,
             kind: TxKind::Call(contract),

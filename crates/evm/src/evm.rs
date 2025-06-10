@@ -10,7 +10,6 @@ use revm::{
         ContextTr,
     },
     inspector::{JournalExt, NoOpInspector},
-    state::EvmState,
     DatabaseCommit, Inspector,
 };
 
@@ -58,14 +57,14 @@ pub trait Evm {
     fn transact_raw(
         &mut self,
         tx: Self::Tx,
-    ) -> Result<ResultAndState<ExecutionResult<Self::HaltReason>, EvmState>, Self::Error>;
+    ) -> Result<ResultAndState<ExecutionResult<Self::HaltReason>>, Self::Error>;
 
     /// Same as [`Evm::transact_raw`], but takes a [`IntoTxEnv`] implementation, thus allowing to
     /// support transacting with an external type.
     fn transact(
         &mut self,
         tx: impl IntoTxEnv<Self::Tx>,
-    ) -> Result<ResultAndState<ExecutionResult<Self::HaltReason>, EvmState>, Self::Error> {
+    ) -> Result<ResultAndState<ExecutionResult<Self::HaltReason>>, Self::Error> {
         self.transact_raw(tx.into_tx_env())
     }
 
@@ -79,7 +78,7 @@ pub trait Evm {
         caller: Address,
         contract: Address,
         data: Bytes,
-    ) -> Result<ResultAndState<ExecutionResult<Self::HaltReason>, EvmState>, Self::Error>;
+    ) -> Result<ResultAndState<ExecutionResult<Self::HaltReason>>, Self::Error>;
 
     /// Returns a mutable reference to the underlying database.
     fn db_mut(&mut self) -> &mut Self::DB;
