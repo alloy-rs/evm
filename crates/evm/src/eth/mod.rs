@@ -8,7 +8,7 @@ use core::{
     ops::{Deref, DerefMut},
 };
 use revm::{
-    context::{BlockEnv, CfgEnv, Evm as RevmEvm, TxEnv, result::ExecutionResult},
+    context::{result::ExecutionResult, BlockEnv, CfgEnv, Evm as RevmEvm, TxEnv},
     context_interface::result::{EVMError, HaltReason, ResultAndState},
     handler::{instructions::EthInstructions, EthPrecompiles, PrecompileProvider},
     inspector::NoOpInspector,
@@ -120,7 +120,10 @@ where
         self.cfg.chain_id
     }
 
-    fn transact_raw(&mut self, tx: Self::Tx) -> Result<ResultAndState<ExecutionResult<Self::HaltReason>, EvmState>, Self::Error> {
+    fn transact_raw(
+        &mut self,
+        tx: Self::Tx,
+    ) -> Result<ResultAndState<ExecutionResult<Self::HaltReason>, EvmState>, Self::Error> {
         // Use transact_finalize for both inspect and non-inspect paths
         // In revm v25, inspection is handled internally by the EVM
         self.inner.transact_finalize(tx)

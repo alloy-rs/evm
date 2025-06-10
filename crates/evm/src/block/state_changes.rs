@@ -29,11 +29,16 @@ where
     let mut balance_increments = HashMap::default();
 
     // Add block rewards if they are enabled.
-    if let Some(base_block_reward) = calc::base_block_reward(&spec, block_env.number.saturating_to()) {
+    if let Some(base_block_reward) =
+        calc::base_block_reward(&spec, block_env.number.saturating_to())
+    {
         // Ommer rewards
         for ommer in ommers {
-            *balance_increments.entry(ommer.beneficiary()).or_default() +=
-                calc::ommer_reward(base_block_reward, block_env.number.saturating_to(), ommer.number());
+            *balance_increments.entry(ommer.beneficiary()).or_default() += calc::ommer_reward(
+                base_block_reward,
+                block_env.number.saturating_to(),
+                ommer.number(),
+            );
         }
 
         // Full block reward

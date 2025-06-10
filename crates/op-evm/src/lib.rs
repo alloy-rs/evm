@@ -22,7 +22,7 @@ use op_revm::{
     OpTransaction, OpTransactionError,
 };
 use revm::{
-    context::{BlockEnv, TxEnv, result::ExecutionResult},
+    context::{result::ExecutionResult, BlockEnv, TxEnv},
     context_interface::result::{EVMError, ResultAndState},
     handler::{instructions::EthInstructions, PrecompileProvider},
     inspector::NoOpInspector,

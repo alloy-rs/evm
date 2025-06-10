@@ -72,7 +72,8 @@ where
     /// Creates a new [`OpBlockExecutor`].
     pub fn new(evm: E, ctx: OpBlockExecutionCtx, spec: Spec, receipt_builder: R) -> Self {
         Self {
-            is_regolith: spec.is_regolith_active_at_timestamp(evm.block().timestamp.saturating_to()),
+            is_regolith: spec
+                .is_regolith_active_at_timestamp(evm.block().timestamp.saturating_to()),
             evm,
             system_caller: SystemCaller::new(spec.clone()),
             spec,
@@ -112,8 +113,12 @@ where
         // blocks will always have at least a single transaction in them (the L1 info transaction),
         // so we can safely assume that this will always be triggered upon the transition and that
         // the above check for empty blocks will never be hit on OP chains.
-        ensure_create2_deployer(&self.spec, self.evm.block().timestamp.saturating_to(), self.evm.db_mut())
-            .map_err(BlockExecutionError::other)?;
+        ensure_create2_deployer(
+            &self.spec,
+            self.evm.block().timestamp.saturating_to(),
+            self.evm.db_mut(),
+        )
+        .map_err(BlockExecutionError::other)?;
 
         Ok(())
     }
@@ -195,7 +200,9 @@ where
                         // this is only set for post-Canyon deposit
                         // transactions.
                         deposit_receipt_version: (is_deposit
-                            && self.spec.is_canyon_active_at_timestamp(self.evm.block().timestamp.saturating_to()))
+                            && self.spec.is_canyon_active_at_timestamp(
+                                self.evm.block().timestamp.saturating_to(),
+                            ))
                         .then_some(1),
                     })
                 }

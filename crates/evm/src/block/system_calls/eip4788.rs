@@ -8,7 +8,10 @@ use alloc::{boxed::Box, string::ToString};
 use alloy_eips::eip4788::BEACON_ROOTS_ADDRESS;
 use alloy_hardforks::EthereumHardforks;
 use alloy_primitives::B256;
-use revm::{context_interface::result::{ExecutionResult, ResultAndState}, state::EvmState};
+use revm::{
+    context_interface::result::{ExecutionResult, ResultAndState},
+    state::EvmState,
+};
 
 /// Applies the pre-block call to the [EIP-4788] beacon block root contract, using the given block,
 /// chain spec, EVM.

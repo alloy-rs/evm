@@ -8,7 +8,10 @@ use alloc::string::ToString;
 use alloy_eips::eip2935::HISTORY_STORAGE_ADDRESS;
 use alloy_hardforks::EthereumHardforks;
 use alloy_primitives::B256;
-use revm::{context_interface::result::{ExecutionResult, ResultAndState}, state::EvmState};
+use revm::{
+    context_interface::result::{ExecutionResult, ResultAndState},
+    state::EvmState,
+};
 
 /// Applies the pre-block call to the [EIP-2935] blockhashes contract, using the given block,
 /// chain specification, and EVM.
