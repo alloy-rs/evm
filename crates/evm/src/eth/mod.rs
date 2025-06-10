@@ -8,14 +8,15 @@ use core::{
     ops::{Deref, DerefMut},
 };
 use revm::{
-    context::{BlockEnv, CfgEnv, Evm as RevmEvm, TxEnv},
+    context::{BlockEnv, CfgEnv, Evm as RevmEvm, TxEnv, result::ExecutionResult},
     context_interface::result::{EVMError, HaltReason, ResultAndState},
     handler::{instructions::EthInstructions, EthPrecompiles, PrecompileProvider},
     inspector::NoOpInspector,
     interpreter::{interpreter::EthInterpreter, InterpreterResult},
     precompile::{PrecompileSpecId, Precompiles},
     primitives::hardfork::SpecId,
-    Context, ExecuteEvm, InspectEvm, Inspector, MainBuilder, MainContext,
+    state::EvmState,
+    Context, ExecuteEvm, Inspector, MainBuilder, MainContext,
 };
 
 mod block;
@@ -119,13 +120,10 @@ where
         self.cfg.chain_id
     }
 
-    fn transact_raw(&mut self, tx: Self::Tx) -> Result<ResultAndState, Self::Error> {
-        if self.inspect {
-            self.inner.set_tx(tx);
-            self.inner.inspect_replay()
-        } else {
-            self.inner.transact(tx)
-        }
+    fn transact_raw(&mut self, tx: Self::Tx) -> Result<ResultAndState<ExecutionResult<Self::HaltReason>, EvmState>, Self::Error> {
+        // Use transact_finalize for both inspect and non-inspect paths
+        // In revm v25, inspection is handled internally by the EVM
+        self.inner.transact_finalize(tx)
     }
 
     fn transact_system_call(
@@ -133,7 +131,7 @@ where
         caller: Address,
         contract: Address,
         data: Bytes,
-    ) -> Result<ResultAndState, Self::Error> {
+    ) -> Result<ResultAndState<ExecutionResult<Self::HaltReason>, EvmState>, Self::Error> {
         let tx = TxEnv {
             caller,
             kind: TxKind::Call(contract),

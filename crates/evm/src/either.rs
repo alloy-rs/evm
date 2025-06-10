@@ -1,6 +1,9 @@
 use crate::{Evm, EvmEnv};
 use alloy_primitives::{Address, Bytes};
-use revm::context::{either, BlockEnv};
+use revm::{
+    context::{either, BlockEnv, result::ExecutionResult},
+    state::EvmState,
+};
 
 impl<L, R> Evm for either::Either<L, R>
 where
@@ -34,14 +37,14 @@ where
     fn transact_raw(
         &mut self,
         tx: Self::Tx,
-    ) -> Result<revm::context::result::ResultAndState<Self::HaltReason>, Self::Error> {
+    ) -> Result<revm::context::result::ResultAndState<ExecutionResult<Self::HaltReason>, EvmState>, Self::Error> {
         either::for_both!(self, evm => evm.transact_raw(tx))
     }
 
     fn transact(
         &mut self,
         tx: impl crate::IntoTxEnv<Self::Tx>,
-    ) -> Result<revm::context::result::ResultAndState<Self::HaltReason>, Self::Error> {
+    ) -> Result<revm::context::result::ResultAndState<ExecutionResult<Self::HaltReason>, EvmState>, Self::Error> {
         either::for_both!(self, evm => evm.transact(tx))
     }
 
@@ -50,7 +53,7 @@ where
         caller: Address,
         contract: Address,
         data: Bytes,
-    ) -> Result<revm::context::result::ResultAndState<Self::HaltReason>, Self::Error> {
+    ) -> Result<revm::context::result::ResultAndState<ExecutionResult<Self::HaltReason>, EvmState>, Self::Error> {
         either::for_both!(self, evm => evm.transact_system_call(caller, contract, data))
     }
 

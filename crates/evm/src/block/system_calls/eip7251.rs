@@ -22,7 +22,7 @@ use revm::{
 #[inline]
 pub(crate) fn transact_consolidation_requests_contract_call<Halt>(
     evm: &mut impl Evm<HaltReason = Halt>,
-) -> Result<ResultAndState<Halt, EvmState>, BlockExecutionError> {
+) -> Result<ResultAndState<ExecutionResult<Halt>, EvmState>, BlockExecutionError> {
     // Execute EIP-7251 consolidation requests contract message data.
     //
     // This requirement for the consolidation requests contract call defined by

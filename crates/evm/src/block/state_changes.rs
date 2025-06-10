@@ -29,11 +29,11 @@ where
     let mut balance_increments = HashMap::default();
 
     // Add block rewards if they are enabled.
-    if let Some(base_block_reward) = calc::base_block_reward(&spec, block_env.number) {
+    if let Some(base_block_reward) = calc::base_block_reward(&spec, block_env.number.saturating_to()) {
         // Ommer rewards
         for ommer in ommers {
             *balance_increments.entry(ommer.beneficiary()).or_default() +=
-                calc::ommer_reward(base_block_reward, block_env.number, ommer.number());
+                calc::ommer_reward(base_block_reward, block_env.number.saturating_to(), ommer.number());
         }
 
         // Full block reward
@@ -44,7 +44,7 @@ where
     // process withdrawals
     insert_post_block_withdrawals_balance_increments(
         spec,
-        block_env.timestamp,
+        block_env.timestamp.saturating_to(),
         withdrawals.map(|w| w.as_slice()),
         &mut balance_increments,
     );
@@ -122,6 +122,7 @@ where
                 info: account.info.clone(),
                 storage: Default::default(),
                 status: AccountStatus::Touched,
+                transaction_id: 0,
             },
         ))
     };

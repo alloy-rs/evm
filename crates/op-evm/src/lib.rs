@@ -22,12 +22,13 @@ use op_revm::{
     OpTransaction, OpTransactionError,
 };
 use revm::{
-    context::{BlockEnv, TxEnv},
+    context::{BlockEnv, TxEnv, result::ExecutionResult},
     context_interface::result::{EVMError, ResultAndState},
     handler::{instructions::EthInstructions, PrecompileProvider},
     inspector::NoOpInspector,
     interpreter::{interpreter::EthInterpreter, InterpreterResult},
-    Context, ExecuteEvm, InspectEvm, Inspector,
+    state::EvmState,
+    Context, ExecuteEvm, Inspector,
 };
 
 pub mod block;
@@ -110,13 +111,8 @@ where
     fn transact_raw(
         &mut self,
         tx: Self::Tx,
-    ) -> Result<ResultAndState<Self::HaltReason>, Self::Error> {
-        if self.inspect {
-            self.inner.set_tx(tx);
-            self.inner.inspect_replay()
-        } else {
-            self.inner.transact(tx)
-        }
+    ) -> Result<ResultAndState<ExecutionResult<Self::HaltReason>, EvmState>, Self::Error> {
+        self.inner.transact_finalize(tx)
     }
 
     fn transact_system_call(
@@ -124,7 +120,7 @@ where
         caller: Address,
         contract: Address,
         data: Bytes,
-    ) -> Result<ResultAndState<Self::HaltReason>, Self::Error> {
+    ) -> Result<ResultAndState<ExecutionResult<Self::HaltReason>, EvmState>, Self::Error> {
         let tx = OpTransaction {
             base: TxEnv {
                 caller,
