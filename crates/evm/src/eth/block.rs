@@ -157,7 +157,10 @@ where
     fn finish(
         mut self,
     ) -> Result<(Self::Evm, BlockExecutionResult<R::Receipt>), BlockExecutionError> {
-        let requests = if self.spec.is_prague_active_at_timestamp(self.evm.block().timestamp) {
+        let requests = if self
+            .spec
+            .is_prague_active_at_timestamp(self.evm.block().timestamp.saturating_to())
+        {
             // Collect all EIP-6110 deposits
             let deposit_requests =
                 eip6110::parse_deposits_from_receipts(&self.spec, &self.receipts)?;
@@ -185,7 +188,7 @@ where
         if self
             .spec
             .ethereum_fork_activation(EthereumHardfork::Dao)
-            .transitions_at_block(self.evm.block().number)
+            .transitions_at_block(self.evm.block().number.saturating_to())
         {
             // drain balances from hardcoded addresses.
             let drained_balance: u128 = self

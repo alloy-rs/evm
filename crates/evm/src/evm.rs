@@ -10,9 +10,9 @@ use revm::{
         ContextTr,
     },
     inspector::{JournalExt, NoOpInspector},
+    state::EvmState,
     DatabaseCommit, Inspector,
 };
-use revm::state::EvmState;
 
 /// Helper trait to bound [`revm::Database::Error`] with common requirements.
 pub trait Database: revm::Database<Error: Error + Send + Sync + 'static> {}
