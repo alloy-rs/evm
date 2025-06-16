@@ -36,42 +36,6 @@ impl PrecompilesMap {
         Self::Builtin(precompiles)
     }
 
-    /// Maps a precompile at the given address using the provided function.
-    pub fn map_precompile<F>(&mut self, address: &Address, f: F)
-    where
-        F: FnOnce(DynPrecompile) -> DynPrecompile + Send + Sync + 'static,
-    {
-        let dyn_precompiles = self.ensure_dynamic_precompiles();
-
-        // get the current precompile at the address
-        if let Some(dyn_precompile) = dyn_precompiles.inner.remove(address) {
-            // apply the transformation function
-            let transformed = f(dyn_precompile);
-
-            // update the precompile at the address
-            dyn_precompiles.inner.insert(*address, transformed);
-        }
-    }
-
-    /// Maps all precompiles using the provided function.
-    pub fn map_precompiles<F>(&mut self, mut f: F)
-    where
-        F: FnMut(&Address, DynPrecompile) -> DynPrecompile,
-    {
-        let dyn_precompiles = self.ensure_dynamic_precompiles();
-
-        // apply the transformation to each precompile
-        let entries = dyn_precompiles.inner.drain();
-        let mut new_map =
-            HashMap::with_capacity_and_hasher(entries.size_hint().0, Default::default());
-        for (addr, precompile) in entries {
-            let transformed = f(&addr, precompile);
-            new_map.insert(addr, transformed);
-        }
-
-        dyn_precompiles.inner = new_map;
-    }
-
     /// Applies a new precompile at the given address.
     pub fn apply_precompile<F>(&mut self, address: &Address, f: F)
     where
@@ -138,6 +102,59 @@ impl PrecompilesMap {
             Self::Builtin(precompiles) => precompiles.get(address).map(Either::Left),
             Self::Dynamic(dyn_precompiles) => dyn_precompiles.inner.get(address).map(Either::Right),
         }
+    }
+}
+
+/// Abstracts away the functions needed to map a precompile to an address
+/// These functions are used by Reth (etc.) to configure precompiles
+/// Abstracting it to a trait allows more control over hoe precompiles work
+pub trait PrecompileCfg {
+    /// Maps a precompile at the given address using the provided function.
+    fn map_precompile<F>(&mut self, address: &Address, f: F)
+    where
+        F: FnOnce(DynPrecompile) -> DynPrecompile + Send + Sync + 'static;
+
+    /// Maps all precompiles using the provided function.
+    fn map_precompiles<F>(&mut self, f: F)
+    where
+        F: FnMut(&Address, DynPrecompile) -> DynPrecompile;
+}
+
+impl PrecompileCfg for PrecompilesMap {
+    /// Maps a precompile at the given address using the provided function.
+    fn map_precompile<F>(&mut self, address: &Address, f: F)
+    where
+        F: FnOnce(DynPrecompile) -> DynPrecompile + Send + Sync + 'static,
+    {
+        let dyn_precompiles = self.ensure_dynamic_precompiles();
+
+        // get the current precompile at the address
+        if let Some(dyn_precompile) = dyn_precompiles.inner.remove(address) {
+            // apply the transformation function
+            let transformed = f(dyn_precompile);
+
+            // update the precompile at the address
+            dyn_precompiles.inner.insert(*address, transformed);
+        }
+    }
+
+    /// Maps all precompiles using the provided function.
+    fn map_precompiles<F>(&mut self, mut f: F)
+    where
+        F: FnMut(&Address, DynPrecompile) -> DynPrecompile,
+    {
+        let dyn_precompiles = self.ensure_dynamic_precompiles();
+
+        // apply the transformation to each precompile
+        let entries = dyn_precompiles.inner.drain();
+        let mut new_map =
+            HashMap::with_capacity_and_hasher(entries.size_hint().0, Default::default());
+        for (addr, precompile) in entries {
+            let transformed = f(&addr, precompile);
+            new_map.insert(addr, transformed);
+        }
+
+        dyn_precompiles.inner = new_map;
     }
 }
 
