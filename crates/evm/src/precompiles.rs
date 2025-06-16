@@ -107,7 +107,7 @@ impl PrecompilesMap {
 
 /// Abstracts away the functions needed to map a precompile to an address
 /// These functions are used by Reth (etc.) to configure precompiles
-/// Abstracting it to a trait allows more control over hoe precompiles work
+/// Abstracting it to a trait allows more control over how precompiles work
 pub trait PrecompileCfg {
     /// Maps a precompile at the given address using the provided function.
     fn map_precompile<F>(&mut self, address: &Address, f: F)
