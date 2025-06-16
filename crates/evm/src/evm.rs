@@ -1,6 +1,6 @@
 //! Abstraction over EVM.
 
-use crate::{tracing::TxTracer, EvmEnv, EvmError, IntoTxEnv};
+use crate::{precompiles::PrecompileCfg, tracing::TxTracer, EvmEnv, EvmError, IntoTxEnv};
 use alloy_primitives::{Address, Bytes};
 use core::{error::Error, fmt::Debug, hash::Hash};
 use revm::{
@@ -9,6 +9,7 @@ use revm::{
         result::{HaltReasonTr, ResultAndState},
         ContextTr,
     },
+    handler::PrecompileProvider,
     inspector::{JournalExt, NoOpInspector},
     DatabaseCommit, Inspector,
 };
@@ -159,7 +160,7 @@ pub trait EvmFactory {
         HaltReason = Self::HaltReason,
         Error = Self::Error<DB::Error>,
         Spec = Self::Spec,
-        Precompiles = Self::Precompiles,
+        Precompiles = Self::Precompiles<DB>,
         Inspector = I,
     >;
 
@@ -174,7 +175,7 @@ pub trait EvmFactory {
     /// The EVM specification identifier, see [`Evm::Spec`].
     type Spec: Debug + Copy + Hash + Eq + Send + Sync + Default + 'static;
     /// Precompiles used by the EVM.
-    type Precompiles;
+    type Precompiles<DB: Database>: PrecompileProvider<Self::Context<DB>> + PrecompileCfg;
 
     /// Creates a new instance of an EVM.
     fn create_evm<DB: Database>(
