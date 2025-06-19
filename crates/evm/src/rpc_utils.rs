@@ -226,4 +226,58 @@ mod tests {
         assert!(account.code.is_some());
         assert_eq!(account.code_hash, keccak256(&code));
     }
+
+    #[test]
+    fn test_state_override_storage() {
+        let account = address!("0x1234567890123456789012345678901234567890");
+        let slot1 = B256::from(U256::from(1));
+        let slot2 = B256::from(U256::from(2));
+        let value1 = B256::from(U256::from(100));
+        let value2 = B256::from(U256::from(200));
+
+        let mut db = CacheDB::new(EmptyDB::new());
+
+        // Create storage overrides
+        let mut storage = HashMap::<B256, B256>::default();
+        storage.insert(slot1, value1);
+        storage.insert(slot2, value2);
+
+        let acc_override = AccountOverride::default().with_state_diff(storage);
+        apply_account_override(account, acc_override, &mut db).unwrap();
+
+        // Get the storage value using the database interface
+        let storage1 = db.storage(account, U256::from(1)).unwrap();
+        let storage2 = db.storage(account, U256::from(2)).unwrap();
+        
+        assert_eq!(storage1, U256::from(100));
+        assert_eq!(storage2, U256::from(200));
+    }
+
+    #[test]
+    fn test_state_override_full_state() {
+        let account = address!("0x1234567890123456789012345678901234567890");
+        let slot1 = B256::from(U256::from(1));
+        let slot2 = B256::from(U256::from(2));
+        let value1 = B256::from(U256::from(100));
+        let value2 = B256::from(U256::from(200));
+
+        let mut db = State::builder().with_database(CacheDB::new(EmptyDB::new())).build();
+
+        // Create storage overrides using state (not state_diff)
+        let mut storage = HashMap::<B256, B256>::default();
+        storage.insert(slot1, value1);
+        storage.insert(slot2, value2);
+
+        let acc_override = AccountOverride::default().with_state(storage);
+        let mut state_overrides = StateOverride::default();
+        state_overrides.insert(account, acc_override);
+        apply_state_overrides(state_overrides, &mut db).unwrap();
+
+        // Get the storage value using the database interface
+        let storage1 = db.storage(account, U256::from(1)).unwrap();
+        let storage2 = db.storage(account, U256::from(2)).unwrap();
+        
+        assert_eq!(storage1, U256::from(100));
+        assert_eq!(storage2, U256::from(200));
+    }
 }
