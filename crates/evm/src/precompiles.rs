@@ -72,7 +72,44 @@ impl PrecompilesMap {
         dyn_precompiles.inner = new_map;
     }
 
-    /// Applies a new precompile at the given address.
+    /// Applies a transformation to the precompile at the given address.
+    ///
+    /// This method allows you to add, update, or remove a precompile by applying a closure
+    /// to the existing precompile (if any) at the specified address.
+    ///
+    /// # Behavior
+    ///
+    /// The closure receives:
+    /// - `Some(precompile)` if a precompile exists at the address
+    /// - `None` if no precompile exists at the address
+    ///
+    /// Based on what the closure returns:
+    /// - `Some(precompile)` - Insert or replace the precompile at the address
+    /// - `None` - Remove the precompile from the address (if it exists)
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// // Add a new precompile
+    /// precompiles.apply_precompile(&address, |_| Some(my_precompile));
+    ///
+    /// // Update an existing precompile
+    /// precompiles.apply_precompile(&address, |existing| {
+    ///     existing.map(|p| wrap_with_logging(p))
+    /// });
+    ///
+    /// // Remove a precompile
+    /// precompiles.apply_precompile(&address, |_| None);
+    ///
+    /// // Conditionally update
+    /// precompiles.apply_precompile(&address, |existing| {
+    ///     if let Some(p) = existing {
+    ///         Some(modify_precompile(p))
+    ///     } else {
+    ///         Some(create_default_precompile())
+    ///     }
+    /// });
+    /// ```
     pub fn apply_precompile<F>(&mut self, address: &Address, f: F)
     where
         F: FnOnce(Option<DynPrecompile>) -> Option<DynPrecompile>,
