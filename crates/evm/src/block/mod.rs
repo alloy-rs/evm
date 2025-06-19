@@ -301,25 +301,67 @@ where
 
 /// A factory that can create [`BlockExecutor`]s.
 ///
-/// This trait extends [`crate::EvmFactory`] and provides a way to construct a [`BlockExecutor`].
-/// Executor is expected to derive most of the context for block execution from the EVM (which
-/// includes [`revm::context::BlockEnv`]), and any additional context should be contained in
-/// configured [`ExecutionCtx`].
+/// This trait serves as the main entry point for block execution, providing a way to construct
+/// [`BlockExecutor`] instances with the necessary context. It separates the concerns of:
+/// - EVM configuration (handled by [`EvmFactory`])
+/// - Block-specific execution context (provided via [`ExecutionCtx`])
 ///
-/// Every block executor factory is expected to contain and expose an [`EvmFactory`] instance.
+/// # Design Philosophy
+///
+/// The factory pattern allows for:
+/// - Reusable EVM configuration across multiple block executions
+/// - Separation of EVM-related state from block execution state
+/// - Flexible instantiation of executors with different contexts
+///
+/// # Relationship with EvmFactory
+///
+/// Every block executor factory contains an [`EvmFactory`] instance which handles:
+/// - EVM configuration and instantiation
+/// - Transaction environment setup
+/// - State database management
+///
+/// The block executor factory extends this by adding block-level execution concerns.
 ///
 /// For more context on the executor design, see the documentation for [`BlockExecutor`].
 ///
 /// [`ExecutionCtx`]: BlockExecutorFactory::ExecutionCtx
+/// [`EvmFactory`]: crate::EvmFactory
 #[auto_impl::auto_impl(Arc)]
 pub trait BlockExecutorFactory: 'static {
     /// The EVM factory used by the executor.
     type EvmFactory: EvmFactory;
 
-    /// Context required for block execution.
+    /// Context required for block execution beyond what the EVM provides (e.g.
+    /// [`EvmEnv`](crate::EvmEnv))
     ///
-    /// This is similar to [`crate::EvmEnv`], but only contains context unrelated to EVM and
-    /// required for execution of an entire block.
+    /// While the EVM contains transaction-level context (gas limits, caller, value) and
+    /// block-level context (block number, timestamp, base fee), the `ExecutionCtx` provides
+    /// additional block execution context that is specific to your consensus implementation.
+    ///
+    /// # Purpose
+    ///
+    /// This type provides data needed for system calls that occur outside normal transaction
+    /// execution. Block execution requires additional context for:
+    /// - **Pre-execution system calls**: Setting up block hash history, beacon block roots
+    /// - **Post-execution system calls**: Applying block rewards, validator withdrawals
+    /// - **Consensus-specific data**: Uncle/ommer blocks, L2 data availability info
+    /// - **Protocol parameters**: Fork-specific rules, precompile configurations
+    /// - **Precompile metadata**: Context for precompiles that require block-level data (e.g.
+    ///   parameters stored in the block body)
+    ///
+    /// For example, in Ethereum: [`EthBlockExecutionCtx`](crate::eth::EthBlockExecutionCtx)
+    /// contains:
+    /// - Parent block hash for EIP-2935 block hash system call
+    /// - Parent beacon block root for EIP-4788 beacon root system call
+    /// - Uncle blocks for handling uncle rewards
+    /// - Withdrawals for EIP-4895 validator withdrawals
+    ///
+    /// # Design Considerations
+    ///
+    /// - Must be [`Clone`] to support creating multiple executors, can use `Cow` borrowed from the
+    ///   block.
+    /// - Should be lightweight (use references where possible)
+    /// - Contains only block-level data, not transaction-specific data
     type ExecutionCtx<'a>: Clone;
 
     /// Transaction type used by the executor, see [`BlockExecutor::Transaction`].
@@ -336,6 +378,44 @@ pub trait BlockExecutorFactory: 'static {
     fn evm_factory(&self) -> &Self::EvmFactory;
 
     /// Creates an executor with given EVM and execution context.
+    ///
+    /// This method combines:
+    /// - An EVM instance (already configured with block environment and state)
+    /// - The execution context (containing additional data for system calls)
+    ///
+    /// To create a [`BlockExecutor`] that can:
+    /// 1. Apply pre-execution system calls (e.g., EIP-2935 blockhashes, EIP-4788 beacon roots)
+    /// 2. Execute transactions
+    /// 3. Apply post-execution system calls (e.g., withdrawals, rewards)
+    ///
+    /// # Parameters
+    ///
+    /// - `evm`: A configured EVM instance with block environment and state
+    /// - `ctx`: The execution context containing consensus-specific data needed for system calls
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// // Create EVM with block environment
+    /// let evm = factory.evm_factory().create_evm(block_env, state_db, inspector);
+    ///
+    /// // Create execution context with consensus-specific data required for block execution
+    /// let ctx = EthBlockExecutionCtx {
+    ///     parent_hash: parent_block.hash(),
+    ///     parent_beacon_block_root: parent_block.parent_beacon_block_root,
+    ///     ommers: &uncle_blocks,
+    ///     withdrawals: Some(Cow::Borrowed(&withdrawals)),
+    /// };
+    ///
+    /// // Create executor - it will use ctx for system calls
+    /// let mut executor = factory.create_executor(evm, ctx);
+    ///
+    /// // The executor will:
+    /// // 1. Apply pre-execution changes
+    /// // 2. Execute all transactions
+    /// // 3. Apply post-execution changes (e.g., process withdrawals, apply rewards)
+    /// let result = executor.execute_block(transactions)?;
+    /// ```
     fn create_executor<'a, DB, I>(
         &'a self,
         evm: <Self::EvmFactory as EvmFactory>::Evm<&'a mut State<DB>, I>,
