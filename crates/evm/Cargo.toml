@@ -19,6 +19,7 @@ alloy-primitives.workspace = true
 alloy-sol-types.workspace = true
 alloy-eips.workspace = true
 alloy-hardforks.workspace = true
+alloy-rpc-types-eth = { workspace = true, optional = true }
 
 revm.workspace = true
 op-revm = { workspace = true, optional = true }
@@ -47,6 +48,8 @@ std = [
     "derive_more/std",
     "op-revm?/std",
     "thiserror/std",
-    "op-alloy-consensus?/std"
+    "op-alloy-consensus?/std",
+    "alloy-rpc-types-eth?/std"
 ]
 op = ["op-revm", "op-alloy-consensus"]
+rpc-util = ["dep:alloy-rpc-types-eth"]

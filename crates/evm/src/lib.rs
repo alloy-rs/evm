@@ -21,6 +21,8 @@ pub use error::*;
 pub mod tx;
 pub use tx::*;
 pub mod precompiles;
+#[cfg(feature = "rpc-util")]
+pub mod rpc_utils;
 pub mod tracing;
 
 mod either;

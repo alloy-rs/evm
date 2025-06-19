@@ -46,6 +46,7 @@ alloy-consensus = { version = "1.0.0", default-features = false }
 alloy-primitives = { version = "1.0.0", default-features = false }
 alloy-sol-types = { version = "1.0.0", default-features = false }
 alloy-hardforks = { version = "0.2" }
+alloy-rpc-types-eth = { version = "1.0.0", default-features = false }
 
 # op-alloy
 alloy-op-hardforks = { version = "0.2" }
