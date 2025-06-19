@@ -38,12 +38,14 @@ pub struct BlockExecutionResult<T> {
 /// This trait combines the requirements for a transaction to be executable by a block executor:
 /// - Must be convertible to the EVM's transaction environment via [`IntoTxEnv`]
 /// - Must provide access to the transaction and signer via [`RecoveredTx`]
-/// - Must be [`Copy`] for efficient handling during block execution (the expectation here is that this always passed as & reference)
+/// - Must be [`Copy`] for efficient handling during block execution (the expectation here is that
+///   this always passed as & reference)
 ///
 /// This trait is automatically implemented for any type that meets these requirements.
 /// Common implementations include:
 /// - [`Recovered<T>`](alloy_consensus::transaction::Recovered) where `T` is a transaction type
-/// - [`WithEncoded<Recovered<T>>`](alloy_eips::eip2718::WithEncoded) for transactions with encoded bytes
+/// - [`WithEncoded<Recovered<T>>`](alloy_eips::eip2718::WithEncoded) for transactions with encoded
+///   bytes
 ///
 /// The trait ensures that the block executor can both execute the transaction in the EVM
 /// and access the original transaction data for receipt generation.
@@ -88,22 +90,27 @@ pub trait BlockExecutor {
     /// Input transaction type.
     ///
     /// This represents the consensus transaction type that the block executor operates on.
-    /// It's typically a type from the consensus layer (e.g., [`EthereumTxEnvelope`](alloy_consensus::EthereumTxEnvelope)) that contains
+    /// It's typically a type from the consensus layer (e.g.,
+    /// [`EthereumTxEnvelope`](alloy_consensus::EthereumTxEnvelope)) that contains
     /// the raw transaction data, signature, and other consensus-level information.
     ///
     /// This type is used in several contexts:
     /// - As the generic parameter for [`RecoveredTx<T>`](crate::RecoveredTx) in [`ExecutableTx`]
-    /// - As the generic parameter for [`FromRecoveredTx<T>`](crate::FromRecoveredTx) and [`FromTxWithEncoded<T>`](crate::FromTxWithEncoded) in the EVM constraint
+    /// - As the generic parameter for [`FromRecoveredTx<T>`](crate::FromRecoveredTx) and
+    ///   [`FromTxWithEncoded<T>`](crate::FromTxWithEncoded) in the EVM constraint
     /// - To generate receipts after transaction execution
     ///
     /// The transaction flow is:
-    /// 1. `Self::Transaction` (consensus tx) → [`Recovered<Self::Transaction>`](alloy_consensus::transaction::Recovered) (with sender)
-    /// 2. [`Recovered<Self::Transaction>`](alloy_consensus::transaction::Recovered) → [`TxEnv`](revm::context::TxEnv) (via [`FromRecoveredTx`])
+    /// 1. `Self::Transaction` (consensus tx) →
+    ///    [`Recovered<Self::Transaction>`](alloy_consensus::transaction::Recovered) (with sender)
+    /// 2. [`Recovered<Self::Transaction>`](alloy_consensus::transaction::Recovered) →
+    ///    [`TxEnv`](revm::context::TxEnv) (via [`FromRecoveredTx`])
     /// 3. [`TxEnv`](revm::context::TxEnv) → EVM execution → [`ExecutionResult`]
     /// 4. [`ExecutionResult`] + `Self::Transaction` → `Self::Receipt`
     ///
     /// Common examples:
-    /// - [`EthereumTxEnvelope`](alloy_consensus::EthereumTxEnvelope) from alloy_consensus for standard Ethereum
+    /// - [`EthereumTxEnvelope`](alloy_consensus::EthereumTxEnvelope) from alloy_consensus for
+    ///   standard Ethereum
     /// - `OpTxEnvelope` from op_alloy_consensus for Optimism (when `op` feature is enabled)
     type Transaction;
     /// Receipt type this executor produces.
@@ -111,8 +118,10 @@ pub trait BlockExecutor {
     /// EVM used by the executor.
     ///
     /// The EVM's transaction type (`Evm::Tx`) must be able to be constructed from both:
-    /// - [`FromRecoveredTx<Self::Transaction>`](crate::FromRecoveredTx) - for transactions with recovered senders
-    /// - [`FromTxWithEncoded<Self::Transaction>`](crate::FromTxWithEncoded) - for transactions with encoded bytes
+    /// - [`FromRecoveredTx<Self::Transaction>`](crate::FromRecoveredTx) - for transactions with
+    ///   recovered senders
+    /// - [`FromTxWithEncoded<Self::Transaction>`](crate::FromTxWithEncoded) - for transactions with
+    ///   encoded bytes
     ///
     /// This constraint ensures that the block executor can convert consensus transactions
     /// into the EVM's transaction format for execution.
@@ -179,7 +188,8 @@ pub trait BlockExecutor {
     ///
     /// The [`ExecutableTx`] constraint ensures that:
     /// 1. The transaction can be converted to `TxEnv` via [`IntoTxEnv`] for EVM execution
-    /// 2. The original transaction and signer can be accessed via [`RecoveredTx`] for receipt generation
+    /// 2. The original transaction and signer can be accessed via [`RecoveredTx`] for receipt
+    ///    generation
     ///
     /// Returns [`None`] if transaction was skipped via [`CommitChanges::No`], otherwise returns
     /// the gas used by the transaction.

@@ -36,8 +36,10 @@ pub trait Evm {
     /// that while the EVM internally works with `Self::Tx` (usually `TxEnv`), users can pass
     /// various transaction formats to [`Evm::transact`], including:
     /// - Direct [`TxEnv`](revm::context::TxEnv) instances
-    /// - [`Recovered<T>`](alloy_consensus::transaction::Recovered) where `T` implements [`crate::FromRecoveredTx`]
-    /// - [`WithEncoded<Recovered<T>>`](alloy_eips::eip2718::WithEncoded) where `T` implements [`crate::FromTxWithEncoded`]
+    /// - [`Recovered<T>`](alloy_consensus::transaction::Recovered) where `T` implements
+    ///   [`crate::FromRecoveredTx`]
+    /// - [`WithEncoded<Recovered<T>>`](alloy_eips::eip2718::WithEncoded) where `T` implements
+    ///   [`crate::FromTxWithEncoded`]
     ///
     /// This design allows the EVM to accept recovered consensus transactions seamlessly.
     type Tx: IntoTxEnv<Self::Tx>;
@@ -73,8 +75,10 @@ pub trait Evm {
     /// This is the primary method for executing transactions. It accepts flexible input types
     /// that can be converted to the EVM's transaction environment, including:
     /// - [`TxEnv`](revm::context::TxEnv) - Direct transaction environment
-    /// - [`Recovered<T>`](alloy_consensus::transaction::Recovered) - Consensus transaction with recovered sender
-    /// - [`WithEncoded<Recovered<T>>`](alloy_eips::eip2718::WithEncoded) - Transaction with sender and encoded bytes
+    /// - [`Recovered<T>`](alloy_consensus::transaction::Recovered) - Consensus transaction with
+    ///   recovered sender
+    /// - [`WithEncoded<Recovered<T>>`](alloy_eips::eip2718::WithEncoded) - Transaction with sender
+    ///   and encoded bytes
     ///
     /// The conversion happens automatically through the [`IntoTxEnv`] trait.
     fn transact(

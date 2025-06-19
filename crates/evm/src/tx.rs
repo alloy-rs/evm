@@ -69,15 +69,16 @@ where
 ///
 /// # Implementation
 ///
-/// This trait is implemented for all standard Ethereum transaction types ([`TxLegacy`], [`TxEip2930`],
-/// [`TxEip1559`], [`TxEip4844`], [`TxEip7702`]) and transaction envelopes ([`EthereumTxEnvelope`]).
+/// This trait is implemented for all standard Ethereum transaction types ([`TxLegacy`],
+/// [`TxEip2930`], [`TxEip1559`], [`TxEip4844`], [`TxEip7702`]) and transaction envelopes
+/// ([`EthereumTxEnvelope`]).
 ///
 /// # Example
 ///
 /// ```ignore
 /// // Recover the signer from a transaction
 /// let recovered = tx.recover_signer()?;
-/// 
+///
 /// // The recovered transaction can now be used with the EVM
 /// // This works because Recovered<T> implements IntoTxEnv when T implements FromRecoveredTx
 /// evm.transact(recovered)?;
@@ -352,7 +353,7 @@ impl<Tx, T: RecoveredTx<Tx>> RecoveredTx<Tx> for WithEncoded<T> {
 /// let encoded_bytes = tx.encoded_2718();
 /// let recovered = tx.recover_signer()?;
 /// let with_encoded = WithEncoded::new(recovered, encoded_bytes);
-/// 
+///
 /// // The transaction with encoded data can be used with the EVM
 /// evm.transact(with_encoded)?;
 /// ```
