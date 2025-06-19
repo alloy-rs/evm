@@ -306,9 +306,7 @@ where
 /// - EVM configuration (handled by [`EvmFactory`])
 /// - Block-specific execution context (provided via [`ExecutionCtx`])
 ///
-/// # Design Philosophy
-///
-/// The factory pattern allows for:
+/// It allows for:
 /// - Reusable EVM configuration across multiple block executions
 /// - Separation of EVM-related state from block execution state
 /// - Flexible instantiation of executors with different contexts
