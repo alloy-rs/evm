@@ -109,9 +109,9 @@ pub trait BlockExecutor {
     /// 4. [`ExecutionResult`] + `Self::Transaction` → `Self::Receipt`
     ///
     /// Common examples:
-    /// - [`EthereumTxEnvelope`](alloy_consensus::EthereumTxEnvelope) from alloy_consensus for
-    ///   standard Ethereum
-    /// - `OpTxEnvelope` from op_alloy_consensus for Optimism (when `op` feature is enabled)
+    /// - [`EthereumTxEnvelope`](alloy_consensus::EthereumTxEnvelope) for all Ethereum transaction
+    ///   variants
+    /// - `OpTxEnvelope` for opstack transaction variants
     type Transaction;
     /// Receipt type this executor produces.
     type Receipt;
