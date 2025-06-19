@@ -112,7 +112,7 @@ impl<E: Evm, Txs: Iterator, F> TracerIter<'_, E, Txs, F> {
     }
 }
 
-impl<'a, E, T, Txs, F, O, Err> Iterator for TracerIter<'a, E, Txs, F>
+impl<E, T, Txs, F, O, Err> Iterator for TracerIter<'_, E, Txs, F>
 where
     E: Evm<DB: DatabaseCommit, Inspector: Clone>,
     T: IntoTxEnv<E::Tx> + Clone,

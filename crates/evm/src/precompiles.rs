@@ -191,12 +191,14 @@ impl<CTX: ContextTr> PrecompileProvider<CTX> for PrecompilesMap {
         let r;
         let input_bytes = match &inputs.input {
             CallInput::SharedBuffer(range) => {
-                match context.local().shared_memory_buffer_slice(range.clone()) {
-                    Some(slice) => {
-                        r = slice;
-                        &*r
-                    }
-                    None => &[],
+                // `map_or` does not work here as we use `r` to extend lifetime of the slice
+                // and return it.
+                #[allow(clippy::option_if_let_else)]
+                if let Some(slice) = context.local().shared_memory_buffer_slice(range.clone()) {
+                    r = slice;
+                    r.as_ref()
+                } else {
+                    &[]
                 }
             }
             CallInput::Bytes(bytes) => bytes.as_ref(),

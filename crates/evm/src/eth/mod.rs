@@ -10,7 +10,7 @@ use core::{
 use revm::{
     context::{BlockEnv, CfgEnv, Evm as RevmEvm, TxEnv},
     context_interface::result::{EVMError, HaltReason, ResultAndState},
-    handler::{instructions::EthInstructions, EthPrecompiles, PrecompileProvider},
+    handler::{instructions::EthInstructions, EthFrame, EthPrecompiles, PrecompileProvider},
     inspector::NoOpInspector,
     interpreter::{interpreter::EthInterpreter, InterpreterResult},
     precompile::{PrecompileSpecId, Precompiles},
@@ -41,6 +41,7 @@ pub struct EthEvm<DB: Database, I, PRECOMPILE = EthPrecompiles> {
         I,
         EthInstructions<EthInterpreter, EthEvmContext<DB>>,
         PRECOMPILE,
+        EthFrame,
     >,
     inspect: bool,
 }
@@ -56,6 +57,7 @@ impl<DB: Database, I, PRECOMPILE> EthEvm<DB, I, PRECOMPILE> {
             I,
             EthInstructions<EthInterpreter, EthEvmContext<DB>>,
             PRECOMPILE,
+            EthFrame,
         >,
         inspect: bool,
     ) -> Self {
@@ -65,8 +67,13 @@ impl<DB: Database, I, PRECOMPILE> EthEvm<DB, I, PRECOMPILE> {
     /// Consumes self and return the inner EVM instance.
     pub fn into_inner(
         self,
-    ) -> RevmEvm<EthEvmContext<DB>, I, EthInstructions<EthInterpreter, EthEvmContext<DB>>, PRECOMPILE>
-    {
+    ) -> RevmEvm<
+        EthEvmContext<DB>,
+        I,
+        EthInstructions<EthInterpreter, EthEvmContext<DB>>,
+        PRECOMPILE,
+        EthFrame,
+    > {
         self.inner
     }
 
