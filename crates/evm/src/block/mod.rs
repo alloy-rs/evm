@@ -191,8 +191,8 @@ pub trait BlockExecutor {
     /// 2. The original transaction and signer can be accessed via [`RecoveredTx`] for receipt
     ///    generation
     ///
-    /// Returns [`None`] if transaction was skipped via [`CommitChanges::No`], otherwise returns
-    /// the gas used by the transaction.
+    /// Returns [`None`] if commiting changes from the transaction should be skipped via
+    /// [`CommitChanges::No`], otherwise returns the gas used by the transaction.
     fn execute_transaction_with_commit_condition(
         &mut self,
         tx: impl ExecutableTx<Self>,
