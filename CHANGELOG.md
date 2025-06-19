@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0](https://github.com/alloy-rs/evm/releases/tag/v0.11.0) - 2025-06-11
+
+### Features
+
+- Tracing helpers ([#89](https://github.com/alloy-rs/evm/issues/89))
+
+### Miscellaneous Tasks
+
+- Update `op-alloy-consensus` ([#101](https://github.com/alloy-rs/evm/issues/101))
+
 ## [0.10.0](https://github.com/alloy-rs/evm/releases/tag/v0.10.0) - 2025-05-23
 
 ### Dependencies
@@ -17,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Miscellaneous Tasks
 
+- Release 0.10.0
 - Preparing for mint nonoptional in reth ([#91](https://github.com/alloy-rs/evm/issues/91))
 
 ## [0.9.1](https://github.com/alloy-rs/evm/releases/tag/v0.9.1) - 2025-05-20

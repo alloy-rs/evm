@@ -34,6 +34,21 @@ pub struct BlockExecutionResult<T> {
 }
 
 /// Helper trait to encapsulate requirements for a type to be used as input for [`BlockExecutor`].
+///
+/// This trait combines the requirements for a transaction to be executable by a block executor:
+/// - Must be convertible to the EVM's transaction environment via [`IntoTxEnv`]
+/// - Must provide access to the transaction and signer via [`RecoveredTx`]
+/// - Must be [`Copy`] for efficient handling during block execution (the expectation here is that
+///   this always passed as & reference)
+///
+/// This trait is automatically implemented for any type that meets these requirements.
+/// Common implementations include:
+/// - [`Recovered<T>`](alloy_consensus::transaction::Recovered) where `T` is a transaction type
+/// - [`WithEncoded<Recovered<T>>`](alloy_eips::eip2718::WithEncoded) for transactions with encoded
+///   bytes
+///
+/// The trait ensures that the block executor can both execute the transaction in the EVM
+/// and access the original transaction data for receipt generation.
 pub trait ExecutableTx<E: BlockExecutor + ?Sized>:
     IntoTxEnv<<E::Evm as Evm>::Tx> + RecoveredTx<E::Transaction> + Copy
 {
@@ -73,16 +88,60 @@ impl CommitChanges {
 /// relevant information about the block execution.
 pub trait BlockExecutor {
     /// Input transaction type.
+    ///
+    /// This represents the consensus transaction type that the block executor operates on.
+    /// It's typically a type from the consensus layer (e.g.,
+    /// [`EthereumTxEnvelope`](alloy_consensus::EthereumTxEnvelope)) that contains
+    /// the raw transaction data, signature, and other consensus-level information.
+    ///
+    /// This type is used in several contexts:
+    /// - As the generic parameter for [`RecoveredTx<T>`](crate::RecoveredTx) in [`ExecutableTx`]
+    /// - As the generic parameter for [`FromRecoveredTx<T>`](crate::FromRecoveredTx) and
+    ///   [`FromTxWithEncoded<T>`](crate::FromTxWithEncoded) in the EVM constraint
+    /// - To generate receipts after transaction execution
+    ///
+    /// The transaction flow is:
+    /// 1. `Self::Transaction` (consensus tx) →
+    ///    [`Recovered<Self::Transaction>`](alloy_consensus::transaction::Recovered) (with sender)
+    /// 2. [`Recovered<Self::Transaction>`](alloy_consensus::transaction::Recovered) →
+    ///    [`TxEnv`](revm::context::TxEnv) (via [`FromRecoveredTx`])
+    /// 3. [`TxEnv`](revm::context::TxEnv) → EVM execution → [`ExecutionResult`]
+    /// 4. [`ExecutionResult`] + `Self::Transaction` → `Self::Receipt`
+    ///
+    /// Common examples:
+    /// - [`EthereumTxEnvelope`](alloy_consensus::EthereumTxEnvelope) for all Ethereum transaction
+    ///   variants
+    /// - `OpTxEnvelope` for opstack transaction variants
     type Transaction;
     /// Receipt type this executor produces.
     type Receipt;
     /// EVM used by the executor.
+    ///
+    /// The EVM's transaction type (`Evm::Tx`) must be able to be constructed from both:
+    /// - [`FromRecoveredTx<Self::Transaction>`](crate::FromRecoveredTx) - for transactions with
+    ///   recovered senders
+    /// - [`FromTxWithEncoded<Self::Transaction>`](crate::FromTxWithEncoded) - for transactions with
+    ///   encoded bytes
+    ///
+    /// This constraint ensures that the block executor can convert consensus transactions
+    /// into the EVM's transaction format for execution.
     type Evm: Evm<Tx: FromRecoveredTx<Self::Transaction> + FromTxWithEncoded<Self::Transaction>>;
 
     /// Applies any necessary changes before executing the block's transactions.
     fn apply_pre_execution_changes(&mut self) -> Result<(), BlockExecutionError>;
 
     /// Executes a single transaction and applies execution result to internal state.
+    ///
+    /// This method accepts any type implementing [`ExecutableTx`], which ensures the transaction:
+    /// - Can be converted to the EVM's transaction environment for execution
+    /// - Provides access to the original transaction and signer for receipt generation
+    ///
+    /// Common input types include:
+    /// - `&Recovered<Transaction>` - A transaction with its recovered sender
+    /// - `&WithEncoded<Recovered<Transaction>>` - A transaction with sender and encoded bytes
+    ///
+    /// The transaction is executed in the EVM, state changes are committed, and a receipt
+    /// is generated internally.
     ///
     /// Returns the gas used by the transaction.
     fn execute_transaction(
@@ -94,6 +153,14 @@ pub trait BlockExecutor {
 
     /// Executes a single transaction and applies execution result to internal state. Invokes the
     /// given closure with an internal [`ExecutionResult`] produced by the EVM.
+    ///
+    /// This method is similar to [`execute_transaction`](Self::execute_transaction) but provides
+    /// access to the raw execution result before it's converted to a receipt. This is useful for:
+    /// - Custom logging or metrics collection
+    /// - Debugging transaction execution
+    /// - Extracting additional information from the execution result
+    ///
+    /// The transaction is always committed after the closure is invoked.
     fn execute_transaction_with_result_closure(
         &mut self,
         tx: impl ExecutableTx<Self>,
@@ -110,7 +177,22 @@ pub trait BlockExecutor {
     /// given closure with an internal [`ExecutionResult`] produced by the EVM, and commits the
     /// transaction to the state on [`CommitChanges::Yes`].
     ///
-    /// Returns [`None`] if transaction was skipped via [`CommitChanges::No`].
+    /// This is the most flexible transaction execution method, allowing conditional commitment
+    /// based on the execution result. The closure receives the execution result and returns
+    /// whether to commit the changes to state.
+    ///
+    /// Use cases:
+    /// - Conditional execution based on transaction outcome
+    /// - Simulating transactions without committing
+    /// - Custom validation logic before committing
+    ///
+    /// The [`ExecutableTx`] constraint ensures that:
+    /// 1. The transaction can be converted to `TxEnv` via [`IntoTxEnv`] for EVM execution
+    /// 2. The original transaction and signer can be accessed via [`RecoveredTx`] for receipt
+    ///    generation
+    ///
+    /// Returns [`None`] if commiting changes from the transaction should be skipped via
+    /// [`CommitChanges::No`], otherwise returns the gas used by the transaction.
     fn execute_transaction_with_commit_condition(
         &mut self,
         tx: impl ExecutableTx<Self>,
@@ -153,6 +235,26 @@ pub trait BlockExecutor {
     fn evm(&self) -> &Self::Evm;
 
     /// Executes all transactions in a block, applying pre and post execution changes.
+    ///
+    /// This is a convenience method that orchestrates the complete block execution flow:
+    /// 1. Applies pre-execution changes (system calls, irregular state transitions)
+    /// 2. Executes all transactions in order
+    /// 3. Applies post-execution changes (block rewards, system calls)
+    ///
+    /// Each transaction in the iterator must implement [`ExecutableTx`], ensuring it can be:
+    /// - Converted to the EVM's transaction format for execution
+    /// - Used to generate receipts with access to the original transaction data
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let recovered_txs: Vec<Recovered<Transaction>> = block.transactions
+    ///     .iter()
+    ///     .map(|tx| tx.recover_signer())
+    ///     .collect::<Result<_, _>>()?;
+    ///
+    /// let result = executor.execute_block(recovered_txs.iter())?;
+    /// ```
     fn execute_block(
         mut self,
         transactions: impl IntoIterator<Item = impl ExecutableTx<Self>>,
@@ -199,28 +301,72 @@ where
 
 /// A factory that can create [`BlockExecutor`]s.
 ///
-/// This trait extends [`crate::EvmFactory`] and provides a way to construct a [`BlockExecutor`].
-/// Executor is expected to derive most of the context for block execution from the EVM (which
-/// includes [`revm::context::BlockEnv`]), and any additional context should be contained in
-/// configured [`ExecutionCtx`].
+/// This trait serves as the main entry point for block execution, providing a way to construct
+/// [`BlockExecutor`] instances with the necessary context. It separates the concerns of:
+/// - EVM configuration (handled by [`EvmFactory`])
+/// - Block-specific execution context (provided via [`ExecutionCtx`])
 ///
-/// Every block executor factory is expected to contain and expose an [`EvmFactory`] instance.
+/// It allows for:
+/// - Reusable EVM configuration across multiple block executions
+/// - Separation of EVM-related state from block execution state
+/// - Flexible instantiation of executors with different contexts
+///
+/// # Relationship with EvmFactory
+///
+/// Every block executor factory contains an [`EvmFactory`] instance which handles:
+/// - EVM configuration and instantiation
+/// - Transaction environment setup
+/// - State database management
+///
+/// The block executor factory extends this by adding block-level execution concerns.
 ///
 /// For more context on the executor design, see the documentation for [`BlockExecutor`].
 ///
 /// [`ExecutionCtx`]: BlockExecutorFactory::ExecutionCtx
+/// [`EvmFactory`]: crate::EvmFactory
 #[auto_impl::auto_impl(Arc)]
 pub trait BlockExecutorFactory: 'static {
     /// The EVM factory used by the executor.
     type EvmFactory: EvmFactory;
 
-    /// Context required for block execution.
+    /// Context required for block execution beyond what the EVM provides (e.g.
+    /// [`EvmEnv`](crate::EvmEnv))
     ///
-    /// This is similar to [`crate::EvmEnv`], but only contains context unrelated to EVM and
-    /// required for execution of an entire block.
+    /// While the EVM contains transaction-level context (gas limits, caller, value) and
+    /// block-level context (block number, timestamp, base fee), the `ExecutionCtx` provides
+    /// additional block execution context that is specific to your consensus implementation.
+    ///
+    /// # Purpose
+    ///
+    /// This type provides data needed for system calls that occur outside normal transaction
+    /// execution. Block execution requires additional context for:
+    /// - **Pre-execution system calls**: Setting up block hash history, beacon block roots
+    /// - **Post-execution system calls**: Applying block rewards, validator withdrawals
+    /// - **Consensus-specific data**: Uncle/ommer blocks, L2 data availability info
+    /// - **Protocol parameters**: Fork-specific rules, precompile configurations
+    /// - **Precompile metadata**: Context for precompiles that require block-level data (e.g.
+    ///   parameters stored in the block body)
+    ///
+    /// For example, in Ethereum: [`EthBlockExecutionCtx`](crate::eth::EthBlockExecutionCtx)
+    /// contains:
+    /// - Parent block hash for EIP-2935 block hash system call
+    /// - Parent beacon block root for EIP-4788 beacon root system call
+    /// - Uncle blocks for handling uncle rewards
+    /// - Withdrawals for EIP-4895 validator withdrawals
+    ///
+    /// # Design Considerations
+    ///
+    /// - Must be [`Clone`] to support creating multiple executors, can use `Cow` borrowed from the
+    ///   block.
+    /// - Should be lightweight (use references where possible)
+    /// - Contains only block-level data, not transaction-specific data
     type ExecutionCtx<'a>: Clone;
 
     /// Transaction type used by the executor, see [`BlockExecutor::Transaction`].
+    ///
+    /// This should be the same consensus transaction type that the block executor operates on.
+    /// It represents the transaction format from your consensus layer that needs to be
+    /// executed by the EVM.
     type Transaction;
 
     /// Receipt type produced by the executor, see [`BlockExecutor::Receipt`].
@@ -230,6 +376,44 @@ pub trait BlockExecutorFactory: 'static {
     fn evm_factory(&self) -> &Self::EvmFactory;
 
     /// Creates an executor with given EVM and execution context.
+    ///
+    /// This method combines:
+    /// - An EVM instance (already configured with block environment and state)
+    /// - The execution context (containing additional data for system calls)
+    ///
+    /// To create a [`BlockExecutor`] that can:
+    /// 1. Apply pre-execution system calls (e.g., EIP-2935 blockhashes, EIP-4788 beacon roots)
+    /// 2. Execute transactions
+    /// 3. Apply post-execution system calls (e.g., withdrawals, rewards)
+    ///
+    /// # Parameters
+    ///
+    /// - `evm`: A configured EVM instance with block environment and state
+    /// - `ctx`: The execution context containing consensus-specific data needed for system calls
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// // Create EVM with block environment
+    /// let evm = factory.evm_factory().create_evm(block_env, state_db, inspector);
+    ///
+    /// // Create execution context with consensus-specific data required for block execution
+    /// let ctx = EthBlockExecutionCtx {
+    ///     parent_hash: parent_block.hash(),
+    ///     parent_beacon_block_root: parent_block.parent_beacon_block_root,
+    ///     ommers: &uncle_blocks,
+    ///     withdrawals: Some(Cow::Borrowed(&withdrawals)),
+    /// };
+    ///
+    /// // Create executor - it will use ctx for system calls
+    /// let mut executor = factory.create_executor(evm, ctx);
+    ///
+    /// // The executor will:
+    /// // 1. Apply pre-execution changes
+    /// // 2. Execute all transactions
+    /// // 3. Apply post-execution changes (e.g., process withdrawals, apply rewards)
+    /// let result = executor.execute_block(transactions)?;
+    /// ```
     fn create_executor<'a, DB, I>(
         &'a self,
         evm: <Self::EvmFactory as EvmFactory>::Evm<&'a mut State<DB>, I>,
