@@ -309,7 +309,7 @@ impl core::fmt::Debug for DynPrecompiles {
 }
 
 /// Input for a precompile call.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct PrecompileInput<'a> {
     /// Input data bytes.
     pub data: &'a [u8],
