@@ -52,4 +52,4 @@ std = [
     "alloy-rpc-types-eth?/std"
 ]
 op = ["op-revm", "op-alloy-consensus"]
-rpc-util = ["dep:alloy-rpc-types-eth"]
+overrides = ["dep:alloy-rpc-types-eth"]
