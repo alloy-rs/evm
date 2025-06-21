@@ -24,12 +24,6 @@ pub enum CallError<E> {
     InsufficientFunds(#[from] InsufficientFundsError),
 }
 
-impl<E> From<E> for CallError<E> {
-    fn from(err: E) -> Self {
-        CallError::Database(err)
-    }
-}
-
 /// Calculates the caller gas allowance.
 ///
 /// `allowance = (account.balance - tx.value) / tx.gas_price`
@@ -45,7 +39,7 @@ where
     T: revm::context_interface::Transaction,
 {
     // Get the caller account.
-    let caller = db.basic(env.caller())?;
+    let caller = db.basic(env.caller()).map_err(CallError::Database)?;
     // Get the caller balance.
     let balance = caller.map(|acc| acc.balance).unwrap_or_default();
     // Get transaction value.
@@ -54,7 +48,7 @@ where
     // insufficient funds.
     let balance = balance
         .checked_sub(env.value())
-        .ok_or_else(|| InsufficientFundsError { cost: value, balance })?;
+        .ok_or(InsufficientFundsError { cost: value, balance })?;
 
     Ok(balance
         // Calculate the amount of gas the caller can afford with the specified gas price.
