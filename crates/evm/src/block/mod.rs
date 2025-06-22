@@ -58,18 +58,18 @@ impl<E: BlockExecutor, T> ExecutableTx<E> for T where
 {
 }
 
-/// Marks whether transaction should be commited into block executor's state.
+/// Marks whether transaction should be committed into block executor's state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[must_use]
 pub enum CommitChanges {
-    /// Transaction should be commited into block executor's state.
+    /// Transaction should be committed into block executor's state.
     Yes,
-    /// Transaction should not be commited.
+    /// Transaction should not be committed.
     No,
 }
 
 impl CommitChanges {
-    /// Returns `true` if transaction should be commited into block executor's state.
+    /// Returns `true` if transaction should be committed into block executor's state.
     pub fn should_commit(self) -> bool {
         matches!(self, Self::Yes)
     }
@@ -191,7 +191,7 @@ pub trait BlockExecutor {
     /// 2. The original transaction and signer can be accessed via [`RecoveredTx`] for receipt
     ///    generation
     ///
-    /// Returns [`None`] if commiting changes from the transaction should be skipped via
+    /// Returns [`None`] if committing changes from the transaction should be skipped via
     /// [`CommitChanges::No`], otherwise returns the gas used by the transaction.
     fn execute_transaction_with_commit_condition(
         &mut self,
