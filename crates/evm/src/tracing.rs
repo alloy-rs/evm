@@ -102,7 +102,7 @@ pub struct TracerIter<'a, E: Evm, Txs: Iterator, F> {
 }
 
 impl<E: Evm, Txs: Iterator, F> TracerIter<'_, E, Txs, F> {
-    /// Flips the `skip_last_commit` flag thus making sure all transaction are commited.
+    /// Flips the `skip_last_commit` flag thus making sure all transaction are committed.
     ///
     /// We are skipping last commit by default as it's expected that when tracing users are mostly
     /// interested in tracer output rather than in a state after it.
