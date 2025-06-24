@@ -236,7 +236,7 @@ impl<CTX: ContextTr> PrecompileProvider<CTX> for PrecompilesMap {
                 #[allow(clippy::option_if_let_else)]
                 if let Some(slice) = context.local().shared_memory_buffer_slice(range.clone()) {
                     r = slice;
-                    r.as_ref()
+                    &r[..]
                 } else {
                     &[]
                 }
