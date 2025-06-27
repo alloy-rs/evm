@@ -68,3 +68,71 @@ impl InvalidTxError for op_revm::OpTransactionError {
         matches!(self, Self::Base(tx) if tx.is_nonce_too_low())
     }
 }
+
+/// Error type for EvmInternals trait operations.
+#[derive(Debug)]
+pub struct EvmInternalsError {
+    /// The kind of error that occurred.
+    pub kind: EvmInternalsErrorKind,
+    /// The underlying error.
+    pub error: Box<dyn Error + Send + Sync + 'static>,
+}
+
+/// The kind of error that can occur during EvmInternals operations.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EvmInternalsErrorKind {
+    /// Database error occurred.
+    Database,
+    /// Journal operation failed.
+    Journal,
+    /// State access error.
+    State,
+    /// Invalid operation.
+    InvalidOperation,
+    /// Other error.
+    Other,
+}
+
+impl core::fmt::Display for EvmInternalsError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{:?}: {}", self.kind, self.error)
+    }
+}
+
+impl Error for EvmInternalsError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        Some(self.error.as_ref())
+    }
+}
+
+impl EvmInternalsError {
+    /// Creates a new EvmInternalsError.
+    pub fn new(kind: EvmInternalsErrorKind, error: impl Error + Send + Sync + 'static) -> Self {
+        Self { kind, error: Box::new(error) }
+    }
+
+    /// Creates a database error.
+    pub fn database(error: impl Error + Send + Sync + 'static) -> Self {
+        Self::new(EvmInternalsErrorKind::Database, error)
+    }
+
+    /// Creates a journal error.
+    pub fn journal(error: impl Error + Send + Sync + 'static) -> Self {
+        Self::new(EvmInternalsErrorKind::Journal, error)
+    }
+
+    /// Creates a state error.
+    pub fn state(error: impl Error + Send + Sync + 'static) -> Self {
+        Self::new(EvmInternalsErrorKind::State, error)
+    }
+
+    /// Creates an invalid operation error.
+    pub fn invalid_operation(error: impl Error + Send + Sync + 'static) -> Self {
+        Self::new(EvmInternalsErrorKind::InvalidOperation, error)
+    }
+
+    /// Creates an other error.
+    pub fn other(error: impl Error + Send + Sync + 'static) -> Self {
+        Self::new(EvmInternalsErrorKind::Other, error)
+    }
+}
