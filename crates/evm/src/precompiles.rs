@@ -10,7 +10,7 @@ use revm::{
     context::{Cfg, ContextTr, LocalContextTr},
     handler::{EthPrecompiles, PrecompileProvider},
     interpreter::{CallInput, Gas, InputsImpl, InstructionResult, InterpreterResult},
-    precompile::{PrecompileError, PrecompileResult, Precompiles},
+    precompile::{PrecompileError, PrecompileFn, PrecompileResult, Precompiles},
 };
 
 /// A mapping of precompile contracts that can be either static (builtin) or dynamic.
@@ -284,6 +284,16 @@ impl<CTX: ContextTr> PrecompileProvider<CTX> for PrecompilesMap {
 #[derive(Clone)]
 pub struct DynPrecompile(pub(crate) Arc<dyn Precompile + Send + Sync>);
 
+impl DynPrecompile {
+    /// Creates a new [`DynPrecompiles`] with the given closure.
+    pub fn new<F>(f: F) -> Self
+    where
+        F: Fn(PrecompileInput<'_>) -> PrecompileResult + Send + Sync + 'static,
+    {
+        Self(Arc::new(f))
+    }
+}
+
 impl core::fmt::Debug for DynPrecompile {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("DynPrecompile").finish()
@@ -342,6 +352,13 @@ where
 {
     fn from(f: F) -> Self {
         Self(Arc::new(f))
+    }
+}
+
+impl From<PrecompileFn> for DynPrecompile {
+    fn from(f: PrecompileFn) -> Self {
+        let p = move |input: PrecompileInput<'_>| f(input.data, input.gas);
+        p.into()
     }
 }
 
