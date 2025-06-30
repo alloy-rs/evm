@@ -40,7 +40,7 @@ impl EvmInternalsError {
     }
 }
 
-/// Object-safe trait for accessing and modifying EVM internals, particularly the journal.
+/// dyn-compatible trait for accessing and modifying EVM internals, particularly the journal.
 ///
 /// This trait provides an abstraction over journal operations without exposing
 /// associated types, making it object-safe and suitable for dynamic dispatch.

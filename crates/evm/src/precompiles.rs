@@ -400,9 +400,8 @@ impl<A: Precompile, B: Precompile> Precompile for Either<A, B> {
 
 #[cfg(test)]
 mod tests {
-    use crate::eth::EthEvmContext;
-
     use super::*;
+    use crate::eth::EthEvmContext;
     use alloy_primitives::{address, Bytes};
     use revm::{context::ContextTr, database::EmptyDB, precompile::PrecompileOutput};
 
