@@ -1,11 +1,13 @@
 //! Helpers for dealing with Precompiles.
 
+use crate::{Database, EvmInternals, EvmInternalsImpl};
 use alloc::{borrow::Cow, boxed::Box, string::String, sync::Arc};
 use alloy_consensus::transaction::Either;
 use alloy_primitives::{
     map::{HashMap, HashSet},
     Address, Bytes, U256,
 };
+use core::fmt::Debug;
 use revm::{
     context::{Cfg, ContextTr, LocalContextTr},
     handler::{EthPrecompiles, PrecompileProvider},
@@ -201,7 +203,7 @@ impl core::fmt::Debug for PrecompilesMap {
     }
 }
 
-impl<CTX: ContextTr> PrecompileProvider<CTX> for PrecompilesMap {
+impl<CTX: ContextTr<Db: Database, Journal: Debug>> PrecompileProvider<CTX> for PrecompilesMap {
     type Output = InterpreterResult;
 
     fn set_spec(&mut self, _spec: <CTX::Cfg as Cfg>::Spec) -> bool {
@@ -228,27 +230,26 @@ impl<CTX: ContextTr> PrecompileProvider<CTX> for PrecompilesMap {
         };
 
         // Execute the precompile
-        let r;
         let input_bytes = match &inputs.input {
             CallInput::SharedBuffer(range) => {
                 // `map_or` does not work here as we use `r` to extend lifetime of the slice
                 // and return it.
                 #[allow(clippy::option_if_let_else)]
                 if let Some(slice) = context.local().shared_memory_buffer_slice(range.clone()) {
-                    r = slice;
-                    &*r
+                    Bytes::copy_from_slice(&slice)
                 } else {
-                    &[]
+                    Bytes::new()
                 }
             }
-            CallInput::Bytes(bytes) => bytes.as_ref(),
+            CallInput::Bytes(bytes) => bytes.clone(),
         };
 
         let precompile_result = precompile.call(PrecompileInput {
-            data: input_bytes,
+            data: input_bytes.as_ref(),
             gas: gas_limit,
             caller: inputs.caller_address,
             value: inputs.call_value,
+            internals: &mut EvmInternalsImpl(context.journal_mut()),
         });
 
         match precompile_result {
@@ -319,7 +320,7 @@ impl core::fmt::Debug for DynPrecompiles {
 }
 
 /// Input for a precompile call.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug)]
 pub struct PrecompileInput<'a> {
     /// Input data bytes.
     pub data: &'a [u8],
@@ -329,6 +330,8 @@ pub struct PrecompileInput<'a> {
     pub caller: Address,
     /// Value sent with the call.
     pub value: U256,
+    /// Various hooks for interacting with the EVM state.
+    pub internals: &'a mut dyn EvmInternals,
 }
 
 /// Trait for implementing precompiled contracts.
@@ -385,14 +388,19 @@ impl<A: Precompile, B: Precompile> Precompile for Either<A, B> {
 
 #[cfg(test)]
 mod tests {
+    use crate::eth::EthEvmContext;
+
     use super::*;
     use alloy_primitives::{address, Bytes};
-    use revm::precompile::PrecompileOutput;
+    use revm::{database::EmptyDB, precompile::PrecompileOutput};
 
     #[test]
     fn test_map_precompile() {
         let eth_precompiles = EthPrecompiles::default();
         let mut spec_precompiles = PrecompilesMap::from(eth_precompiles);
+
+        let mut ctx = EthEvmContext::new(EmptyDB::default(), Default::default());
+        let mut internals = EvmInternalsImpl(ctx.journal_mut());
 
         // create a test input for the precompile (identity precompile)
         let identity_address = address!("0x0000000000000000000000000000000000000004");
@@ -416,6 +424,7 @@ mod tests {
                 gas: gas_limit,
                 caller: Address::ZERO,
                 value: U256::ZERO,
+                internals: &mut internals,
             })
             .unwrap();
         assert_eq!(result.bytes, test_input, "Identity precompile should return the input data");
@@ -447,6 +456,7 @@ mod tests {
                 gas: gas_limit,
                 caller: Address::ZERO,
                 value: U256::ZERO,
+                internals: &mut internals,
             })
             .unwrap();
         assert_eq!(
@@ -460,6 +470,9 @@ mod tests {
         let test_input = Bytes::from_static(b"test data");
         let expected_output = Bytes::from_static(b"processed: test data");
         let gas_limit = 1000;
+
+        let mut ctx = EthEvmContext::new(EmptyDB::default(), Default::default());
+        let mut internals = EvmInternalsImpl(ctx.journal_mut());
 
         // define a closure that implements the precompile functionality
         let closure_precompile = |input: PrecompileInput<'_>| -> PrecompileResult {
@@ -476,6 +489,7 @@ mod tests {
                 gas: gas_limit,
                 caller: Address::ZERO,
                 value: U256::ZERO,
+                internals: &mut internals,
             })
             .unwrap();
         assert_eq!(result.gas_used, 15);
@@ -486,6 +500,9 @@ mod tests {
     fn test_get_precompile() {
         let eth_precompiles = EthPrecompiles::default();
         let spec_precompiles = PrecompilesMap::from(eth_precompiles);
+
+        let mut ctx = EthEvmContext::new(EmptyDB::default(), Default::default());
+        let mut internals = EvmInternalsImpl(ctx.journal_mut());
 
         let identity_address = address!("0x0000000000000000000000000000000000000004");
         let test_input = Bytes::from_static(b"test data");
@@ -501,6 +518,7 @@ mod tests {
                 gas: gas_limit,
                 caller: Address::ZERO,
                 value: U256::ZERO,
+                internals: &mut internals,
             })
             .unwrap();
         assert_eq!(result.bytes, test_input, "Identity precompile should return the input data");
@@ -527,6 +545,7 @@ mod tests {
                 gas: gas_limit,
                 caller: Address::ZERO,
                 value: U256::ZERO,
+                internals: &mut internals,
             })
             .unwrap();
         assert_eq!(

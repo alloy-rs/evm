@@ -22,8 +22,6 @@ pub mod tx;
 pub use tx::*;
 pub mod traits;
 pub use traits::*;
-pub mod journal;
-pub use journal::*;
 #[cfg(feature = "call-util")]
 pub mod call;
 #[cfg(feature = "overrides")]

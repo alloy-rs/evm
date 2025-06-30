@@ -14,8 +14,8 @@ use revm::{
 };
 
 /// Helper trait to bound [`revm::Database::Error`] with common requirements.
-pub trait Database: revm::Database<Error: Error + Send + Sync + 'static> {}
-impl<T> Database for T where T: revm::Database<Error: Error + Send + Sync + 'static> {}
+pub trait Database: revm::Database<Error: Error + Send + Sync + 'static> + Debug {}
+impl<T> Database for T where T: revm::Database<Error: Error + Send + Sync + 'static> + Debug {}
 
 /// An instance of an ethereum virtual machine.
 ///

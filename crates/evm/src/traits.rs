@@ -1,139 +1,156 @@
 //! EVM traits.
 
-use crate::error::EvmInternalsError;
-use alloy_primitives::{Address, B256, U256};
-use core::fmt::Debug;
+use crate::Database;
+use alloy_primitives::{Address, B256};
+use core::{error::Error, fmt::Debug};
+use revm::{
+    context::{DBErrorMarker, JournalTr},
+    interpreter::{SStoreResult, StateLoad},
+    primitives::{StorageKey, StorageValue},
+    state::{Account, AccountInfo, Bytecode},
+};
 
-/// Account information for EVM internals.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct EvmAccount {
-    /// Account balance.
-    pub balance: U256,
-    /// Account nonce.
-    pub nonce: u64,
-    /// Account code hash.
-    pub code_hash: Option<B256>,
-    /// Account code.
-    pub code: Option<Vec<u8>>,
+/// Erased error type.
+#[derive(thiserror::Error, Debug)]
+#[error(transparent)]
+pub struct ErasedError(Box<dyn Error + Send + Sync + 'static>);
+
+impl ErasedError {
+    /// Creates a new [`ErasedError`].
+    pub fn new(error: impl Error + Send + Sync + 'static) -> Self {
+        Self(Box::new(error))
+    }
+}
+
+impl DBErrorMarker for ErasedError {}
+
+/// Errors returned by [`EvmInternals`].
+#[derive(Debug, thiserror::Error)]
+pub enum EvmInternalsError {
+    /// Database error.
+    #[error(transparent)]
+    Database(ErasedError),
+}
+
+impl EvmInternalsError {
+    /// Creates a new [`EvmInternalsError::Database`]
+    pub fn database(err: impl Error + Send + Sync + 'static) -> Self {
+        Self::Database(ErasedError::new(err))
+    }
 }
 
 /// Object-safe trait for accessing and modifying EVM internals, particularly the journal.
 ///
 /// This trait provides an abstraction over journal operations without exposing
 /// associated types, making it object-safe and suitable for dynamic dispatch.
-pub trait EvmInternals: Debug + Send + Sync {
-    /// Get an account from the journaled state.
-    fn get_account(&mut self, address: Address) -> Result<Option<EvmAccount>, EvmInternalsError>;
-
-    /// Set or update an account in the journaled state.
-    fn set_account(
+pub trait EvmInternals: Database<Error = ErasedError> + Debug {
+    /// Loads the account.
+    fn load_account(
         &mut self,
         address: Address,
-        account: EvmAccount,
-    ) -> Result<(), EvmInternalsError>;
+    ) -> Result<StateLoad<&mut Account>, EvmInternalsError>;
 
-    /// Get the storage value for an account.
-    fn get_storage(
+    /// Loads the account code.
+    fn load_account_code(
         &mut self,
         address: Address,
-        slot: U256,
-    ) -> Result<Option<U256>, EvmInternalsError>;
+    ) -> Result<StateLoad<&mut Account>, EvmInternalsError>;
 
-    /// Set the storage value for an account.
-    fn set_storage(
+    /// Returns the storage value from Journal state.
+    ///
+    /// Loads the storage from database if not found in Journal state.
+    fn sload(
         &mut self,
         address: Address,
-        slot: U256,
-        value: U256,
-    ) -> Result<(), EvmInternalsError>;
+        key: StorageKey,
+    ) -> Result<StateLoad<StorageValue>, EvmInternalsError>;
 
-    /// Get the code for an account.
-    fn get_code(&mut self, address: Address) -> Result<Option<Vec<u8>>, EvmInternalsError>;
+    /// Touches the account.
+    fn touch_account(&mut self, address: Address);
 
-    /// Set the code for an account.
-    fn set_code(&mut self, address: Address, code: Vec<u8>) -> Result<(), EvmInternalsError>;
+    /// Sets bytecode to the account.
+    fn set_code(&mut self, address: Address, code: Bytecode);
 
-    /// Get the code hash for an account.
-    fn get_code_hash(&mut self, address: Address) -> Result<Option<B256>, EvmInternalsError>;
-
-    /// Check if an account exists.
-    fn account_exists(&mut self, address: Address) -> Result<bool, EvmInternalsError>;
-
-    /// Mark an account as touched.
-    fn touch_account(&mut self, address: Address) -> Result<(), EvmInternalsError>;
-
-    /// Create a new account.
-    fn create_account(
+    /// Stores the storage value in Journal state.
+    fn sstore(
         &mut self,
         address: Address,
-        balance: U256,
-        nonce: u64,
-    ) -> Result<(), EvmInternalsError>;
-
-    /// Delete an account.
-    fn delete_account(&mut self, address: Address) -> Result<(), EvmInternalsError>;
-
-    /// Check if an account was created in the current transaction.
-    fn is_account_created(&self, address: Address) -> Result<bool, EvmInternalsError>;
-
-    /// Check if an account was destroyed in the current transaction.
-    fn is_account_destroyed(&self, address: Address) -> Result<bool, EvmInternalsError>;
-
-    /// Transfer balance between accounts.
-    fn transfer(
-        &mut self,
-        from: Address,
-        to: Address,
-        amount: U256,
-    ) -> Result<(), EvmInternalsError>;
-
-    /// Add balance to an account.
-    fn add_balance(&mut self, address: Address, amount: U256) -> Result<(), EvmInternalsError>;
-
-    /// Subtract balance from an account.
-    fn sub_balance(&mut self, address: Address, amount: U256) -> Result<(), EvmInternalsError>;
-
-    /// Get the balance of an account.
-    fn get_balance(&mut self, address: Address) -> Result<U256, EvmInternalsError>;
-
-    /// Get the nonce of an account.
-    fn get_nonce(&mut self, address: Address) -> Result<u64, EvmInternalsError>;
-
-    /// Set the nonce of an account.
-    fn set_nonce(&mut self, address: Address, nonce: u64) -> Result<(), EvmInternalsError>;
-
-    /// Increment the nonce of an account.
-    fn increment_nonce(&mut self, address: Address) -> Result<(), EvmInternalsError>;
-
-    /// Create a checkpoint in the journal.
-    fn checkpoint(&mut self) -> Result<(), EvmInternalsError>;
-
-    /// Revert to the last checkpoint.
-    fn revert_to_checkpoint(&mut self) -> Result<(), EvmInternalsError>;
-
-    /// Commit the current checkpoint.
-    fn commit_checkpoint(&mut self) -> Result<(), EvmInternalsError>;
-
-    /// Get the current depth of checkpoints.
-    fn checkpoint_depth(&self) -> Result<usize, EvmInternalsError>;
-
-    /// Clear all journal entries.
-    fn clear_journal(&mut self) -> Result<(), EvmInternalsError>;
-
-    /// Get all touched addresses.
-    fn get_touched_addresses(&self) -> Result<Vec<Address>, EvmInternalsError>;
-
-    /// Get all created addresses.
-    fn get_created_addresses(&self) -> Result<Vec<Address>, EvmInternalsError>;
-
-    /// Get all destroyed addresses.
-    fn get_destroyed_addresses(&self) -> Result<Vec<Address>, EvmInternalsError>;
-
-    /// Get all storage slots that have been modified for an account.
-    /// Returns a vector of (slot, value) pairs.
-    fn get_modified_storage(
-        &self,
-        address: Address,
-    ) -> Result<Vec<(U256, U256)>, EvmInternalsError>;
+        key: StorageKey,
+        value: StorageValue,
+    ) -> Result<StateLoad<SStoreResult>, EvmInternalsError>;
 }
 
+/// Helper internal struct for implementing [`EvmInternals`].
+#[derive(Debug)]
+pub(crate) struct EvmInternalsImpl<'a, T>(pub(crate) &'a mut T);
+
+impl<T> revm::Database for EvmInternalsImpl<'_, T>
+where
+    T: JournalTr<Database: Database>,
+{
+    type Error = ErasedError;
+
+    fn basic(&mut self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
+        self.0.db_mut().basic(address).map_err(ErasedError::new)
+    }
+
+    fn code_by_hash(&mut self, code_hash: B256) -> Result<Bytecode, Self::Error> {
+        self.0.db_mut().code_by_hash(code_hash).map_err(ErasedError::new)
+    }
+
+    fn storage(
+        &mut self,
+        address: Address,
+        index: StorageKey,
+    ) -> Result<StorageValue, Self::Error> {
+        self.0.db_mut().storage(address, index).map_err(ErasedError::new)
+    }
+
+    fn block_hash(&mut self, number: u64) -> Result<B256, Self::Error> {
+        self.0.db_mut().block_hash(number).map_err(ErasedError::new)
+    }
+}
+
+impl<T> EvmInternals for EvmInternalsImpl<'_, T>
+where
+    T: JournalTr<Database: Database> + Debug,
+{
+    fn load_account(
+        &mut self,
+        address: Address,
+    ) -> Result<StateLoad<&mut Account>, EvmInternalsError> {
+        self.0.load_account(address).map_err(EvmInternalsError::database)
+    }
+
+    fn load_account_code(
+        &mut self,
+        address: Address,
+    ) -> Result<StateLoad<&mut Account>, EvmInternalsError> {
+        self.0.load_account_code(address).map_err(EvmInternalsError::database)
+    }
+
+    fn sload(
+        &mut self,
+        address: Address,
+        key: StorageKey,
+    ) -> Result<StateLoad<StorageValue>, EvmInternalsError> {
+        self.0.sload(address, key).map_err(EvmInternalsError::database)
+    }
+
+    fn touch_account(&mut self, address: Address) {
+        self.0.touch_account(address);
+    }
+
+    fn set_code(&mut self, address: Address, code: Bytecode) {
+        self.0.set_code(address, code);
+    }
+
+    fn sstore(
+        &mut self,
+        address: Address,
+        key: StorageKey,
+        value: StorageValue,
+    ) -> Result<StateLoad<SStoreResult>, EvmInternalsError> {
+        self.0.sstore(address, key, value).map_err(EvmInternalsError::database)
+    }
+}
