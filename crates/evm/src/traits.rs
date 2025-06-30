@@ -1,6 +1,7 @@
 //! EVM traits.
 
 use crate::Database;
+use alloc::boxed::Box;
 use alloy_primitives::{Address, B256};
 use core::{error::Error, fmt::Debug};
 use revm::{
