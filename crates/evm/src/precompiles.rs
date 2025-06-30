@@ -134,6 +134,43 @@ impl PrecompilesMap {
         }
     }
 
+    /// Builder-style method that maps a precompile at the given address using the provided
+    /// function.
+    ///
+    /// This is a consuming version of [`map_precompile`](Self::map_precompile) that returns `Self`.
+    pub fn with_mapped_precompile<F>(mut self, address: &Address, f: F) -> Self
+    where
+        F: FnOnce(DynPrecompile) -> DynPrecompile + Send + Sync + 'static,
+    {
+        self.map_precompile(address, f);
+        self
+    }
+
+    /// Builder-style method that maps all precompiles using the provided function.
+    ///
+    /// This is a consuming version of [`map_precompiles`](Self::map_precompiles) that returns
+    /// `Self`.
+    pub fn with_mapped_precompiles<F>(mut self, f: F) -> Self
+    where
+        F: FnMut(&Address, DynPrecompile) -> DynPrecompile,
+    {
+        self.map_precompiles(f);
+        self
+    }
+
+    /// Builder-style method that applies a transformation to the precompile at the given address.
+    ///
+    /// This is a consuming version of [`apply_precompile`](Self::apply_precompile) that returns
+    /// `Self`. See [`apply_precompile`](Self::apply_precompile) for detailed behavior and
+    /// examples.
+    pub fn with_applied_precompile<F>(mut self, address: &Address, f: F) -> Self
+    where
+        F: FnOnce(Option<DynPrecompile>) -> Option<DynPrecompile>,
+    {
+        self.apply_precompile(address, f);
+        self
+    }
+
     /// Ensures that precompiles are in their dynamic representation.
     /// If they are already dynamic, this is a no-op.
     /// Returns a mutable reference to the dynamic precompiles.
