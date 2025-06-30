@@ -1,6 +1,6 @@
 //! Helpers for dealing with Precompiles.
 
-use crate::{Database, EvmInternals, EvmInternalsImpl};
+use crate::{Database, EvmInternals};
 use alloc::{borrow::Cow, boxed::Box, string::String, sync::Arc};
 use alloy_consensus::transaction::Either;
 use alloy_primitives::{
@@ -261,7 +261,7 @@ where
             gas: gas_limit,
             caller: inputs.caller_address,
             value: inputs.call_value,
-            internals: &mut EvmInternalsImpl(journal),
+            internals: EvmInternals::new(journal),
         });
 
         match precompile_result {
@@ -343,7 +343,7 @@ pub struct PrecompileInput<'a> {
     /// Value sent with the call.
     pub value: U256,
     /// Various hooks for interacting with the EVM state.
-    pub internals: &'a mut dyn EvmInternals,
+    pub internals: EvmInternals<'a>,
 }
 
 /// Trait for implementing precompiled contracts.
@@ -411,7 +411,6 @@ mod tests {
         let mut spec_precompiles = PrecompilesMap::from(eth_precompiles);
 
         let mut ctx = EthEvmContext::new(EmptyDB::default(), Default::default());
-        let mut internals = EvmInternalsImpl(ctx.journal_mut());
 
         // create a test input for the precompile (identity precompile)
         let identity_address = address!("0x0000000000000000000000000000000000000004");
@@ -435,7 +434,7 @@ mod tests {
                 gas: gas_limit,
                 caller: Address::ZERO,
                 value: U256::ZERO,
-                internals: &mut internals,
+                internals: EvmInternals::new(ctx.journal_mut()),
             })
             .unwrap();
         assert_eq!(result.bytes, test_input, "Identity precompile should return the input data");
@@ -467,7 +466,7 @@ mod tests {
                 gas: gas_limit,
                 caller: Address::ZERO,
                 value: U256::ZERO,
-                internals: &mut internals,
+                internals: EvmInternals::new(ctx.journal_mut()),
             })
             .unwrap();
         assert_eq!(
@@ -483,7 +482,6 @@ mod tests {
         let gas_limit = 1000;
 
         let mut ctx = EthEvmContext::new(EmptyDB::default(), Default::default());
-        let mut internals = EvmInternalsImpl(ctx.journal_mut());
 
         // define a closure that implements the precompile functionality
         let closure_precompile = |input: PrecompileInput<'_>| -> PrecompileResult {
@@ -500,7 +498,7 @@ mod tests {
                 gas: gas_limit,
                 caller: Address::ZERO,
                 value: U256::ZERO,
-                internals: &mut internals,
+                internals: EvmInternals::new(ctx.journal_mut()),
             })
             .unwrap();
         assert_eq!(result.gas_used, 15);
@@ -513,7 +511,6 @@ mod tests {
         let spec_precompiles = PrecompilesMap::from(eth_precompiles);
 
         let mut ctx = EthEvmContext::new(EmptyDB::default(), Default::default());
-        let mut internals = EvmInternalsImpl(ctx.journal_mut());
 
         let identity_address = address!("0x0000000000000000000000000000000000000004");
         let test_input = Bytes::from_static(b"test data");
@@ -529,7 +526,7 @@ mod tests {
                 gas: gas_limit,
                 caller: Address::ZERO,
                 value: U256::ZERO,
-                internals: &mut internals,
+                internals: EvmInternals::new(ctx.journal_mut()),
             })
             .unwrap();
         assert_eq!(result.bytes, test_input, "Identity precompile should return the input data");
@@ -556,7 +553,7 @@ mod tests {
                 gas: gas_limit,
                 caller: Address::ZERO,
                 value: U256::ZERO,
-                internals: &mut internals,
+                internals: EvmInternals::new(ctx.journal_mut()),
             })
             .unwrap();
         assert_eq!(

@@ -44,35 +44,27 @@ impl EvmInternalsError {
 ///
 /// This trait provides an abstraction over journal operations without exposing
 /// associated types, making it object-safe and suitable for dynamic dispatch.
-pub trait EvmInternals: Database<Error = ErasedError> + Debug {
-    /// Loads the account.
+trait EvmInternalsTr: Database<Error = ErasedError> + Debug {
     fn load_account(
         &mut self,
         address: Address,
     ) -> Result<StateLoad<&mut Account>, EvmInternalsError>;
 
-    /// Loads the account code.
     fn load_account_code(
         &mut self,
         address: Address,
     ) -> Result<StateLoad<&mut Account>, EvmInternalsError>;
 
-    /// Returns the storage value from Journal state.
-    ///
-    /// Loads the storage from database if not found in Journal state.
     fn sload(
         &mut self,
         address: Address,
         key: StorageKey,
     ) -> Result<StateLoad<StorageValue>, EvmInternalsError>;
 
-    /// Touches the account.
     fn touch_account(&mut self, address: Address);
 
-    /// Sets bytecode to the account.
     fn set_code(&mut self, address: Address, code: Bytecode);
 
-    /// Stores the storage value in Journal state.
     fn sstore(
         &mut self,
         address: Address,
@@ -83,7 +75,7 @@ pub trait EvmInternals: Database<Error = ErasedError> + Debug {
 
 /// Helper internal struct for implementing [`EvmInternals`].
 #[derive(Debug)]
-pub(crate) struct EvmInternalsImpl<'a, T>(pub(crate) &'a mut T);
+struct EvmInternalsImpl<'a, T>(&'a mut T);
 
 impl<T> revm::Database for EvmInternalsImpl<'_, T>
 where
@@ -112,7 +104,7 @@ where
     }
 }
 
-impl<T> EvmInternals for EvmInternalsImpl<'_, T>
+impl<T> EvmInternalsTr for EvmInternalsImpl<'_, T>
 where
     T: JournalTr<Database: Database> + Debug,
 {
@@ -153,5 +145,74 @@ where
         value: StorageValue,
     ) -> Result<StateLoad<SStoreResult>, EvmInternalsError> {
         self.0.sstore(address, key, value).map_err(EvmInternalsError::database)
+    }
+}
+
+/// Helper type exposing hooks into EVM.
+#[derive(Debug)]
+pub struct EvmInternals<'a> {
+    internals: Box<dyn EvmInternalsTr + 'a>,
+}
+
+impl<'a> EvmInternals<'a> {
+    /// Creates a new [`EvmInternals`] instance.
+    pub fn new<T>(journal: &'a mut T) -> Self
+    where
+        T: JournalTr<Database: Database> + Debug,
+    {
+        Self { internals: Box::new(EvmInternalsImpl(journal)) }
+    }
+
+    /// Returns a mutable reference to [`Database`] implementation with erased error type.
+    ///
+    /// Users should prefer using other methods for accessing state that rely on cached state in the
+    /// journal instead.
+    pub fn db_mut(&mut self) -> impl Database<Error = ErasedError> + '_ {
+        &mut *self.internals
+    }
+
+    /// Loads an account.
+    pub fn load_account(
+        &mut self,
+        address: Address,
+    ) -> Result<StateLoad<&mut Account>, EvmInternalsError> {
+        self.internals.load_account(address)
+    }
+
+    /// Loads code of an account.
+    pub fn load_account_code(
+        &mut self,
+        address: Address,
+    ) -> Result<StateLoad<&mut Account>, EvmInternalsError> {
+        self.internals.load_account_code(address)
+    }
+
+    /// Loads a storage slot.
+    pub fn sload(
+        &mut self,
+        address: Address,
+        key: StorageKey,
+    ) -> Result<StateLoad<StorageValue>, EvmInternalsError> {
+        self.internals.sload(address, key)
+    }
+
+    /// Touches the account.
+    pub fn touch_account(&mut self, address: Address) {
+        self.internals.touch_account(address);
+    }
+
+    /// Sets bytecode to the account.
+    pub fn set_code(&mut self, address: Address, code: Bytecode) {
+        self.internals.set_code(address, code);
+    }
+
+    /// Stores the storage value in Journal state.
+    pub fn sstore(
+        &mut self,
+        address: Address,
+        key: StorageKey,
+        value: StorageValue,
+    ) -> Result<StateLoad<SStoreResult>, EvmInternalsError> {
+        self.internals.sstore(address, key, value)
     }
 }
