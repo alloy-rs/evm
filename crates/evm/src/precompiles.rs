@@ -9,10 +9,11 @@ use alloy_primitives::{
 };
 use core::fmt::Debug;
 use revm::{
-    context::{Cfg, ContextTr, LocalContextTr},
+    context::LocalContextTr,
     handler::{EthPrecompiles, PrecompileProvider},
     interpreter::{CallInput, Gas, InputsImpl, InstructionResult, InterpreterResult},
     precompile::{PrecompileError, PrecompileFn, PrecompileResult, Precompiles},
+    Context, Journal,
 };
 
 /// A mapping of precompile contracts that can be either static (builtin) or dynamic.
@@ -203,16 +204,23 @@ impl core::fmt::Debug for PrecompilesMap {
     }
 }
 
-impl<CTX: ContextTr<Db: Database, Journal: Debug>> PrecompileProvider<CTX> for PrecompilesMap {
+impl<BlockEnv, TxEnv, CfgEnv, DB, Chain>
+    PrecompileProvider<Context<BlockEnv, TxEnv, CfgEnv, DB, Journal<DB>, Chain>> for PrecompilesMap
+where
+    BlockEnv: revm::context::Block,
+    TxEnv: revm::context::Transaction,
+    CfgEnv: revm::context::Cfg,
+    DB: Database,
+{
     type Output = InterpreterResult;
 
-    fn set_spec(&mut self, _spec: <CTX::Cfg as Cfg>::Spec) -> bool {
+    fn set_spec(&mut self, _spec: CfgEnv::Spec) -> bool {
         false
     }
 
     fn run(
         &mut self,
-        context: &mut CTX,
+        context: &mut Context<BlockEnv, TxEnv, CfgEnv, DB, Journal<DB>, Chain>,
         address: &Address,
         inputs: &InputsImpl,
         _is_static: bool,
@@ -229,27 +237,31 @@ impl<CTX: ContextTr<Db: Database, Journal: Debug>> PrecompileProvider<CTX> for P
             output: Bytes::new(),
         };
 
+        let (local, journal) = (&context.local, &mut context.journaled_state);
+
         // Execute the precompile
+        let r;
         let input_bytes = match &inputs.input {
             CallInput::SharedBuffer(range) => {
                 // `map_or` does not work here as we use `r` to extend lifetime of the slice
                 // and return it.
                 #[allow(clippy::option_if_let_else)]
-                if let Some(slice) = context.local().shared_memory_buffer_slice(range.clone()) {
-                    Bytes::copy_from_slice(&slice)
+                if let Some(slice) = local.shared_memory_buffer_slice(range.clone()) {
+                    r = slice;
+                    &*r
                 } else {
-                    Bytes::new()
+                    &[]
                 }
             }
-            CallInput::Bytes(bytes) => bytes.clone(),
+            CallInput::Bytes(bytes) => bytes.as_ref(),
         };
 
         let precompile_result = precompile.call(PrecompileInput {
-            data: input_bytes.as_ref(),
+            data: input_bytes,
             gas: gas_limit,
             caller: inputs.caller_address,
             value: inputs.call_value,
-            internals: &mut EvmInternalsImpl(context.journal_mut()),
+            internals: &mut EvmInternalsImpl(journal),
         });
 
         match precompile_result {
@@ -392,7 +404,7 @@ mod tests {
 
     use super::*;
     use alloy_primitives::{address, Bytes};
-    use revm::{database::EmptyDB, precompile::PrecompileOutput};
+    use revm::{context::ContextTr, database::EmptyDB, precompile::PrecompileOutput};
 
     #[test]
     fn test_map_precompile() {
