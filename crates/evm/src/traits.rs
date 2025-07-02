@@ -2,7 +2,7 @@
 
 use crate::Database;
 use alloc::boxed::Box;
-use alloy_primitives::{Address, B256};
+use alloy_primitives::{Address, B256, U256};
 use core::{error::Error, fmt, fmt::Debug};
 use revm::{
     context::{Block, DBErrorMarker, JournalTr},
@@ -166,6 +166,16 @@ impl<'a> EvmInternals<'a> {
     /// Returns the  evm's block information.
     pub const fn block_env(&self) -> impl Block + 'a {
         self.block_env
+    }
+
+    /// Returns the current block number.
+    pub fn block_number(&self) -> U256 {
+        self.block_env.number()
+    }
+
+    /// Returns the current block timestamp.
+    pub fn block_timestamp(&self) -> U256 {
+        self.block_env.timestamp()
     }
 
     /// Returns a mutable reference to [`Database`] implementation with erased error type.
