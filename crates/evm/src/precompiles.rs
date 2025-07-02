@@ -298,7 +298,7 @@ where
             gas: gas_limit,
             caller: inputs.caller_address,
             value: inputs.call_value,
-            internals: EvmInternals::new(journal),
+            internals: EvmInternals::new(journal, &context.block),
         });
 
         match precompile_result {
@@ -440,7 +440,7 @@ mod tests {
     use super::*;
     use crate::eth::EthEvmContext;
     use alloy_primitives::{address, Bytes};
-    use revm::{context::ContextTr, database::EmptyDB, precompile::PrecompileOutput};
+    use revm::{context::Block, database::EmptyDB, precompile::PrecompileOutput};
 
     #[test]
     fn test_map_precompile() {
@@ -471,7 +471,7 @@ mod tests {
                 gas: gas_limit,
                 caller: Address::ZERO,
                 value: U256::ZERO,
-                internals: EvmInternals::new(ctx.journal_mut()),
+                internals: EvmInternals::new(&mut ctx.journaled_state, &ctx.block),
             })
             .unwrap();
         assert_eq!(result.bytes, test_input, "Identity precompile should return the input data");
@@ -503,7 +503,7 @@ mod tests {
                 gas: gas_limit,
                 caller: Address::ZERO,
                 value: U256::ZERO,
-                internals: EvmInternals::new(ctx.journal_mut()),
+                internals: EvmInternals::new(&mut ctx.journaled_state, &ctx.block),
             })
             .unwrap();
         assert_eq!(
@@ -522,6 +522,7 @@ mod tests {
 
         // define a closure that implements the precompile functionality
         let closure_precompile = |input: PrecompileInput<'_>| -> PrecompileResult {
+            let _timestamp = input.internals.block_env().timestamp();
             let mut output = b"processed: ".to_vec();
             output.extend_from_slice(input.data.as_ref());
             Ok(PrecompileOutput { gas_used: 15, bytes: Bytes::from(output) })
@@ -535,7 +536,7 @@ mod tests {
                 gas: gas_limit,
                 caller: Address::ZERO,
                 value: U256::ZERO,
-                internals: EvmInternals::new(ctx.journal_mut()),
+                internals: EvmInternals::new(&mut ctx.journaled_state, &ctx.block),
             })
             .unwrap();
         assert_eq!(result.gas_used, 15);
@@ -563,7 +564,7 @@ mod tests {
                 gas: gas_limit,
                 caller: Address::ZERO,
                 value: U256::ZERO,
-                internals: EvmInternals::new(ctx.journal_mut()),
+                internals: EvmInternals::new(&mut ctx.journaled_state, &ctx.block),
             })
             .unwrap();
         assert_eq!(result.bytes, test_input, "Identity precompile should return the input data");
@@ -590,7 +591,7 @@ mod tests {
                 gas: gas_limit,
                 caller: Address::ZERO,
                 value: U256::ZERO,
-                internals: EvmInternals::new(ctx.journal_mut()),
+                internals: EvmInternals::new(&mut ctx.journaled_state, &ctx.block),
             })
             .unwrap();
         assert_eq!(

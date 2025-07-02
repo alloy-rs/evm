@@ -3,9 +3,9 @@
 use crate::Database;
 use alloc::boxed::Box;
 use alloy_primitives::{Address, B256};
-use core::{error::Error, fmt::Debug};
+use core::{error::Error, fmt, fmt::Debug};
 use revm::{
-    context::{DBErrorMarker, JournalTr},
+    context::{Block, DBErrorMarker, JournalTr},
     interpreter::{SStoreResult, StateLoad},
     primitives::{StorageKey, StorageValue},
     state::{Account, AccountInfo, Bytecode},
@@ -148,19 +148,24 @@ where
     }
 }
 
-/// Helper type exposing hooks into EVM.
-#[derive(Debug)]
+/// Helper type exposing hooks into EVM and access to evm internal settings.
 pub struct EvmInternals<'a> {
     internals: Box<dyn EvmInternalsTr + 'a>,
+    block_env: &'a (dyn Block + 'a),
 }
 
 impl<'a> EvmInternals<'a> {
     /// Creates a new [`EvmInternals`] instance.
-    pub fn new<T>(journal: &'a mut T) -> Self
+    pub(crate) fn new<T>(journal: &'a mut T, block_env: &'a dyn Block) -> Self
     where
         T: JournalTr<Database: Database> + Debug,
     {
-        Self { internals: Box::new(EvmInternalsImpl(journal)) }
+        Self { internals: Box::new(EvmInternalsImpl(journal)), block_env }
+    }
+
+    /// Returns the  evm's block information.
+    pub const fn block_env(&self) -> impl Block + 'a {
+        self.block_env
     }
 
     /// Returns a mutable reference to [`Database`] implementation with erased error type.
@@ -214,5 +219,14 @@ impl<'a> EvmInternals<'a> {
         value: StorageValue,
     ) -> Result<StateLoad<SStoreResult>, EvmInternalsError> {
         self.internals.sstore(address, key, value)
+    }
+}
+
+impl<'a> fmt::Debug for EvmInternals<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("EvmInternals")
+            .field("internals", &self.internals)
+            .field("block_env", &"{{}}")
+            .finish_non_exhaustive()
     }
 }
