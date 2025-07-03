@@ -387,6 +387,37 @@ pub struct PrecompileInput<'a> {
 pub trait Precompile {
     /// Execute the precompile with the given input data, gas limit, and caller address.
     fn call(&self, input: PrecompileInput<'_>) -> PrecompileResult;
+
+    /// Returns whether the precompile is pure.
+    ///
+    /// A pure precompile has deterministic output based solely on its input.
+    /// Non-pure precompiles may produce different outputs for the same input
+    /// based on the current state or other external factors.
+    ///
+    /// # Default
+    ///
+    /// Returns `false` by default, indicating the precompile is not pure
+    /// and its results should not be cached. This conservative default ensures
+    /// that state-dependent precompiles work correctly without explicit configuration.
+    ///
+    /// # Examples
+    ///
+    /// Override this method to return `true` for deterministic precompiles:
+    ///
+    /// ```ignore
+    /// impl Precompile for MyDeterministicPrecompile {
+    ///     fn call(&self, input: PrecompileInput<'_>) -> PrecompileResult {
+    ///         // deterministic computation based only on input
+    ///     }
+    ///
+    ///     fn is_pure(&self) -> bool {
+    ///         true // This precompile always produces the same output for the same input
+    ///     }
+    /// }
+    /// ```
+    fn is_pure(&self) -> bool {
+        false
+    }
 }
 
 impl<F> Precompile for F
@@ -418,11 +449,19 @@ impl Precompile for DynPrecompile {
     fn call(&self, input: PrecompileInput<'_>) -> PrecompileResult {
         self.0.call(input)
     }
+
+    fn is_pure(&self) -> bool {
+        self.0.is_pure()
+    }
 }
 
 impl Precompile for &DynPrecompile {
     fn call(&self, input: PrecompileInput<'_>) -> PrecompileResult {
         self.0.call(input)
+    }
+
+    fn is_pure(&self) -> bool {
+        self.0.is_pure()
     }
 }
 
@@ -431,6 +470,13 @@ impl<A: Precompile, B: Precompile> Precompile for Either<A, B> {
         match self {
             Self::Left(p) => p.call(input),
             Self::Right(p) => p.call(input),
+        }
+    }
+
+    fn is_pure(&self) -> bool {
+        match self {
+            Self::Left(p) => p.is_pure(),
+            Self::Right(p) => p.is_pure(),
         }
     }
 }
@@ -541,6 +587,43 @@ mod tests {
             .unwrap();
         assert_eq!(result.gas_used, 15);
         assert_eq!(result.bytes, expected_output);
+    }
+
+    #[test]
+    fn test_is_pure() {
+        // Test default behavior (should be false)
+        let closure_precompile = |_input: PrecompileInput<'_>| -> PrecompileResult {
+            Ok(PrecompileOutput { gas_used: 10, bytes: Bytes::from_static(b"output") })
+        };
+
+        let dyn_precompile: DynPrecompile = closure_precompile.into();
+        assert!(!dyn_precompile.is_pure(), "closures should not be pure");
+
+        // Test custom precompile with overridden is_pure
+        struct PurePrecompile;
+        impl Precompile for PurePrecompile {
+            fn call(&self, _input: PrecompileInput<'_>) -> PrecompileResult {
+                Ok(PrecompileOutput { gas_used: 10, bytes: Bytes::from_static(b"deterministic") })
+            }
+
+            fn is_pure(&self) -> bool {
+                true
+            }
+        }
+
+        let pure_precompile = PurePrecompile;
+        assert!(pure_precompile.is_pure(), "PurePrecompile should return true for is_pure");
+
+        // Test Either implementation
+        let non_pure =
+            DynPrecompile::new(|_| Ok(PrecompileOutput { gas_used: 10, bytes: Bytes::default() }));
+        let pure = PurePrecompile;
+
+        let either_left = Either::<DynPrecompile, PurePrecompile>::Left(non_pure);
+        assert!(!either_left.is_pure(), "Either::Left with non-pure should return false");
+
+        let either_right = Either::<DynPrecompile, PurePrecompile>::Right(pure);
+        assert!(either_right.is_pure(), "Either::Right with pure should return true");
     }
 
     #[test]
