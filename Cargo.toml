@@ -53,8 +53,8 @@ alloy-op-hardforks = { version = "0.2" }
 op-alloy-consensus = { version = "0.18", default-features = false }
 
 # revm
-revm = { version = "27.0.1", default-features = false }
-op-revm = { version = "8.0.1", default-features = false }
+revm = { version = "27.0.2", default-features = false }
+op-revm = { version = "8.0.2", default-features = false }
 
 # misc
 auto_impl = "1"
