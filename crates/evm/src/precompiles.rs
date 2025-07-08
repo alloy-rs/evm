@@ -342,6 +342,20 @@ impl DynPrecompile {
     {
         Self(Arc::new(f))
     }
+
+    /// Creates a new [`DynPrecompiles`] with the given closure and [`Precompile::is_pure`]
+    /// returning `false`.
+    pub fn new_stateful<F>(f: F) -> Self
+    where
+        F: Fn(PrecompileInput<'_>) -> PrecompileResult + Send + Sync + 'static,
+    {
+        Self(Arc::new(StatefulPrecompile(f)))
+    }
+
+    /// Flips [`Precompile::is_pure`] to `false`.
+    pub fn stateful(self) -> Self {
+        Self(Arc::new(StatefulPrecompile(self.0)))
+    }
 }
 
 impl core::fmt::Debug for DynPrecompile {
@@ -384,6 +398,7 @@ pub struct PrecompileInput<'a> {
 }
 
 /// Trait for implementing precompiled contracts.
+#[auto_impl::auto_impl(Arc)]
 pub trait Precompile {
     /// Execute the precompile with the given input data, gas limit, and caller address.
     fn call(&self, input: PrecompileInput<'_>) -> PrecompileResult;
@@ -396,27 +411,26 @@ pub trait Precompile {
     ///
     /// # Default
     ///
-    /// Returns `false` by default, indicating the precompile is not pure
-    /// and its results should not be cached. This conservative default ensures
-    /// that state-dependent precompiles work correctly without explicit configuration.
+    /// Returns `true` by default, indicating the precompile is pure
+    /// and its results should be cached as this is what most of the precompiles are.
     ///
     /// # Examples
     ///
-    /// Override this method to return `true` for deterministic precompiles:
+    /// Override this method to return `false` for non-deterministic precompiles:
     ///
     /// ```ignore
     /// impl Precompile for MyDeterministicPrecompile {
     ///     fn call(&self, input: PrecompileInput<'_>) -> PrecompileResult {
-    ///         // deterministic computation based only on input
+    ///         // non-deterministic computation dependent on state
     ///     }
     ///
     ///     fn is_pure(&self) -> bool {
-    ///         true // This precompile always produces the same output for the same input
+    ///         false // This precompile might produce different output for the same input
     ///     }
     /// }
     /// ```
     fn is_pure(&self) -> bool {
-        false
+        true
     }
 }
 
@@ -478,6 +492,18 @@ impl<A: Precompile, B: Precompile> Precompile for Either<A, B> {
             Self::Left(p) => p.is_pure(),
             Self::Right(p) => p.is_pure(),
         }
+    }
+}
+
+struct StatefulPrecompile<P>(P);
+
+impl<P: Precompile> Precompile for StatefulPrecompile<P> {
+    fn call(&self, input: PrecompileInput<'_>) -> PrecompileResult {
+        self.0.call(input)
+    }
+
+    fn is_pure(&self) -> bool {
+        false
     }
 }
 
