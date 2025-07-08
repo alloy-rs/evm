@@ -623,32 +623,16 @@ mod tests {
         };
 
         let dyn_precompile: DynPrecompile = closure_precompile.into();
-        assert!(!dyn_precompile.is_pure(), "closures should not be pure");
+        assert!(dyn_precompile.is_pure(), "should be pure by default");
 
         // Test custom precompile with overridden is_pure
-        struct PurePrecompile;
-        impl Precompile for PurePrecompile {
-            fn call(&self, _input: PrecompileInput<'_>) -> PrecompileResult {
-                Ok(PrecompileOutput { gas_used: 10, bytes: Bytes::from_static(b"deterministic") })
-            }
+        let stateful_precompile = DynPrecompile::new_stateful(closure_precompile);
+        assert!(!stateful_precompile.is_pure(), "PurePrecompile should return true for is_pure");
 
-            fn is_pure(&self) -> bool {
-                true
-            }
-        }
-
-        let pure_precompile = PurePrecompile;
-        assert!(pure_precompile.is_pure(), "PurePrecompile should return true for is_pure");
-
-        // Test Either implementation
-        let non_pure =
-            DynPrecompile::new(|_| Ok(PrecompileOutput { gas_used: 10, bytes: Bytes::default() }));
-        let pure = PurePrecompile;
-
-        let either_left = Either::<DynPrecompile, PurePrecompile>::Left(non_pure);
+        let either_left = Either::<DynPrecompile, DynPrecompile>::Left(stateful_precompile);
         assert!(!either_left.is_pure(), "Either::Left with non-pure should return false");
 
-        let either_right = Either::<DynPrecompile, PurePrecompile>::Right(pure);
+        let either_right = Either::<DynPrecompile, DynPrecompile>::Right(dyn_precompile);
         assert!(either_right.is_pure(), "Either::Right with pure should return true");
     }
 
