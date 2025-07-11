@@ -30,15 +30,6 @@ pub struct TracingCtx<'a, T, E: Evm> {
     pub db: &'a mut E::DB,
 }
 
-/// Output of tracing a transaction.
-#[derive(Debug, Clone)]
-pub struct TraceOutput<H, I> {
-    /// Inner EVM output.
-    pub result: ExecutionResult<H>,
-    /// Inspector state at the end of the execution.
-    pub inspector: I,
-}
-
 impl<E: Evm<Inspector: Clone, DB: DatabaseCommit>> TxTracer<E> {
     /// Creates a new [`TxTracer`] instance.
     pub fn new(mut evm: E) -> Self {
@@ -89,6 +80,15 @@ impl<E: Evm<Inspector: Clone, DB: DatabaseCommit>> TxTracer<E> {
     {
         TracerIter { inner: self, txs: txs.into_iter().peekable(), hook, skip_last_commit: true }
     }
+}
+
+/// Output of tracing a transaction.
+#[derive(Debug, Clone)]
+pub struct TraceOutput<H, I> {
+    /// Inner EVM output.
+    pub result: ExecutionResult<H>,
+    /// Inspector state at the end of the execution.
+    pub inspector: I,
 }
 
 /// Iterator used by tracer.
