@@ -100,8 +100,15 @@ pub trait Evm {
         data: Bytes,
     ) -> Result<ResultAndState<Self::HaltReason>, Self::Error>;
 
+    /// Returns an immutable reference to the underlying database.
+    fn db(&self) -> &Self::DB {
+        self.components().0
+    }
+
     /// Returns a mutable reference to the underlying database.
-    fn db_mut(&mut self) -> &mut Self::DB;
+    fn db_mut(&mut self) -> &mut Self::DB {
+        self.components_mut().0
+    }
 
     /// Executes a transaction and commits the state changes to the underlying database.
     fn transact_commit(
@@ -158,16 +165,30 @@ pub trait Evm {
     }
 
     /// Getter of precompiles.
-    fn precompiles(&self) -> &Self::Precompiles;
+    fn precompiles(&self) -> &Self::Precompiles {
+        self.components().2
+    }
 
     /// Mutable getter of precompiles.
-    fn precompiles_mut(&mut self) -> &mut Self::Precompiles;
+    fn precompiles_mut(&mut self) -> &mut Self::Precompiles {
+        self.components_mut().2
+    }
 
     /// Getter of inspector.
-    fn inspector(&self) -> &Self::Inspector;
+    fn inspector(&self) -> &Self::Inspector {
+        self.components().1
+    }
 
     /// Mutable getter of inspector.
-    fn inspector_mut(&mut self) -> &mut Self::Inspector;
+    fn inspector_mut(&mut self) -> &mut Self::Inspector {
+        self.components_mut().1
+    }
+
+    /// Provides immutable references to the database, inspector and precompiles.
+    fn components(&self) -> (&Self::DB, &Self::Inspector, &Self::Precompiles);
+
+    /// Provides mutable references to the database, inspector and precompiles.
+    fn components_mut(&mut self) -> (&mut Self::DB, &mut Self::Inspector, &mut Self::Precompiles);
 }
 
 /// A type responsible for creating instances of an ethereum virtual machine given a certain input.

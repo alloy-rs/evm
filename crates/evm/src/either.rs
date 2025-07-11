@@ -54,10 +54,6 @@ where
         either::for_both!(self, evm => evm.transact_system_call(caller, contract, data))
     }
 
-    fn db_mut(&mut self) -> &mut Self::DB {
-        either::for_both!(self, evm => evm.db_mut())
-    }
-
     fn transact_commit(
         &mut self,
         tx: impl crate::IntoTxEnv<Self::Tx>,
@@ -101,19 +97,11 @@ where
         either::for_both!(self, evm => evm.disable_inspector())
     }
 
-    fn precompiles(&self) -> &Self::Precompiles {
-        either::for_both!(self, evm => evm.precompiles())
+    fn components(&self) -> (&Self::DB, &Self::Inspector, &Self::Precompiles) {
+        either::for_both!(self, evm => evm.components())
     }
 
-    fn precompiles_mut(&mut self) -> &mut Self::Precompiles {
-        either::for_both!(self, evm => evm.precompiles_mut())
-    }
-
-    fn inspector(&self) -> &Self::Inspector {
-        either::for_both!(self, evm => evm.inspector())
-    }
-
-    fn inspector_mut(&mut self) -> &mut Self::Inspector {
-        either::for_both!(self, evm => evm.inspector_mut())
+    fn components_mut(&mut self) -> (&mut Self::DB, &mut Self::Inspector, &mut Self::Precompiles) {
+        either::for_both!(self, evm => evm.components_mut())
     }
 }

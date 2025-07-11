@@ -188,10 +188,6 @@ where
         res
     }
 
-    fn db_mut(&mut self) -> &mut Self::DB {
-        &mut self.journaled_state.database
-    }
-
     fn finish(self) -> (Self::DB, EvmEnv<Self::Spec>) {
         let Context { block: block_env, cfg: cfg_env, journaled_state, .. } = self.inner.0.ctx;
 
@@ -202,20 +198,20 @@ where
         self.inspect = enabled;
     }
 
-    fn precompiles(&self) -> &Self::Precompiles {
-        &self.inner.0.precompiles
+    fn components(&self) -> (&Self::DB, &Self::Inspector, &Self::Precompiles) {
+        (
+            &self.inner.0.ctx.journaled_state.database,
+            &self.inner.0.inspector,
+            &self.inner.0.precompiles,
+        )
     }
 
-    fn precompiles_mut(&mut self) -> &mut Self::Precompiles {
-        &mut self.inner.0.precompiles
-    }
-
-    fn inspector(&self) -> &Self::Inspector {
-        &self.inner.0.inspector
-    }
-
-    fn inspector_mut(&mut self) -> &mut Self::Inspector {
-        &mut self.inner.0.inspector
+    fn components_mut(&mut self) -> (&mut Self::DB, &mut Self::Inspector, &mut Self::Precompiles) {
+        (
+            &mut self.inner.0.ctx.journaled_state.database,
+            &mut self.inner.0.inspector,
+            &mut self.inner.0.precompiles,
+        )
     }
 }
 
