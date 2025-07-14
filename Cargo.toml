@@ -66,3 +66,7 @@ serde_json = "1"
 #[patch.crates-io]
 #revm = { git = "https://github.com/bluealloy/revm", rev = "11b16259" }
 #op-revm = { git = "https://github.com/bluealloy/revm", rev = "11b16259" }
+
+[patch.crates-io]
+revm = { git = "https://github.com/bluealloy/revm", rev = "b0c475d0" }
+op-revm = { git = "https://github.com/bluealloy/revm", rev = "b0c475d0" }
