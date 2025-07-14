@@ -30,11 +30,14 @@ pub struct TracingCtx<'a, T, E: Evm> {
     pub db: &'a mut E::DB,
     /// Fused inspector.
     fused_inspector: &'a E::Inspector,
+    /// Whether the inspector was fused.
+    was_fused: &'a mut bool,
 }
 
 impl<'a, T, E: Evm<Inspector: Clone>> TracingCtx<'a, T, E> {
     /// Fuses the inspector and returns the current inspector state.
     pub fn take_inspector(&mut self) -> E::Inspector {
+        *self.was_fused = true;
         core::mem::replace(self.inspector, self.fused_inspector.clone())
     }
 }
@@ -154,6 +157,7 @@ where
         let Ok(ResultAndState { result, state }) = result else {
             return None;
         };
+        let mut was_fused = false;
         let output = (self.hook)(TracingCtx {
             tx,
             result,
@@ -161,6 +165,7 @@ where
             inspector,
             db,
             fused_inspector: &*fused_inspector,
+            was_fused: &mut was_fused,
         });
 
         // Only commit next transaction if `skip_last_commit` is disabled or there is a next
@@ -169,7 +174,7 @@ where
             db.commit(state);
         }
 
-        if self.fuse {
+        if self.fuse && !was_fused {
             self.inner.fuse_inspector();
         }
 
