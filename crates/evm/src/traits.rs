@@ -2,7 +2,7 @@
 
 use crate::Database;
 use alloc::boxed::Box;
-use alloy_primitives::{Address, B256, U256};
+use alloy_primitives::{Address, Log, B256, U256};
 use core::{error::Error, fmt, fmt::Debug};
 use revm::{
     context::{Block, DBErrorMarker, JournalTr},
@@ -71,6 +71,8 @@ trait EvmInternalsTr: Database<Error = ErasedError> + Debug {
         key: StorageKey,
         value: StorageValue,
     ) -> Result<StateLoad<SStoreResult>, EvmInternalsError>;
+
+    fn log(&mut self, log: Log);
 }
 
 /// Helper internal struct for implementing [`EvmInternals`].
@@ -145,6 +147,10 @@ where
         value: StorageValue,
     ) -> Result<StateLoad<SStoreResult>, EvmInternalsError> {
         self.0.sstore(address, key, value).map_err(EvmInternalsError::database)
+    }
+
+    fn log(&mut self, log: Log) {
+        self.0.log(log);
     }
 }
 
@@ -229,6 +235,11 @@ impl<'a> EvmInternals<'a> {
         value: StorageValue,
     ) -> Result<StateLoad<SStoreResult>, EvmInternalsError> {
         self.internals.sstore(address, key, value)
+    }
+
+    /// Logs the log in Journal state.
+    pub fn log(&mut self, log: Log) {
+        self.internals.log(log);
     }
 }
 
