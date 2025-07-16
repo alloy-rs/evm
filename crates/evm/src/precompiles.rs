@@ -21,11 +21,9 @@ use revm::{
 /// This is an optimization that allows us to keep using the static precompiles
 /// until we need to modify them, at which point we convert to the dynamic representation.
 #[derive(Clone)]
-pub enum PrecompilesMap {
-    /// Static builtin precompiles.
-    Builtin(Cow<'static, Precompiles>),
-    /// Dynamic precompiles that can be modified at runtime.
-    Dynamic(DynPrecompiles),
+pub struct PrecompilesMap {
+    /// The wrapped precompiles in their current representation.
+    precompiles: PrecompilesKind,
 }
 
 impl PrecompilesMap {
@@ -36,7 +34,7 @@ impl PrecompilesMap {
 
     /// Creates a new set of precompiles for a spec.
     pub fn new(precompiles: Cow<'static, Precompiles>) -> Self {
-        Self::Builtin(precompiles)
+        Self { precompiles: PrecompilesKind::Builtin(precompiles) }
     }
 
     /// Maps a precompile at the given address using the provided function.
@@ -178,7 +176,7 @@ impl PrecompilesMap {
     /// If they are already dynamic, this is a no-op.
     /// Returns a mutable reference to the dynamic precompiles.
     pub fn ensure_dynamic_precompiles(&mut self) -> &mut DynPrecompiles {
-        if let Self::Builtin(ref precompiles_cow) = self {
+        if let PrecompilesKind::Builtin(ref precompiles_cow) = self.precompiles {
             let mut dynamic = DynPrecompiles::default();
 
             let static_precompiles = match precompiles_cow {
@@ -195,30 +193,34 @@ impl PrecompilesMap {
                 dynamic.addresses.insert(*addr);
             }
 
-            *self = Self::Dynamic(dynamic);
+            self.precompiles = PrecompilesKind::Dynamic(dynamic);
         }
 
-        match self {
-            Self::Dynamic(dynamic) => dynamic,
+        match &mut self.precompiles {
+            PrecompilesKind::Dynamic(dynamic) => dynamic,
             _ => unreachable!("We just ensured that this is a Dynamic variant"),
         }
     }
 
     /// Returns an iterator over references to precompile addresses.
     pub fn addresses(&self) -> impl Iterator<Item = &Address> {
-        match self {
-            Self::Builtin(precompiles) => Either::Left(precompiles.addresses()),
-            Self::Dynamic(dyn_precompiles) => Either::Right(dyn_precompiles.addresses.iter()),
+        match &self.precompiles {
+            PrecompilesKind::Builtin(precompiles) => Either::Left(precompiles.addresses()),
+            PrecompilesKind::Dynamic(dyn_precompiles) => {
+                Either::Right(dyn_precompiles.addresses.iter())
+            }
         }
     }
 
     /// Gets a reference to the precompile at the given address.
     pub fn get(&self, address: &Address) -> Option<impl Precompile + '_> {
-        match self {
-            Self::Builtin(precompiles) => precompiles
+        match &self.precompiles {
+            PrecompilesKind::Builtin(precompiles) => precompiles
                 .get(address)
                 .map(|f| Either::Left(|input: PrecompileInput<'_>| f(input.data, input.gas))),
-            Self::Dynamic(dyn_precompiles) => dyn_precompiles.inner.get(address).map(Either::Right),
+            PrecompilesKind::Dynamic(dyn_precompiles) => {
+                dyn_precompiles.inner.get(address).map(Either::Right)
+            }
         }
     }
 }
@@ -231,9 +233,9 @@ impl From<EthPrecompiles> for PrecompilesMap {
 
 impl core::fmt::Debug for PrecompilesMap {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            Self::Builtin(_) => f.debug_struct("PrecompilesMap::Builtin").finish(),
-            Self::Dynamic(precompiles) => f
+        match &self.precompiles {
+            PrecompilesKind::Builtin(_) => f.debug_struct("PrecompilesMap::Builtin").finish(),
+            PrecompilesKind::Dynamic(precompiles) => f
                 .debug_struct("PrecompilesMap::Dynamic")
                 .field("addresses", &precompiles.addresses)
                 .finish(),
@@ -328,6 +330,18 @@ where
     fn contains(&self, address: &Address) -> bool {
         self.get(address).is_some()
     }
+}
+
+/// A mapping of precompile contracts that can be either static (builtin) or dynamic.
+///
+/// This is an optimization that allows us to keep using the static precompiles
+/// until we need to modify them, at which point we convert to the dynamic representation.
+#[derive(Clone)]
+enum PrecompilesKind {
+    /// Static builtin precompiles.
+    Builtin(Cow<'static, Precompiles>),
+    /// Dynamic precompiles that can be modified at runtime.
+    Dynamic(DynPrecompiles),
 }
 
 /// A dynamic precompile implementation that can be modified at runtime.
@@ -530,8 +544,8 @@ mod tests {
         spec_precompiles.ensure_dynamic_precompiles();
 
         // using the dynamic precompiles interface
-        let dyn_precompile = match &spec_precompiles {
-            PrecompilesMap::Dynamic(dyn_precompiles) => {
+        let dyn_precompile = match &spec_precompiles.precompiles {
+            PrecompilesKind::Dynamic(dyn_precompiles) => {
                 dyn_precompiles.inner.get(&identity_address).unwrap()
             }
             _ => panic!("Expected dynamic precompiles"),
@@ -562,8 +576,8 @@ mod tests {
         });
 
         // get the modified precompile and check it
-        let dyn_precompile = match &spec_precompiles {
-            PrecompilesMap::Dynamic(dyn_precompiles) => {
+        let dyn_precompile = match &spec_precompiles.precompiles {
+            PrecompilesKind::Dynamic(dyn_precompiles) => {
                 dyn_precompiles.inner.get(&identity_address).unwrap()
             }
             _ => panic!("Expected dynamic precompiles"),
