@@ -50,7 +50,10 @@ impl<T, F: FnMut() -> T> InspectorInitializer<T> for FnInitializer<T, F> {
 
 /// A helper type for tracing transactions.
 #[derive(Debug, Clone)]
-pub struct TxTracer<E: Evm, Init: InspectorInitializer<E::Inspector> = CloneInitializer<<E as Evm>::Inspector>> {
+pub struct TxTracer<
+    E: Evm,
+    Init: InspectorInitializer<E::Inspector> = CloneInitializer<<E as Evm>::Inspector>,
+> {
     evm: E,
     fused_inspector: E::Inspector,
     initializer: Init,
@@ -58,7 +61,12 @@ pub struct TxTracer<E: Evm, Init: InspectorInitializer<E::Inspector> = CloneInit
 
 /// Container type for context exposed in [`TxTracer`].
 #[derive(Debug)]
-pub struct TracingCtx<'a, T, E: Evm, Init: InspectorInitializer<E::Inspector> = CloneInitializer<<E as Evm>::Inspector>> {
+pub struct TracingCtx<
+    'a,
+    T,
+    E: Evm,
+    Init: InspectorInitializer<E::Inspector> = CloneInitializer<<E as Evm>::Inspector>,
+> {
     /// The transaction that was just executed.
     pub tx: T,
     /// Result of transaction execution.
@@ -79,8 +87,8 @@ pub struct TracingCtx<'a, T, E: Evm, Init: InspectorInitializer<E::Inspector> = 
 
 impl<'a, T, E: Evm, Init: InspectorInitializer<E::Inspector>> TracingCtx<'a, T, E, Init> {
     /// Takes the current inspector and replaces it with a fresh one.
-    /// 
-    /// This is useful when you want to keep the current inspector state but continue 
+    ///
+    /// This is useful when you want to keep the current inspector state but continue
     /// tracing with a new one.
     pub fn take_inspector(&mut self) -> E::Inspector
     where
@@ -123,7 +131,13 @@ impl<E: Evm<DB: DatabaseCommit>, Init: InspectorInitializer<E::Inspector>> TxTra
         &mut self,
         txs: Txs,
         mut f: F,
-    ) -> TracerIter<'_, E, Init, Txs::IntoIter, impl FnMut(TracingCtx<'_, T, E, Init>) -> Result<O, E::Error>>
+    ) -> TracerIter<
+        '_,
+        E,
+        Init,
+        Txs::IntoIter,
+        impl FnMut(TracingCtx<'_, T, E, Init>) -> Result<O, E::Error>,
+    >
     where
         T: IntoTxEnv<E::Tx> + Clone,
         Txs: IntoIterator<Item = T>,
@@ -154,9 +168,8 @@ impl<E: Evm<DB: DatabaseCommit>, Init: InspectorInitializer<E::Inspector>> TxTra
     }
 }
 
-
-impl<E: Evm<DB: DatabaseCommit>> TxTracer<E, CloneInitializer<E::Inspector>> 
-where 
+impl<E: Evm<DB: DatabaseCommit>> TxTracer<E, CloneInitializer<E::Inspector>>
+where
     E::Inspector: Clone,
 {
     /// Creates a new [`TxTracer`] instance with a cloneable inspector.
@@ -186,7 +199,9 @@ pub struct TracerIter<'a, E: Evm, Init: InspectorInitializer<E::Inspector>, Txs:
     fuse: bool,
 }
 
-impl<E: Evm, Init: InspectorInitializer<E::Inspector>, Txs: Iterator, F> TracerIter<'_, E, Init, Txs, F> {
+impl<E: Evm, Init: InspectorInitializer<E::Inspector>, Txs: Iterator, F>
+    TracerIter<'_, E, Init, Txs, F>
+{
     /// Flips the `skip_last_commit` flag thus making sure all transaction are committed.
     ///
     /// We are skipping last commit by default as it's expected that when tracing users are mostly
