@@ -1,7 +1,7 @@
 //! Helpers for tracing.
 
 use crate::{Evm, IntoTxEnv};
-use core::{fmt::Debug, iter::Peekable};
+use core::{fmt::Debug, iter::Peekable, marker};
 use revm::{
     context::result::{ExecutionResult, ResultAndState},
     state::EvmState,
@@ -9,41 +9,41 @@ use revm::{
 };
 
 /// Trait for inspector initialization.
-pub trait InspectorInitializer<T> {
+pub trait InspectorInitializer<T, E> {
     /// Create a new inspector instance.
-    fn initialize(&mut self) -> T;
+    fn initialize(&mut self) -> Result<T, E>;
 }
 
 /// A simple initializer that clones the inspector.
 #[derive(Debug, Clone)]
-pub struct CloneInitializer<T: Clone>(T);
+pub struct CloneInitializer<T: Clone, E>(T, marker::PhantomData<E>);
 
-impl<T: Clone> CloneInitializer<T> {
+impl<T: Clone, E> CloneInitializer<T, E> {
     /// Create a new clone initializer.
     pub fn new(value: T) -> Self {
-        Self(value)
+        Self(value, marker::PhantomData)
     }
 }
 
-impl<T: Clone> InspectorInitializer<T> for CloneInitializer<T> {
-    fn initialize(&mut self) -> T {
-        self.0.clone()
+impl<T: Clone, E> InspectorInitializer<T, E> for CloneInitializer<T, E> {
+    fn initialize(&mut self) -> Result<T, E> {
+        Ok(self.0.clone())
     }
 }
 
 /// An initializer that creates inspectors using a closure.
 #[derive(Debug)]
-pub struct FnInitializer<T, F: FnMut() -> T>(F);
+pub struct FnInitializer<T, E, F: FnMut() -> Result<T, E>>(F);
 
-impl<T, F: FnMut() -> T> FnInitializer<T, F> {
+impl<T, E, F: FnMut() -> Result<T, E>> FnInitializer<T, E, F> {
     /// Create a new function initializer.
     pub fn new(f: F) -> Self {
         Self(f)
     }
 }
 
-impl<T, F: FnMut() -> T> InspectorInitializer<T> for FnInitializer<T, F> {
-    fn initialize(&mut self) -> T {
+impl<T, E, F: FnMut() -> Result<T, E>> InspectorInitializer<T, E> for FnInitializer<T, E, F> {
+    fn initialize(&mut self) -> Result<T, E> {
         (self.0)()
     }
 }
@@ -52,7 +52,10 @@ impl<T, F: FnMut() -> T> InspectorInitializer<T> for FnInitializer<T, F> {
 #[derive(Debug, Clone)]
 pub struct TxTracer<
     E: Evm,
-    Init: InspectorInitializer<E::Inspector> = CloneInitializer<<E as Evm>::Inspector>,
+    Init: InspectorInitializer<E::Inspector, E::Error> = CloneInitializer<
+        <E as Evm>::Inspector,
+        <E as Evm>::Error,
+    >,
 > {
     evm: E,
     fused_inspector: E::Inspector,
@@ -65,7 +68,10 @@ pub struct TracingCtx<
     'a,
     T,
     E: Evm,
-    Init: InspectorInitializer<E::Inspector> = CloneInitializer<<E as Evm>::Inspector>,
+    Init: InspectorInitializer<E::Inspector, E::Error> = CloneInitializer<
+        <E as Evm>::Inspector,
+        <E as Evm>::Error,
+    >,
 > {
     /// The transaction that was just executed.
     pub tx: T,
@@ -78,37 +84,39 @@ pub struct TracingCtx<
     /// Database used when executing the transaction, _before_ committing the state changes.
     pub db: &'a mut E::DB,
     /// Fused inspector.
-    pub fused_inspector: &'a E::Inspector,
+    fused_inspector: &'a E::Inspector,
     /// Whether the inspector was fused.
     was_fused: &'a mut bool,
     /// Reference to the initializer.
     initializer: &'a mut Init,
 }
 
-impl<'a, T, E: Evm, Init: InspectorInitializer<E::Inspector>> TracingCtx<'a, T, E, Init> {
+impl<'a, T, E: Evm, Init: InspectorInitializer<E::Inspector, E::Error>> TracingCtx<'a, T, E, Init> {
     /// Takes the current inspector and replaces it with a fresh one.
     ///
     /// This is useful when you want to keep the current inspector state but continue
     /// tracing with a new one.
-    pub fn take_inspector(&mut self) -> E::Inspector
+    pub fn take_inspector(&mut self) -> Result<E::Inspector, E::Error>
     where
         E::Inspector: Clone,
     {
         *self.was_fused = true;
-        core::mem::replace(self.inspector, self.initializer.initialize())
+        Ok(core::mem::replace(self.inspector, self.initializer.initialize()?))
     }
 }
 
-impl<E: Evm<DB: DatabaseCommit>, Init: InspectorInitializer<E::Inspector>> TxTracer<E, Init> {
+impl<E: Evm<DB: DatabaseCommit>, Init: InspectorInitializer<E::Inspector, E::Error>>
+    TxTracer<E, Init>
+{
     /// Creates a new [`TxTracer`] instance with a custom inspector initializer.
-    pub fn new_with_initializer(evm: E, mut initializer: Init) -> Self {
-        let fused_inspector = initializer.initialize();
-        Self { fused_inspector, evm, initializer }
+    pub fn new_with_initializer(evm: E, mut initializer: Init) -> Result<Self, E::Error> {
+        let fused_inspector = initializer.initialize()?;
+        Ok(Self { fused_inspector, evm, initializer })
     }
 
-    fn fuse_inspector(&mut self) -> E::Inspector {
-        let fresh = self.initializer.initialize();
-        core::mem::replace(self.evm.inspector_mut(), fresh)
+    fn fuse_inspector(&mut self) -> Result<E::Inspector, E::Error> {
+        let fresh = self.initializer.initialize()?;
+        Ok(core::mem::replace(self.evm.inspector_mut(), fresh))
     }
 
     /// Executes a transaction, and returns its outcome along with the inspector state.
@@ -120,7 +128,7 @@ impl<E: Evm<DB: DatabaseCommit>, Init: InspectorInitializer<E::Inspector>> TxTra
         E::Inspector: Clone,
     {
         let result = self.evm.transact_commit(tx);
-        let inspector = self.fuse_inspector();
+        let inspector = self.fuse_inspector()?;
         Ok(TraceOutput { result: result?, inspector })
     }
 
@@ -168,12 +176,12 @@ impl<E: Evm<DB: DatabaseCommit>, Init: InspectorInitializer<E::Inspector>> TxTra
     }
 }
 
-impl<E: Evm<DB: DatabaseCommit>> TxTracer<E, CloneInitializer<E::Inspector>>
+impl<E: Evm<DB: DatabaseCommit>> TxTracer<E, CloneInitializer<E::Inspector, E::Error>>
 where
     E::Inspector: Clone,
 {
     /// Creates a new [`TxTracer`] instance with a cloneable inspector.
-    pub fn new(mut evm: E) -> Self {
+    pub fn new(mut evm: E) -> Result<Self, E::Error> {
         let inspector = evm.inspector_mut().clone();
         Self::new_with_initializer(evm, CloneInitializer::new(inspector))
     }
@@ -191,7 +199,13 @@ pub struct TraceOutput<H, I> {
 /// Iterator used by tracer.
 #[derive(derive_more::Debug)]
 #[debug(bound(E::Inspector: Debug))]
-pub struct TracerIter<'a, E: Evm, Init: InspectorInitializer<E::Inspector>, Txs: Iterator, F> {
+pub struct TracerIter<
+    'a,
+    E: Evm,
+    Init: InspectorInitializer<E::Inspector, E::Error>,
+    Txs: Iterator,
+    F,
+> {
     inner: &'a mut TxTracer<E, Init>,
     txs: Peekable<Txs>,
     hook: F,
@@ -199,7 +213,7 @@ pub struct TracerIter<'a, E: Evm, Init: InspectorInitializer<E::Inspector>, Txs:
     fuse: bool,
 }
 
-impl<E: Evm, Init: InspectorInitializer<E::Inspector>, Txs: Iterator, F>
+impl<E: Evm, Init: InspectorInitializer<E::Inspector, E::Error>, Txs: Iterator, F>
     TracerIter<'_, E, Init, Txs, F>
 {
     /// Flips the `skip_last_commit` flag thus making sure all transaction are committed.
@@ -221,7 +235,7 @@ impl<E: Evm, Init: InspectorInitializer<E::Inspector>, Txs: Iterator, F>
 impl<E, Init, T, Txs, F, O, Err> Iterator for TracerIter<'_, E, Init, Txs, F>
 where
     E: Evm<DB: DatabaseCommit>,
-    Init: InspectorInitializer<E::Inspector>,
+    Init: InspectorInitializer<E::Inspector, E::Error>,
     T: IntoTxEnv<E::Tx> + Clone,
     Txs: Iterator<Item = T>,
     Err: From<E::Error>,
