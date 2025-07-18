@@ -26,7 +26,10 @@ pub fn post_block_balance_increments<H>(
 where
     H: BlockHeader,
 {
-    let mut balance_increments = HashMap::default();
+    let mut balance_increments = HashMap::with_capacity_and_hasher(
+        withdrawals.map_or(ommers.len(), |w| w.len()),
+        Default::default(),
+    );
 
     // Add block rewards if they are enabled.
     if let Some(base_block_reward) =
