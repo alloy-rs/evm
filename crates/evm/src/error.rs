@@ -16,10 +16,6 @@ impl InvalidTxError for InvalidTransaction {
     fn is_nonce_too_low(&self) -> bool {
         matches!(self, Self::NonceTooLow { .. })
     }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
 }
 
 /// Abstraction over errors that can occur during EVM execution.
