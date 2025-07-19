@@ -281,56 +281,6 @@ impl EvmFactory for EthEvmFactory {
     }
 }
 
-/// Trait for modifying precompiles based on spec ID.
-pub trait PrecompileModifies<SpecId> {
-    /// Modifies the precompiles based on the spec ID.
-    fn modify(&self, precompiles: &mut PrecompilesMap, spec_id: SpecId);
-}
-
-/// A wrapper around an [`EvmFactory`] that modifies the precompiles based on the spec ID.
-#[derive(Debug, Clone, Copy)]
-pub struct EvmFactoryWith<Evm, PrecompilesInit> {
-    factory: Evm,
-    precompile_init: PrecompilesInit,
-}
-
-impl<F, P> EvmFactory for EvmFactoryWith<F, P>
-where
-    F: EvmFactory<Precompiles = PrecompilesMap, Spec = SpecId>,
-    P: PrecompileModifies<SpecId>,
-{
-    type Evm<DB: Database, I: Inspector<Self::Context<DB>>> = F::Evm<DB, I>;
-    type Context<DB: Database> = F::Context<DB>;
-    type Tx = F::Tx;
-    type Error<DBError: core::error::Error + Send + Sync + 'static> = F::Error<DBError>;
-    type HaltReason = F::HaltReason;
-    type Spec = F::Spec;
-    type Precompiles = F::Precompiles;
-
-    fn create_evm<DB: Database>(
-        &self,
-        db: DB,
-        input: EvmEnv<Self::Spec>,
-    ) -> Self::Evm<DB, NoOpInspector> {
-        let spec_id = input.cfg_env.spec;
-        let mut evm = self.factory.create_evm(db, input);
-        self.precompile_init.modify(evm.precompiles_mut(), spec_id);
-        evm
-    }
-
-    fn create_evm_with_inspector<DB: Database, I: Inspector<Self::Context<DB>>>(
-        &self,
-        db: DB,
-        input: EvmEnv<Self::Spec>,
-        inspector: I,
-    ) -> Self::Evm<DB, I> {
-        let spec_id = input.cfg_env.spec;
-        let mut evm = self.factory.create_evm_with_inspector(db, input, inspector);
-        self.precompile_init.modify(evm.precompiles_mut(), spec_id);
-        evm
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
