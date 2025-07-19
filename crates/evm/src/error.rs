@@ -7,9 +7,6 @@ use revm::context_interface::result::{EVMError, InvalidTransaction};
 pub trait InvalidTxError: Error + Send + Sync + Any + 'static {
     /// Returns whether the error cause by transaction having a nonce lower than expected.
     fn is_nonce_too_low(&self) -> bool;
-
-    /// Returns `self` as `&dyn Any` for downcasting.
-    fn as_any(&self) -> &dyn Any;
 }
 
 impl InvalidTxError for InvalidTransaction {
