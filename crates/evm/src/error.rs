@@ -70,8 +70,4 @@ impl InvalidTxError for op_revm::OpTransactionError {
     fn is_nonce_too_low(&self) -> bool {
         matches!(self, Self::Base(tx) if tx.is_nonce_too_low())
     }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
 }
