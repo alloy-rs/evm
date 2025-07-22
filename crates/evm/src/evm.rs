@@ -2,7 +2,7 @@
 
 use crate::{tracing::TxTracer, EvmEnv, EvmError, IntoTxEnv};
 use alloy_primitives::{Address, Bytes};
-use core::{error::Error, fmt::Debug, hash::Hash};
+use core::{convert::Infallible, error::Error, fmt::Debug, hash::Hash};
 use revm::{
     context::{result::ExecutionResult, BlockEnv},
     context_interface::{
@@ -244,13 +244,12 @@ pub trait EvmFactoryExt: EvmFactory {
         db: DB,
         input: EvmEnv<Self::Spec>,
         fused_inspector: I,
-    ) -> TxTracer<Self::Evm<DB, I>>
+    ) -> Result<TxTracer<Self::Evm<DB, I>>, Infallible>
     where
         DB: Database + DatabaseCommit,
         I: Inspector<Self::Context<DB>> + Clone,
     {
-        TxTracer::new(self.create_evm_with_inspector(db, input, fused_inspector)).unwrap()
-        //TODO: Developeruche: Remove this unwrap
+        TxTracer::new(self.create_evm_with_inspector(db, input, fused_inspector))
     }
 }
 
