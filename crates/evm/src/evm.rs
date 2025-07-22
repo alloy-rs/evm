@@ -249,7 +249,8 @@ pub trait EvmFactoryExt: EvmFactory {
         DB: Database + DatabaseCommit,
         I: Inspector<Self::Context<DB>> + Clone,
     {
-        TxTracer::new(self.create_evm_with_inspector(db, input, fused_inspector))
+        TxTracer::new(self.create_evm_with_inspector(db, input, fused_inspector)).unwrap()
+        //TODO: Developeruche: Remove this unwrap
     }
 }
 
