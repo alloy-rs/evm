@@ -664,7 +664,11 @@ mod tests {
         spec_precompiles.map_precompile(&identity_address, move |_original_dyn| {
             // create a new DynPrecompile that always returns our constant
             |_input: PrecompileInput<'_>| -> PrecompileResult {
-                Ok(PrecompileOutput { gas_used: 10, bytes: Bytes::from_static(b"constant value") })
+                Ok(PrecompileOutput {
+                    gas_used: 10,
+                    bytes: Bytes::from_static(b"constant value"),
+                    reverted: false,
+                })
             }
             .into()
         });
@@ -705,7 +709,7 @@ mod tests {
             let _timestamp = input.internals.block_env().timestamp();
             let mut output = b"processed: ".to_vec();
             output.extend_from_slice(input.data.as_ref());
-            Ok(PrecompileOutput { gas_used: 15, bytes: Bytes::from(output) })
+            Ok(PrecompileOutput { gas_used: 15, bytes: Bytes::from(output), reverted: false })
         };
 
         let dyn_precompile: DynPrecompile = closure_precompile.into();
@@ -727,7 +731,11 @@ mod tests {
     fn test_is_pure() {
         // Test default behavior (should be false)
         let closure_precompile = |_input: PrecompileInput<'_>| -> PrecompileResult {
-            Ok(PrecompileOutput { gas_used: 10, bytes: Bytes::from_static(b"output") })
+            Ok(PrecompileOutput {
+                gas_used: 10,
+                bytes: Bytes::from_static(b"output"),
+                reverted: false,
+            })
         };
 
         let dyn_precompile: DynPrecompile = closure_precompile.into();
@@ -761,6 +769,7 @@ mod tests {
                     Ok(PrecompileOutput {
                         gas_used: 100,
                         bytes: Bytes::from("dynamic precompile response"),
+                        reverted: false,
                     })
                 }))
             } else {
