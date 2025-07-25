@@ -7,11 +7,19 @@ use revm::context_interface::result::{EVMError, InvalidTransaction};
 pub trait InvalidTxError: Error + Send + Sync + Any + 'static {
     /// Returns whether the error cause by transaction having a nonce lower than expected.
     fn is_nonce_too_low(&self) -> bool;
+
+    /// Cast the dyn `InvalidTxError` to `InvalidTransaction`.
+    fn as_invalid_tx_err(&self) -> Option<&InvalidTransaction>;
 }
 
 impl InvalidTxError for InvalidTransaction {
     fn is_nonce_too_low(&self) -> bool {
         matches!(self, Self::NonceTooLow { .. })
+    }
+
+    fn as_invalid_tx_err(&self) -> Option<&InvalidTransaction> {
+        let any_ref: &dyn Any = self;
+        any_ref.downcast_ref::<Self>()
     }
 }
 
@@ -66,5 +74,12 @@ where
 impl InvalidTxError for op_revm::OpTransactionError {
     fn is_nonce_too_low(&self) -> bool {
         matches!(self, Self::Base(tx) if tx.is_nonce_too_low())
+    }
+
+    fn as_invalid_tx_err(&self) -> Option<&InvalidTransaction> {
+        match self {
+            Self::Base(tx) => Some(tx),
+            _ => None,
+        }
     }
 }
