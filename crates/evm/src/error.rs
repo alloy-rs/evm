@@ -8,7 +8,9 @@ pub trait InvalidTxError: Error + Send + Sync + Any + 'static {
     /// Returns whether the error cause by transaction having a nonce lower than expected.
     fn is_nonce_too_low(&self) -> bool;
 
-    /// Cast the dyn `InvalidTxError` to `InvalidTransaction`.
+    /// Returns the underlying [`InvalidTransaction`] if any.
+    ///
+    /// This is primarily used for error conversions, e.g. for rpc responses.
     fn as_invalid_tx_err(&self) -> Option<&InvalidTransaction>;
 }
 
@@ -18,8 +20,7 @@ impl InvalidTxError for InvalidTransaction {
     }
 
     fn as_invalid_tx_err(&self) -> Option<&InvalidTransaction> {
-        let any_ref: &dyn Any = self;
-        any_ref.downcast_ref::<Self>()
+        Some(self)
     }
 }
 
