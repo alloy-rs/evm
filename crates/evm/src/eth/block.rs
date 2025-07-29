@@ -11,9 +11,9 @@ use crate::{
         state_changes::{balance_increment_state, post_block_balance_increments},
         BlockExecutionError, BlockExecutionResult, BlockExecutor, BlockExecutorFactory,
         BlockExecutorFor, BlockValidationError, CommitChanges, ExecutableTx, OnStateHook,
-        StateChangePostBlockSource, StateChangeSource, SystemCaller,
+        StateChangePostBlockSource, StateChangeSource, StateDB, SystemCaller,
     },
-    Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded,
+    Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded,
 };
 use alloc::{borrow::Cow, boxed::Box, vec::Vec};
 use alloy_consensus::{Header, Transaction, TxReceipt};
@@ -21,8 +21,8 @@ use alloy_eips::{eip4895::Withdrawals, eip7685::Requests, Encodable2718};
 use alloy_hardforks::EthereumHardfork;
 use alloy_primitives::{Log, B256};
 use revm::{
-    context::result::ExecutionResult, context_interface::result::ResultAndState, database::State,
-    DatabaseCommit, Inspector,
+    context::result::ExecutionResult, context_interface::result::ResultAndState, DatabaseCommit,
+    Inspector,
 };
 
 /// Context for Ethereum block execution.
@@ -78,13 +78,9 @@ where
     }
 }
 
-impl<'db, DB, E, Spec, R> BlockExecutor for EthBlockExecutor<'_, E, Spec, R>
+impl<E, Spec, R> BlockExecutor for EthBlockExecutor<'_, E, Spec, R>
 where
-    DB: Database + 'db,
-    E: Evm<
-        DB = &'db mut State<DB>,
-        Tx: FromRecoveredTx<R::Transaction> + FromTxWithEncoded<R::Transaction>,
-    >,
+    E: Evm<DB: StateDB, Tx: FromRecoveredTx<R::Transaction> + FromTxWithEncoded<R::Transaction>>,
     Spec: EthExecutorSpec,
     R: ReceiptBuilder<Transaction: Transaction + Encodable2718, Receipt: TxReceipt<Log = Log>>,
 {
@@ -96,7 +92,7 @@ where
         // Set state clear flag if the block is after the Spurious Dragon hardfork.
         let state_clear_flag =
             self.spec.is_spurious_dragon_active_at_block(self.evm.block().number.saturating_to());
-        self.evm.db_mut().set_state_clear_flag(state_clear_flag);
+        self.evm.db_mut().as_state().set_state_clear_flag(state_clear_flag);
 
         self.system_caller.apply_blockhashes_contract_call(self.ctx.parent_hash, &mut self.evm)?;
         self.system_caller
@@ -194,6 +190,7 @@ where
             let drained_balance: u128 = self
                 .evm
                 .db_mut()
+                .as_state()
                 .drain_balances(dao_fork::DAO_HARDFORK_ACCOUNTS)
                 .map_err(|_| BlockValidationError::IncrementBalanceFailed)?
                 .into_iter()
@@ -206,17 +203,20 @@ where
         // increment balances
         self.evm
             .db_mut()
+            .as_state()
             .increment_balances(balance_increments.clone())
             .map_err(|_| BlockValidationError::IncrementBalanceFailed)?;
 
         // call state hook with changes due to balance increments.
         self.system_caller.try_on_state_with(|| {
-            balance_increment_state(&balance_increments, self.evm.db_mut()).map(|state| {
-                (
-                    StateChangeSource::PostBlock(StateChangePostBlockSource::BalanceIncrements),
-                    Cow::Owned(state),
-                )
-            })
+            balance_increment_state(&balance_increments, self.evm.db_mut().as_state()).map(
+                |state| {
+                    (
+                        StateChangeSource::PostBlock(StateChangePostBlockSource::BalanceIncrements),
+                        Cow::Owned(state),
+                    )
+                },
+            )
         })?;
 
         Ok((
@@ -292,14 +292,14 @@ where
         &self.evm_factory
     }
 
-    fn create_executor<'a, DB, I>(
-        &'a self,
-        evm: EvmF::Evm<&'a mut State<DB>, I>,
-        ctx: Self::ExecutionCtx<'a>,
-    ) -> impl BlockExecutorFor<'a, Self, DB, I>
+    fn create_executor<DB, I>(
+        &self,
+        evm: EvmF::Evm<DB, I>,
+        ctx: Self::ExecutionCtx<'_>,
+    ) -> impl BlockExecutorFor<Self, DB, I>
     where
-        DB: Database + 'a,
-        I: Inspector<EvmF::Context<&'a mut State<DB>>> + 'a,
+        DB: StateDB,
+        I: Inspector<EvmF::Context<DB>>,
     {
         EthBlockExecutor::new(evm, ctx, &self.spec, &self.receipt_builder)
     }

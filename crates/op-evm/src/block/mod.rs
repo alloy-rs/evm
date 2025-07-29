@@ -9,7 +9,7 @@ use alloy_evm::{
         state_changes::{balance_increment_state, post_block_balance_increments},
         BlockExecutionError, BlockExecutionResult, BlockExecutor, BlockExecutorFactory,
         BlockExecutorFor, BlockValidationError, CommitChanges, ExecutableTx, OnStateHook,
-        StateChangePostBlockSource, StateChangeSource, SystemCaller,
+        StateChangePostBlockSource, StateChangeSource, StateDB, SystemCaller,
     },
     eth::receipt_builder::ReceiptBuilderCtx,
     Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded,
@@ -85,11 +85,10 @@ where
     }
 }
 
-impl<'db, DB, E, R, Spec> BlockExecutor for OpBlockExecutor<E, R, Spec>
+impl<E, R, Spec> BlockExecutor for OpBlockExecutor<E, R, Spec>
 where
-    DB: Database + 'db,
     E: Evm<
-        DB = &'db mut State<DB>,
+        DB: StateDB<DB: Database>,
         Tx: FromRecoveredTx<R::Transaction> + FromTxWithEncoded<R::Transaction>,
     >,
     R: OpReceiptBuilder<Transaction: Transaction + Encodable2718, Receipt: TxReceipt>,
@@ -103,7 +102,7 @@ where
         // Set state clear flag if the block is after the Spurious Dragon hardfork.
         let state_clear_flag =
             self.spec.is_spurious_dragon_active_at_block(self.evm.block().number.saturating_to());
-        self.evm.db_mut().set_state_clear_flag(state_clear_flag);
+        self.evm.db_mut().as_state().set_state_clear_flag(state_clear_flag);
 
         self.system_caller.apply_blockhashes_contract_call(self.ctx.parent_hash, &mut self.evm)?;
         self.system_caller
@@ -116,7 +115,7 @@ where
         ensure_create2_deployer(
             &self.spec,
             self.evm.block().timestamp.saturating_to(),
-            self.evm.db_mut(),
+            self.evm.db_mut().as_state(),
         )
         .map_err(BlockExecutionError::other)?;
 
@@ -150,6 +149,7 @@ where
             .then(|| {
                 self.evm
                     .db_mut()
+                    .as_state()
                     .load_cache_account(*tx.signer())
                     .map(|acc| acc.account_info().unwrap_or_default())
             })
@@ -222,16 +222,19 @@ where
         // increment balances
         self.evm
             .db_mut()
+            .as_state()
             .increment_balances(balance_increments.clone())
             .map_err(|_| BlockValidationError::IncrementBalanceFailed)?;
         // call state hook with changes due to balance increments.
         self.system_caller.try_on_state_with(|| {
-            balance_increment_state(&balance_increments, self.evm.db_mut()).map(|state| {
-                (
-                    StateChangeSource::PostBlock(StateChangePostBlockSource::BalanceIncrements),
-                    Cow::Owned(state),
-                )
-            })
+            balance_increment_state(&balance_increments, self.evm.db_mut().as_state()).map(
+                |state| {
+                    (
+                        StateChangeSource::PostBlock(StateChangePostBlockSource::BalanceIncrements),
+                        Cow::Owned(state),
+                    )
+                },
+            )
         })?;
 
         let gas_used = self.receipts.last().map(|r| r.cumulative_gas_used()).unwrap_or_default();
@@ -312,14 +315,14 @@ where
         &self.evm_factory
     }
 
-    fn create_executor<'a, DB, I>(
-        &'a self,
-        evm: EvmF::Evm<&'a mut State<DB>, I>,
-        ctx: Self::ExecutionCtx<'a>,
-    ) -> impl BlockExecutorFor<'a, Self, DB, I>
+    fn create_executor<DB, I>(
+        &self,
+        evm: EvmF::Evm<DB, I>,
+        ctx: Self::ExecutionCtx<'_>,
+    ) -> impl BlockExecutorFor<Self, DB, I>
     where
-        DB: Database + 'a,
-        I: Inspector<EvmF::Context<&'a mut State<DB>>> + 'a,
+        DB: StateDB<DB: Database>,
+        I: Inspector<EvmF::Context<DB>>,
     {
         OpBlockExecutor::new(evm, ctx, &self.spec, &self.receipt_builder)
     }

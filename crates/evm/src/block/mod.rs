@@ -1,12 +1,15 @@
 //! Block execution abstraction.
 
+use core::fmt::Debug;
+
 use crate::{
     Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, IntoTxEnv, RecoveredTx,
 };
 use alloc::{boxed::Box, vec::Vec};
 use alloy_eips::eip7685::Requests;
 use revm::{
-    context::result::ExecutionResult, database::State, inspector::NoOpInspector, Inspector,
+    context::result::ExecutionResult, database::State, inspector::NoOpInspector, DatabaseCommit,
+    Inspector,
 };
 
 mod error;
@@ -274,25 +277,25 @@ pub trait BlockExecutor {
 
 /// A helper trait encapsulating the constraints on [`BlockExecutor`] produced by the
 /// [`BlockExecutorFactory`] to avoid duplicating them in every implementation.
-pub trait BlockExecutorFor<'a, F: BlockExecutorFactory + ?Sized, DB, I = NoOpInspector>
+pub trait BlockExecutorFor<F: BlockExecutorFactory + ?Sized, DB, I = NoOpInspector>
 where
     Self: BlockExecutor<
-        Evm = <F::EvmFactory as EvmFactory>::Evm<&'a mut State<DB>, I>,
+        Evm = <F::EvmFactory as EvmFactory>::Evm<DB, I>,
         Transaction = F::Transaction,
         Receipt = F::Receipt,
     >,
-    DB: Database + 'a,
-    I: Inspector<<F::EvmFactory as EvmFactory>::Context<&'a mut State<DB>>> + 'a,
+    DB: StateDB,
+    I: Inspector<<F::EvmFactory as EvmFactory>::Context<DB>>,
 {
 }
 
-impl<'a, F, DB, I, T> BlockExecutorFor<'a, F, DB, I> for T
+impl<F, DB, I, T> BlockExecutorFor<F, DB, I> for T
 where
     F: BlockExecutorFactory,
-    DB: Database + 'a,
-    I: Inspector<<F::EvmFactory as EvmFactory>::Context<&'a mut State<DB>>> + 'a,
+    DB: StateDB,
+    I: Inspector<<F::EvmFactory as EvmFactory>::Context<DB>>,
     T: BlockExecutor<
-        Evm = <F::EvmFactory as EvmFactory>::Evm<&'a mut State<DB>, I>,
+        Evm = <F::EvmFactory as EvmFactory>::Evm<DB, I>,
         Transaction = F::Transaction,
         Receipt = F::Receipt,
     >,
@@ -414,12 +417,45 @@ pub trait BlockExecutorFactory: 'static {
     /// // 3. Apply post-execution changes (e.g., process withdrawals, apply rewards)
     /// let result = executor.execute_block(transactions)?;
     /// ```
-    fn create_executor<'a, DB, I>(
-        &'a self,
-        evm: <Self::EvmFactory as EvmFactory>::Evm<&'a mut State<DB>, I>,
-        ctx: Self::ExecutionCtx<'a>,
-    ) -> impl BlockExecutorFor<'a, Self, DB, I>
+    fn create_executor<DB, I>(
+        &self,
+        evm: <Self::EvmFactory as EvmFactory>::Evm<DB, I>,
+        ctx: Self::ExecutionCtx<'_>,
+    ) -> impl BlockExecutorFor<Self, DB, I>
     where
-        DB: Database + 'a,
-        I: Inspector<<Self::EvmFactory as EvmFactory>::Context<&'a mut State<DB>>> + 'a;
+        DB: StateDB<DB: Database>,
+        I: Inspector<<Self::EvmFactory as EvmFactory>::Context<DB>>;
+}
+
+/// An abstraction over either [`State`] or a mutable reference to it.
+pub trait StateDB: Database + DatabaseCommit {
+    /// Inner database type.
+    type DB: revm::Database<Error: 'static + Send + Sync> + Debug;
+
+    /// Returns a mutable reference to the database.
+    fn as_state(&mut self) -> &mut State<Self::DB>;
+}
+
+impl<DB> StateDB for State<DB>
+where
+    DB: Database,
+    Self: Database,
+{
+    type DB = DB;
+
+    fn as_state(&mut self) -> &mut State<Self::DB> {
+        self
+    }
+}
+
+impl<DB> StateDB for &mut State<DB>
+where
+    DB: Database,
+    Self: Database,
+{
+    type DB = DB;
+
+    fn as_state(&mut self) -> &mut State<Self::DB> {
+        self
+    }
 }
