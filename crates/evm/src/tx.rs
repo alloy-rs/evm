@@ -51,24 +51,24 @@ impl IntoTxEnv<Self> for TxEnv {
 /// A helper trait to allow implementing [`IntoTxEnv`] for types that build transaction environment
 /// by cloning data.
 #[auto_impl::auto_impl(&)]
-pub trait BuildTxEnv<TxEnv> {
+pub trait ToTxEnv<TxEnv> {
     /// Builds a [`TxEnv`] from `self`.
     fn build_tx_env(&self) -> TxEnv;
 }
 
 impl<T, TxEnv> IntoTxEnv<TxEnv> for T
 where
-    T: BuildTxEnv<TxEnv>,
+    T: ToTxEnv<TxEnv>,
 {
     fn into_tx_env(self) -> TxEnv {
         self.build_tx_env()
     }
 }
 
-impl<L, R, TxEnv> BuildTxEnv<TxEnv> for Either<L, R>
+impl<L, R, TxEnv> ToTxEnv<TxEnv> for Either<L, R>
 where
-    L: BuildTxEnv<TxEnv>,
-    R: BuildTxEnv<TxEnv>,
+    L: ToTxEnv<TxEnv>,
+    R: ToTxEnv<TxEnv>,
 {
     fn build_tx_env(&self) -> TxEnv {
         match self {
@@ -127,7 +127,7 @@ where
     }
 }
 
-impl<T, TxEnv: FromRecoveredTx<T>> BuildTxEnv<TxEnv> for Recovered<T> {
+impl<T, TxEnv: FromRecoveredTx<T>> ToTxEnv<TxEnv> for Recovered<T> {
     fn build_tx_env(&self) -> TxEnv {
         TxEnv::from_recovered_tx(self.inner(), self.signer())
     }
@@ -415,14 +415,14 @@ where
     }
 }
 
-impl<T, TxEnv: FromTxWithEncoded<T>> BuildTxEnv<TxEnv> for WithEncoded<Recovered<T>> {
+impl<T, TxEnv: FromTxWithEncoded<T>> ToTxEnv<TxEnv> for WithEncoded<Recovered<T>> {
     fn build_tx_env(&self) -> TxEnv {
         let recovered = &self.1;
         TxEnv::from_encoded_tx(recovered.inner(), recovered.signer(), self.encoded_bytes().clone())
     }
 }
 
-impl<T, TxEnv: FromTxWithEncoded<T>> BuildTxEnv<TxEnv> for WithEncoded<&Recovered<T>> {
+impl<T, TxEnv: FromTxWithEncoded<T>> ToTxEnv<TxEnv> for WithEncoded<&Recovered<T>> {
     fn build_tx_env(&self) -> TxEnv {
         TxEnv::from_encoded_tx(self.value(), *self.value().signer(), self.encoded_bytes().clone())
     }
