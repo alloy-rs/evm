@@ -1,7 +1,7 @@
 //! Block execution abstraction.
 
 use crate::{
-    Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, IntoTxEnv, RecoveredTx,
+    BuildTxEnv, Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, RecoveredTx,
 };
 use alloc::{boxed::Box, vec::Vec};
 use alloy_eips::eip7685::Requests;
@@ -50,11 +50,11 @@ pub struct BlockExecutionResult<T> {
 /// The trait ensures that the block executor can both execute the transaction in the EVM
 /// and access the original transaction data for receipt generation.
 pub trait ExecutableTx<E: BlockExecutor + ?Sized>:
-    IntoTxEnv<<E::Evm as Evm>::Tx> + RecoveredTx<E::Transaction> + Copy
+    BuildTxEnv<<E::Evm as Evm>::Tx> + RecoveredTx<E::Transaction>
 {
 }
 impl<E: BlockExecutor, T> ExecutableTx<E> for T where
-    T: IntoTxEnv<<E::Evm as Evm>::Tx> + RecoveredTx<E::Transaction> + Copy
+    T: BuildTxEnv<<E::Evm as Evm>::Tx> + RecoveredTx<E::Transaction>
 {
 }
 
