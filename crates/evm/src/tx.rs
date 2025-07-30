@@ -48,6 +48,19 @@ impl IntoTxEnv<Self> for TxEnv {
     }
 }
 
+impl<L, R, TxEnv> IntoTxEnv<TxEnv> for Either<L, R>
+where
+    L: IntoTxEnv<TxEnv>,
+    R: IntoTxEnv<TxEnv>,
+{
+    fn into_tx_env(self) -> TxEnv {
+        match self {
+            Self::Left(l) => l.into_tx_env(),
+            Self::Right(r) => r.into_tx_env(),
+        }
+    }
+}
+
 #[cfg(feature = "op")]
 impl<T> IntoTxEnv<Self> for op_revm::OpTransaction<T>
 where
@@ -324,6 +337,26 @@ impl<Tx, T: RecoveredTx<Tx>> RecoveredTx<Tx> for WithEncoded<T> {
 
     fn signer(&self) -> &Address {
         self.1.signer()
+    }
+}
+
+impl<L, R, Tx> RecoveredTx<Tx> for Either<L, R>
+where
+    L: RecoveredTx<Tx>,
+    R: RecoveredTx<Tx>,
+{
+    fn tx(&self) -> &Tx {
+        match self {
+            Self::Left(l) => l.tx(),
+            Self::Right(r) => r.tx(),
+        }
+    }
+
+    fn signer(&self) -> &Address {
+        match self {
+            Self::Left(l) => l.signer(),
+            Self::Right(r) => r.signer(),
+        }
     }
 }
 
