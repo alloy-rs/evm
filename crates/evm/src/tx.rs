@@ -53,7 +53,7 @@ impl IntoTxEnv<Self> for TxEnv {
 #[auto_impl::auto_impl(&)]
 pub trait ToTxEnv<TxEnv> {
     /// Builds a [`TxEnv`] from `self`.
-    fn build_tx_env(&self) -> TxEnv;
+    fn to_tx_env(&self) -> TxEnv;
 }
 
 impl<T, TxEnv> IntoTxEnv<TxEnv> for T
@@ -61,7 +61,7 @@ where
     T: ToTxEnv<TxEnv>,
 {
     fn into_tx_env(self) -> TxEnv {
-        self.build_tx_env()
+        self.to_tx_env()
     }
 }
 
@@ -70,10 +70,10 @@ where
     L: ToTxEnv<TxEnv>,
     R: ToTxEnv<TxEnv>,
 {
-    fn build_tx_env(&self) -> TxEnv {
+    fn to_tx_env(&self) -> TxEnv {
         match self {
-            Self::Left(l) => l.build_tx_env(),
-            Self::Right(r) => r.build_tx_env(),
+            Self::Left(l) => l.to_tx_env(),
+            Self::Right(r) => r.to_tx_env(),
         }
     }
 }
@@ -128,7 +128,7 @@ where
 }
 
 impl<T, TxEnv: FromRecoveredTx<T>> ToTxEnv<TxEnv> for Recovered<T> {
-    fn build_tx_env(&self) -> TxEnv {
+    fn to_tx_env(&self) -> TxEnv {
         TxEnv::from_recovered_tx(self.inner(), self.signer())
     }
 }
@@ -416,14 +416,14 @@ where
 }
 
 impl<T, TxEnv: FromTxWithEncoded<T>> ToTxEnv<TxEnv> for WithEncoded<Recovered<T>> {
-    fn build_tx_env(&self) -> TxEnv {
+    fn to_tx_env(&self) -> TxEnv {
         let recovered = &self.1;
         TxEnv::from_encoded_tx(recovered.inner(), recovered.signer(), self.encoded_bytes().clone())
     }
 }
 
 impl<T, TxEnv: FromTxWithEncoded<T>> ToTxEnv<TxEnv> for WithEncoded<&Recovered<T>> {
-    fn build_tx_env(&self) -> TxEnv {
+    fn to_tx_env(&self) -> TxEnv {
         TxEnv::from_encoded_tx(self.value(), *self.value().signer(), self.encoded_bytes().clone())
     }
 }
