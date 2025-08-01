@@ -1,6 +1,6 @@
 //! Abstraction over EVM.
 
-use crate::{tracing::TxTracer, EvmEnv, EvmError, IntoTxEnv};
+use crate::{precompiles::PrecompilesMap, tracing::TxTracer, EvmEnv, EvmError, IntoTxEnv};
 use alloy_primitives::{Address, Bytes};
 use core::{error::Error, fmt::Debug, hash::Hash};
 use revm::{
@@ -234,6 +234,9 @@ pub trait EvmFactory {
         input: EvmEnv<Self::Spec>,
         inspector: I,
     ) -> Self::Evm<DB, I>;
+
+    /// Crates new [`PrecompilesMap`] for a given spec id.
+    fn create_precompiles(&self, spec_id: Self::Spec) -> PrecompilesMap;
 }
 
 /// An extension trait for [`EvmFactory`] providing useful non-overridable methods.
