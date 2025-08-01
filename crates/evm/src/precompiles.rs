@@ -244,7 +244,7 @@ impl PrecompilesMap {
             };
 
             for (addr, precompile_fn) in
-                static_precompiles.inner().iter().map(|(addr, f)| (addr, *f))
+                static_precompiles.inner().iter().map(|(addr, f)| (addr, *f.precompile()))
             {
                 let precompile =
                     move |input: PrecompileInput<'_>| precompile_fn(input.data, input.gas);
