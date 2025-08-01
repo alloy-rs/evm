@@ -197,9 +197,7 @@ impl EvmFactory for OpEvmFactory {
                 .with_block(input.block_env)
                 .with_cfg(input.cfg_env)
                 .build_op_with_inspector(inspector)
-                .with_precompiles(PrecompilesMap::from_static(
-                    OpPrecompiles::new_with_spec(spec_id).precompiles(),
-                )),
+                .with_precompiles(self.create_precompiles(spec_id)),
             inspect: true,
         }
     }
