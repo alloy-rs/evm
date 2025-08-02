@@ -231,6 +231,15 @@ impl PrecompilesMap {
         self
     }
 
+    /// Consumes the type and returns a set of [`DynPrecompile`].
+    pub fn into_dyn_precompiles(mut self) -> DynPrecompiles {
+        self.ensure_dynamic_precompiles();
+        match self.precompiles {
+            PrecompilesKind::Dynamic(dynamic) => dynamic,
+            _ => unreachable!("We just ensured that this is a Dynamic variant"),
+        }
+    }
+
     /// Ensures that precompiles are in their dynamic representation.
     /// If they are already dynamic, this is a no-op.
     /// Returns a mutable reference to the dynamic precompiles.
@@ -464,6 +473,14 @@ pub struct DynPrecompiles {
     inner: HashMap<Address, DynPrecompile>,
     /// Addresses of precompile
     addresses: HashSet<Address>,
+}
+
+impl DynPrecompiles {
+    /// Consumes the type and returns an iterator over the addresses and the corresponding
+    /// precompile.
+    pub fn into_precompiles(self) -> impl Iterator<Item = (Address, DynPrecompile)> {
+        self.inner.into_iter()
+    }
 }
 
 impl core::fmt::Debug for DynPrecompiles {
