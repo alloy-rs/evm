@@ -14,7 +14,8 @@ use revm::{
     interpreter::{interpreter::EthInterpreter, InterpreterResult},
     precompile::{PrecompileSpecId, Precompiles},
     primitives::hardfork::SpecId,
-    Context, ExecuteEvm, InspectEvm, Inspector, MainBuilder, MainContext, SystemCallEvm,
+    Context, ExecuteEvm, InspectEvm, InspectSystemCallEvm, Inspector, MainBuilder, MainContext,
+    SystemCallEvm,
 };
 
 mod block;
@@ -142,7 +143,11 @@ where
         contract: Address,
         data: Bytes,
     ) -> Result<ResultAndState<Self::HaltReason>, Self::Error> {
-        self.inner.transact_system_call_with_caller_finalize(caller, contract, data)
+        if self.inspect {
+            self.inner.inspect_system_call_with_caller(caller, contract, data)
+        } else {
+            self.inner.system_call_with_caller(caller, contract, data)
+        }
     }
 
     fn finish(self) -> (Self::DB, EvmEnv<Self::Spec>) {

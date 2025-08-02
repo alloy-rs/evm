@@ -63,6 +63,18 @@ serde = { version = "1", default-features = false, features = ["derive"] }
 thiserror = { version = "2.0.0", default-features = false }
 serde_json = "1"
 
-#[patch.crates-io]
-#revm = { git = "https://github.com/bluealloy/revm", rev = "11b16259" }
-#op-revm = { git = "https://github.com/bluealloy/revm", rev = "11b16259" }
+[patch.crates-io]
+# Use revm at specific commit 9008e93
+revm = { git = "https://github.com/bluealloy/revm", rev = "9008e93" }
+revm-primitives = { git = "https://github.com/bluealloy/revm", rev = "9008e93" }
+revm-interpreter = { git = "https://github.com/bluealloy/revm", rev = "9008e93" }
+revm-inspector = { git = "https://github.com/bluealloy/revm", rev = "9008e93" }
+revm-handler = { git = "https://github.com/bluealloy/revm", rev = "9008e93" }
+revm-context = { git = "https://github.com/bluealloy/revm", rev = "9008e93" }
+revm-context-interface = { git = "https://github.com/bluealloy/revm", rev = "9008e93" }
+revm-database = { git = "https://github.com/bluealloy/revm", rev = "9008e93" }
+revm-database-interface = { git = "https://github.com/bluealloy/revm", rev = "9008e93" }
+revm-state = { git = "https://github.com/bluealloy/revm", rev = "9008e93" }
+revm-bytecode = { git = "https://github.com/bluealloy/revm", rev = "9008e93" }
+revm-precompile = { git = "https://github.com/bluealloy/revm", rev = "9008e93" }
+op-revm = { git = "https://github.com/bluealloy/revm", rev = "9008e93" }
