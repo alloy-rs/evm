@@ -12,7 +12,7 @@ use revm::{
     context::LocalContextTr,
     handler::{EthPrecompiles, PrecompileProvider},
     interpreter::{CallInput, Gas, InputsImpl, InstructionResult, InterpreterResult},
-    precompile::{PrecompileError, PrecompileFn, PrecompileResult, Precompiles},
+    precompile::{PrecompileError, PrecompileFn, PrecompileId, PrecompileResult, Precompiles},
     Context, Journal,
 };
 
@@ -243,12 +243,14 @@ impl PrecompilesMap {
                 Cow::Owned(owned) => owned,
             };
 
-            for (addr, precompile_fn) in
-                static_precompiles.inner().iter().map(|(addr, f)| (addr, *f.precompile()))
+            for (addr, id, precompile_fn) in static_precompiles
+                .inner()
+                .iter()
+                .map(|(addr, f)| (addr, f.id().clone(), *f.precompile()))
             {
                 let precompile =
                     move |input: PrecompileInput<'_>| precompile_fn(input.data, input.gas);
-                dynamic.inner.insert(*addr, precompile.into());
+                dynamic.inner.insert(*addr, (id, precompile).into());
                 dynamic.addresses.insert(*addr);
             }
 
@@ -278,9 +280,11 @@ impl PrecompilesMap {
     pub fn get(&self, address: &Address) -> Option<impl Precompile + '_> {
         // First check static precompiles
         let static_result = match &self.precompiles {
-            PrecompilesKind::Builtin(precompiles) => precompiles
-                .get(address)
-                .map(|f| Either::Left(|input: PrecompileInput<'_>| f(input.data, input.gas))),
+            PrecompilesKind::Builtin(precompiles) => precompiles.get(address).map(|p| {
+                Either::Left((p.id(), |input: PrecompileInput<'_>| {
+                    p.precompile()(input.data, input.gas)
+                }))
+            }),
             PrecompilesKind::Dynamic(dyn_precompiles) => {
                 dyn_precompiles.inner.get(address).map(Either::Right)
             }
@@ -422,20 +426,20 @@ pub struct DynPrecompile(pub(crate) Arc<dyn Precompile + Send + Sync>);
 
 impl DynPrecompile {
     /// Creates a new [`DynPrecompiles`] with the given closure.
-    pub fn new<F>(f: F) -> Self
+    pub fn new<F>(id: PrecompileId, f: F) -> Self
     where
         F: Fn(PrecompileInput<'_>) -> PrecompileResult + Send + Sync + 'static,
     {
-        Self(Arc::new(f))
+        Self(Arc::new((id, f)))
     }
 
     /// Creates a new [`DynPrecompiles`] with the given closure and [`Precompile::is_pure`]
     /// returning `false`.
-    pub fn new_stateful<F>(f: F) -> Self
+    pub fn new_stateful<F>(id: PrecompileId, f: F) -> Self
     where
         F: Fn(PrecompileInput<'_>) -> PrecompileResult + Send + Sync + 'static,
     {
-        Self(Arc::new(StatefulPrecompile(f)))
+        Self(Arc::new(StatefulPrecompile((id, f))))
     }
 
     /// Flips [`Precompile::is_pure`] to `false`.
@@ -486,6 +490,9 @@ pub struct PrecompileInput<'a> {
 /// Trait for implementing precompiled contracts.
 #[auto_impl::auto_impl(Arc)]
 pub trait Precompile {
+    /// Returns precompile ID.
+    fn precompile_id(&self) -> &PrecompileId;
+
     /// Execute the precompile with the given input data, gas limit, and caller address.
     fn call(&self, input: PrecompileInput<'_>) -> PrecompileResult;
 
@@ -520,32 +527,53 @@ pub trait Precompile {
     }
 }
 
-impl<F> Precompile for F
+impl<F> Precompile for (PrecompileId, F)
 where
     F: Fn(PrecompileInput<'_>) -> PrecompileResult + Send + Sync,
 {
+    fn precompile_id(&self) -> &PrecompileId {
+        &self.0
+    }
+
     fn call(&self, input: PrecompileInput<'_>) -> PrecompileResult {
-        self(input)
+        self.1(input)
     }
 }
 
-impl<F> From<F> for DynPrecompile
+impl<F> Precompile for (&PrecompileId, F)
+where
+    F: Fn(PrecompileInput<'_>) -> PrecompileResult + Send + Sync,
+{
+    fn precompile_id(&self) -> &PrecompileId {
+        &self.0
+    }
+
+    fn call(&self, input: PrecompileInput<'_>) -> PrecompileResult {
+        self.1(input)
+    }
+}
+
+impl<F> From<(PrecompileId, F)> for DynPrecompile
 where
     F: Fn(PrecompileInput<'_>) -> PrecompileResult + Send + Sync + 'static,
 {
-    fn from(f: F) -> Self {
-        Self(Arc::new(f))
+    fn from((id, f): (PrecompileId, F)) -> Self {
+        Self(Arc::new((id, f)))
     }
 }
 
-impl From<PrecompileFn> for DynPrecompile {
-    fn from(f: PrecompileFn) -> Self {
+impl From<(PrecompileId, PrecompileFn)> for DynPrecompile {
+    fn from((id, f): (PrecompileId, PrecompileFn)) -> Self {
         let p = move |input: PrecompileInput<'_>| f(input.data, input.gas);
-        p.into()
+        (id, p).into()
     }
 }
 
 impl Precompile for DynPrecompile {
+    fn precompile_id(&self) -> &PrecompileId {
+        self.0.precompile_id()
+    }
+
     fn call(&self, input: PrecompileInput<'_>) -> PrecompileResult {
         self.0.call(input)
     }
@@ -556,6 +584,10 @@ impl Precompile for DynPrecompile {
 }
 
 impl Precompile for &DynPrecompile {
+    fn precompile_id(&self) -> &PrecompileId {
+        self.0.precompile_id()
+    }
+
     fn call(&self, input: PrecompileInput<'_>) -> PrecompileResult {
         self.0.call(input)
     }
@@ -566,6 +598,13 @@ impl Precompile for &DynPrecompile {
 }
 
 impl<A: Precompile, B: Precompile> Precompile for Either<A, B> {
+    fn precompile_id(&self) -> &PrecompileId {
+        match self {
+            Self::Left(p) => p.precompile_id(),
+            Self::Right(p) => p.precompile_id(),
+        }
+    }
+
     fn call(&self, input: PrecompileInput<'_>) -> PrecompileResult {
         match self {
             Self::Left(p) => p.call(input),
@@ -584,6 +623,10 @@ impl<A: Precompile, B: Precompile> Precompile for Either<A, B> {
 struct StatefulPrecompile<P>(P);
 
 impl<P: Precompile> Precompile for StatefulPrecompile<P> {
+    fn precompile_id(&self) -> &PrecompileId {
+        self.0.precompile_id()
+    }
+
     fn call(&self, input: PrecompileInput<'_>) -> PrecompileResult {
         self.0.call(input)
     }
