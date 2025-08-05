@@ -154,6 +154,50 @@ where
         Ok(Some(gas_used))
     }
 
+    fn execute_transaction_with_cached_result(
+        &mut self,
+        tx: impl ExecutableTx<Self>,
+        ResultAndState { result, state }: ResultAndState<<Self::Evm as Evm>::HaltReason>,
+        f: impl FnOnce(&ExecutionResult<<Self::Evm as Evm>::HaltReason>) -> CommitChanges,
+    ) -> Result<Option<u64>, BlockExecutionError> {
+        // The sum of the transaction's gas limit, Tg, and the gas utilized in this block prior,
+        // must be no greater than the block's gasLimit.
+        let block_available_gas = self.evm.block().gas_limit - self.gas_used;
+
+        if tx.tx().gas_limit() > block_available_gas {
+            return Err(BlockValidationError::TransactionGasLimitMoreThanAvailableBlockGas {
+                transaction_gas_limit: tx.tx().gas_limit(),
+                block_available_gas,
+            }
+            .into());
+        }
+
+        if !f(&result).should_commit() {
+            return Ok(None);
+        }
+
+        self.system_caller.on_state(StateChangeSource::Transaction(self.receipts.len()), &state);
+
+        let gas_used = result.gas_used();
+
+        // append gas used
+        self.gas_used += gas_used;
+
+        // Push transaction changeset and calculate header bloom filter for receipt.
+        self.receipts.push(self.receipt_builder.build_receipt(ReceiptBuilderCtx {
+            tx: tx.tx(),
+            evm: &self.evm,
+            result,
+            state: &state,
+            cumulative_gas_used: self.gas_used,
+        }));
+
+        // Commit the state changes.
+        self.evm.db_mut().commit(state);
+
+        Ok(Some(gas_used))
+    }
+
     fn finish(
         mut self,
     ) -> Result<(Self::Evm, BlockExecutionResult<R::Receipt>), BlockExecutionError> {
