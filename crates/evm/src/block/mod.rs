@@ -4,7 +4,10 @@ use crate::{Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, Recov
 use alloc::{boxed::Box, vec::Vec};
 use alloy_eips::eip7685::Requests;
 use revm::{
-    context::result::ExecutionResult, database::State, inspector::NoOpInspector, Inspector,
+    context::result::{ExecutionResult, ResultAndState},
+    database::State,
+    inspector::NoOpInspector,
+    Inspector,
 };
 
 mod error;
@@ -194,6 +197,13 @@ pub trait BlockExecutor {
     fn execute_transaction_with_commit_condition(
         &mut self,
         tx: impl ExecutableTx<Self>,
+        f: impl FnOnce(&ExecutionResult<<Self::Evm as Evm>::HaltReason>) -> CommitChanges,
+    ) -> Result<Option<u64>, BlockExecutionError>;
+
+    fn execute_transaction_with_cached_result(
+        &mut self,
+        tx: impl ExecutableTx<Self>,
+        result: ResultAndState<<Self::Evm as Evm>::HaltReason>,
         f: impl FnOnce(&ExecutionResult<<Self::Evm as Evm>::HaltReason>) -> CommitChanges,
     ) -> Result<Option<u64>, BlockExecutionError>;
 
