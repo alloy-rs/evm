@@ -45,6 +45,15 @@ where
         either::for_both!(self, evm => evm.transact(tx))
     }
 
+    fn inspect_system_call(
+        &mut self,
+        caller: Address,
+        contract: Address,
+        data: Bytes,
+    ) -> Result<revm::context::result::ResultAndState<Self::HaltReason>, Self::Error> {
+        either::for_both!(self, evm => evm.inspect_system_call(caller, contract, data))
+    }
+
     fn transact_system_call(
         &mut self,
         caller: Address,
