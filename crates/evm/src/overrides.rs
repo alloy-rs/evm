@@ -148,6 +148,7 @@ where
         status: AccountStatus::Touched,
         storage: Default::default(),
         transaction_id: 0,
+        ..Default::default() //TODO
     };
 
     let storage_diff = match (account_override.state, account_override.state_diff) {
