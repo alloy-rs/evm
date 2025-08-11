@@ -1,6 +1,6 @@
 //! Ethereum block executor.
 
-use std::collections::BTreeMap;
+use alloc::collections::BTreeMap;
 
 use super::{
     dao_fork, eip6110,
