@@ -16,13 +16,14 @@ use crate::{
     Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded,
 };
 use alloc::{borrow::Cow, boxed::Box, vec::Vec};
+use alloy_block_access_list::{AccountChanges, BlockAccessList};
 use alloy_consensus::{Header, Transaction, TxReceipt};
 use alloy_eips::{eip4895::Withdrawals, eip7685::Requests, Encodable2718};
 use alloy_hardforks::EthereumHardfork;
 use alloy_primitives::{Log, B256};
 use revm::{
     context::result::ExecutionResult, context_interface::result::ResultAndState, database::State,
-    DatabaseCommit, Inspector,
+    state::AccountInfo, DatabaseCommit, Inspector,
 };
 
 /// Context for Ethereum block execution.
@@ -57,6 +58,8 @@ pub struct EthBlockExecutor<'a, Evm, Spec, R: ReceiptBuilder> {
     receipts: Vec<R::Receipt>,
     /// Total gas used by transactions in this block.
     gas_used: u64,
+    /// optional store for building bal
+    pub block_access_list: Option<BlockAccessList>,
 }
 
 impl<'a, Evm, Spec, R> EthBlockExecutor<'a, Evm, Spec, R>
@@ -74,6 +77,7 @@ where
             system_caller: SystemCaller::new(spec.clone()),
             spec,
             receipt_builder,
+            block_access_list: None,
         }
     }
 }
@@ -304,3 +308,13 @@ where
         EthBlockExecutor::new(evm, ctx, &self.spec, &self.receipt_builder)
     }
 }
+
+// pub fn from_account(account:AccountInfo)->AccountChanges{
+//     if let Some(recipient)=tx.tx().to{
+//            // let sender=tx.signer();
+//             let recipient_account=state.get_mut(&recipient).unwrap();
+//             if recipient_account.storage_access{
+
+//             }
+//         }
+// }

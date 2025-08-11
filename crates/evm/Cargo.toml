@@ -20,6 +20,7 @@ alloy-sol-types.workspace = true
 alloy-eips.workspace = true
 alloy-hardforks.workspace = true
 alloy-rpc-types-eth = { workspace = true, optional = true }
+alloy-block-access-list.workspace = true
 
 revm.workspace = true
 op-revm = { workspace = true, optional = true }
