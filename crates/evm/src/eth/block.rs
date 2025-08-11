@@ -1,5 +1,7 @@
 //! Ethereum block executor.
 
+use std::collections::BTreeMap;
+
 use super::{
     dao_fork, eip6110,
     receipt_builder::{AlloyReceiptBuilder, ReceiptBuilder, ReceiptBuilderCtx},
@@ -16,14 +18,17 @@ use crate::{
     Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded,
 };
 use alloc::{borrow::Cow, boxed::Box, vec::Vec};
-use alloy_block_access_list::{AccountChanges, BlockAccessList};
+use alloy_block_access_list::{
+    balance_change::BalanceChange, code_change::CodeChange, nonce_change::NonceChange,
+    AccountChanges, BlockAccessList, SlotChanges, StorageChange,
+};
 use alloy_consensus::{Header, Transaction, TxReceipt};
 use alloy_eips::{eip4895::Withdrawals, eip7685::Requests, Encodable2718};
 use alloy_hardforks::EthereumHardfork;
-use alloy_primitives::{Log, B256};
+use alloy_primitives::{Address, Log, B256};
 use revm::{
     context::result::ExecutionResult, context_interface::result::ResultAndState, database::State,
-    state::AccountInfo, DatabaseCommit, Inspector,
+    primitives::StorageKey, state::Account, DatabaseCommit, Inspector,
 };
 
 /// Context for Ethereum block execution.
@@ -309,12 +314,50 @@ where
     }
 }
 
-// pub fn from_account(account:AccountInfo)->AccountChanges{
-//     if let Some(recipient)=tx.tx().to{
-//            // let sender=tx.signer();
-//             let recipient_account=state.get_mut(&recipient).unwrap();
-//             if recipient_account.storage_access{
+/// utility function to build block access list
+pub fn from_account(address: Address, account: Account) -> AccountChanges {
+    let mut account_changes = AccountChanges::default();
 
-//             }
-//         }
-// }
+    for (_tx_index, read_keys) in &account.storage_access.reads {
+        for key in read_keys {
+            account_changes.storage_reads.push((*key).into());
+        }
+    }
+
+    // Group writes by slot
+    let mut slot_map: BTreeMap<StorageKey, Vec<StorageChange>> = BTreeMap::new();
+
+    for (tx_index, writes_map) in &account.storage_access.writes {
+        for (slot, (_pre, post)) in writes_map {
+            slot_map
+                .entry(*slot)
+                .or_default()
+                .push(StorageChange { tx_index: *tx_index, new_value: *post });
+        }
+    }
+
+    // Convert slot_map into SlotChanges and push into account_changes
+    for (slot, changes) in slot_map {
+        account_changes.storage_changes.push(SlotChanges { slot: slot.into(), changes });
+    }
+    for (tx_index, (_pre_balance, post_balance)) in &account.balance_change.change {
+        account_changes
+            .balance_changes
+            .push(BalanceChange { tx_index: *tx_index, post_balance: *post_balance });
+    }
+
+    for (tx_index, (_pre_nonce, post_nonce)) in &account.nonce_change.change {
+        account_changes
+            .nonce_changes
+            .push(NonceChange { tx_index: *tx_index, new_nonce: *post_nonce });
+    }
+
+    for (tx_index, code) in &account.code_change.change {
+        account_changes
+            .code_changes
+            .push(CodeChange { tx_index: *tx_index, new_code: code.clone() });
+    }
+
+    account_changes.address = address;
+    account_changes
+}

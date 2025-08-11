@@ -68,5 +68,5 @@ serde_json = "1"
 revm = { git = "https://github.com/Soubhik-10/revm", branch = "bal" }
 op-revm = { git = "https://github.com/Soubhik-10/revm", branch = "bal"}
 alloy-block-access-list = { git = "https://github.com/Soubhik-10/alloy", branch = "bal" }
-alloy-consensus = { git = "https://github.com/Soubhik-10/alloy", branch = "bal" }
-alloy-rpc-types-eth = { git = "https://github.com/Soubhik-10/alloy", branch = "bal" }
+# alloy-consensus = { git = "https://github.com/Soubhik-10/alloy", branch = "bal" }
+# alloy-rpc-types-eth = { git = "https://github.com/Soubhik-10/alloy", branch = "bal" }
