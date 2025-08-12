@@ -27,8 +27,12 @@ use alloy_eips::{eip4895::Withdrawals, eip7685::Requests, Encodable2718};
 use alloy_hardforks::EthereumHardfork;
 use alloy_primitives::{Address, Log, B256};
 use revm::{
-    context::result::ExecutionResult, context_interface::result::ResultAndState, database::State,
-    primitives::StorageKey, state::Account, DatabaseCommit, Inspector,
+    context::{result::ExecutionResult, JournalTr},
+    context_interface::result::ResultAndState,
+    database::State,
+    primitives::StorageKey,
+    state::Account,
+    DatabaseCommit, Inspector,
 };
 
 /// Context for Ethereum block execution.
@@ -89,7 +93,7 @@ where
 
 impl<'db, DB, E, Spec, R> BlockExecutor for EthBlockExecutor<'_, E, Spec, R>
 where
-    DB: Database + 'db,
+    DB: Database + JournalTr + 'db,
     E: Evm<
         DB = &'db mut State<DB>,
         Tx: FromRecoveredTx<R::Transaction> + FromTxWithEncoded<R::Transaction>,
@@ -227,7 +231,14 @@ where
                 )
             })
         })?;
-
+        for address in self.receipts.iter().flat_map(|r| r.logs().iter().map(|l| l.address)) {
+            let acc = self.evm.db_mut().database.load_account(address).unwrap().data;
+            self.block_access_list
+                .clone()
+                .unwrap()
+                .account_changes
+                .push(from_account(address, acc.clone()));
+        }
         Ok((
             self.evm,
             BlockExecutionResult { receipts: self.receipts, requests, gas_used: self.gas_used },
@@ -307,14 +318,14 @@ where
         ctx: Self::ExecutionCtx<'a>,
     ) -> impl BlockExecutorFor<'a, Self, DB, I>
     where
-        DB: Database + 'a,
+        DB: Database + JournalTr + 'a,
         I: Inspector<EvmF::Context<&'a mut State<DB>>> + 'a,
     {
         EthBlockExecutor::new(evm, ctx, &self.spec, &self.receipt_builder)
     }
 }
 
-/// utility function to build block access list
+/// An utility function to build block access list
 pub fn from_account(address: Address, account: Account) -> AccountChanges {
     let mut account_changes = AccountChanges::default();
 
