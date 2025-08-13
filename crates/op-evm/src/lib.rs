@@ -25,7 +25,7 @@ use revm::{
     handler::{instructions::EthInstructions, PrecompileProvider},
     inspector::NoOpInspector,
     interpreter::{interpreter::EthInterpreter, InterpreterResult},
-    Context, ExecuteEvm, InspectEvm, Inspector, SystemCallEvm,
+    Context, ExecuteEvm, InspectEvm, InspectSystemCallEvm, Inspector, SystemCallEvm,
 };
 
 pub mod block;
@@ -114,6 +114,15 @@ where
         } else {
             self.inner.transact(tx)
         }
+    }
+
+    fn inspect_system_call(
+        &mut self,
+        caller: Address,
+        contract: Address,
+        data: Bytes,
+    ) -> Result<ResultAndState<Self::HaltReason>, Self::Error> {
+        self.inner.inspect_system_call_with_caller(caller, contract, data)
     }
 
     fn transact_system_call(

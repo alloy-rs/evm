@@ -88,6 +88,18 @@ pub trait Evm {
         self.transact_raw(tx.into_tx_env())
     }
 
+    /// Inspects a system call without committing state changes.
+    ///
+    /// This method executes a system call with inspection enabled, allowing observation of the
+    /// execution without modifying the underlying state. Similar to [`Evm::transact_system_call`]
+    /// but returns the result with state changes that can be examined or discarded.
+    fn inspect_system_call(
+        &mut self,
+        caller: Address,
+        contract: Address,
+        data: Bytes,
+    ) -> Result<ResultAndState<Self::HaltReason>, Self::Error>;
+
     /// Executes a system call.
     ///
     /// Note: this will only keep the target `contract` in the state. This is done because revm is
