@@ -254,7 +254,12 @@ where
         //}
         Ok((
             self.evm,
-            BlockExecutionResult { receipts: self.receipts, requests, gas_used: self.gas_used },
+            BlockExecutionResult {
+                receipts: self.receipts,
+                requests,
+                gas_used: self.gas_used,
+                block_access_list: None,
+            },
         ))
     }
 
