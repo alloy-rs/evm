@@ -66,7 +66,7 @@ impl PrecompilesMap {
 
     /// Maps all pure precompiles using the provided function.
     ///
-    /// This is a variant of [`map_precompiles`] that only applies the transformation
+    /// This is a variant of [`Self::map_precompiles`] that only applies the transformation
     /// to precompiles that are pure, see [`Precompile::is_pure`].
     pub fn map_pure_precompiles<F>(&mut self, f: F)
     where
