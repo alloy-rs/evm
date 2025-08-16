@@ -347,7 +347,7 @@ where
 pub fn from_account(address: Address, account: AccountInfo) -> AccountChanges {
     let mut account_changes = AccountChanges::default();
 
-    for (_tx_index, read_keys) in &account.storage_access.reads {
+    for read_keys in account.storage_access.reads.values() {
         for key in read_keys {
             account_changes.storage_reads.push((*key).into());
         }

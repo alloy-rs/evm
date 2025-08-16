@@ -132,7 +132,6 @@ where
                 storage: Default::default(),
                 status: AccountStatus::Touched,
                 transaction_id: 0,
-                ..Default::default() // TODO (should we use Default::default() here?)
             },
         ))
     };
