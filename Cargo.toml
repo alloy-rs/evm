@@ -65,8 +65,8 @@ thiserror = { version = "2.0.0", default-features = false }
 serde_json = "1"
 
 [patch.crates-io]
-revm = { git = "https://github.com/Soubhik-10/revm", branch = "bal" }
-op-revm = { git = "https://github.com/Soubhik-10/revm", branch = "bal"}
+revm = { git = "https://github.com/Soubhik-10/revm", branch = "move-stuff" }
+op-revm = { git = "https://github.com/Soubhik-10/revm", branch = "move-stuff"}
 alloy-block-access-list = { git = "https://github.com/Soubhik-10/alloy", branch = "bal" }
 # alloy-consensus = { git = "https://github.com/Soubhik-10/alloy", branch = "bal" }
 # alloy-rpc-types-eth = { git = "https://github.com/Soubhik-10/alloy", branch = "bal" }

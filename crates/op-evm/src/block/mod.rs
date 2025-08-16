@@ -22,10 +22,7 @@ use op_revm::transaction::deposit::DEPOSIT_TRANSACTION_TYPE;
 pub use receipt_builder::OpAlloyReceiptBuilder;
 use receipt_builder::OpReceiptBuilder;
 use revm::{
-    context::{
-        result::{ExecutionResult, ResultAndState},
-        JournalTr,
-    },
+    context::result::{ExecutionResult, ResultAndState},
     database::State,
     DatabaseCommit, Inspector,
 };
@@ -322,7 +319,7 @@ where
         ctx: Self::ExecutionCtx<'a>,
     ) -> impl BlockExecutorFor<'a, Self, DB, I>
     where
-        DB: Database + JournalTr + 'a,
+        DB: Database + 'a,
         I: Inspector<EvmF::Context<&'a mut State<DB>>> + 'a,
     {
         OpBlockExecutor::new(evm, ctx, &self.spec, &self.receipt_builder)
@@ -340,28 +337,28 @@ mod tests {
 
     use super::*;
 
-    // #[test]
-    // fn test_with_encoded() {
-    //     let executor_factory = OpBlockExecutorFactory::new(
-    //         OpAlloyReceiptBuilder::default(),
-    //         OpChainHardforks::op_mainnet(),
-    //         OpEvmFactory::default(),
-    //     );
-    //     let mut db = State::builder().with_database(CacheDB::<EmptyDB>::default()).build();
-    //     let evm = executor_factory.evm_factory.create_evm(&mut db, EvmEnv::default());
-    //     let mut executor = executor_factory.create_executor(evm, OpBlockExecutionCtx::default());
-    //     let tx = Recovered::new_unchecked(
-    //         OpTxEnvelope::Legacy(TxLegacy::default().into_signed(Signature::new(
-    //             Default::default(),
-    //             Default::default(),
-    //             Default::default(),
-    //         ))),
-    //         Address::ZERO,
-    //     );
-    //     let tx_with_encoded = WithEncoded::new(tx.encoded_2718().into(), tx.clone());
+    #[test]
+    fn test_with_encoded() {
+        let executor_factory = OpBlockExecutorFactory::new(
+            OpAlloyReceiptBuilder::default(),
+            OpChainHardforks::op_mainnet(),
+            OpEvmFactory::default(),
+        );
+        let mut db = State::builder().with_database(CacheDB::<EmptyDB>::default()).build();
+        let evm = executor_factory.evm_factory.create_evm(&mut db, EvmEnv::default());
+        let mut executor = executor_factory.create_executor(evm, OpBlockExecutionCtx::default());
+        let tx = Recovered::new_unchecked(
+            OpTxEnvelope::Legacy(TxLegacy::default().into_signed(Signature::new(
+                Default::default(),
+                Default::default(),
+                Default::default(),
+            ))),
+            Address::ZERO,
+        );
+        let tx_with_encoded = WithEncoded::new(tx.encoded_2718().into(), tx.clone());
 
-    //     // make sure we can use both `WithEncoded` and transaction itself as inputs.
-    //     let _ = executor.execute_transaction(&tx);
-    //     let _ = executor.execute_transaction(&tx_with_encoded);
-    // }
+        // make sure we can use both `WithEncoded` and transaction itself as inputs.
+        let _ = executor.execute_transaction(&tx);
+        let _ = executor.execute_transaction(&tx_with_encoded);
+    }
 }
