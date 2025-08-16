@@ -357,7 +357,7 @@ pub fn from_account(address: Address, account: Account) -> AccountChanges {
         }
     }
 
-    // Group writes by slot
+    // Group writes by slots
     let mut slot_map: BTreeMap<StorageKey, Vec<StorageChange>> = BTreeMap::new();
 
     for (tx_index, writes_map) in &account.storage_access.writes {
