@@ -38,6 +38,7 @@ where
         // Ommer rewards
         for ommer in ommers {
             *balance_increments.entry(ommer.beneficiary()).or_default() += calc::ommer_reward(
+                //bal
                 base_block_reward,
                 block_env.number.saturating_to(),
                 ommer.number(),

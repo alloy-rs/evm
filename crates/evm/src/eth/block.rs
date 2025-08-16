@@ -27,8 +27,12 @@ use alloy_eips::{eip4895::Withdrawals, eip7685::Requests, Encodable2718};
 use alloy_hardforks::EthereumHardfork;
 use alloy_primitives::{Address, Log, B256};
 use revm::{
-    context::result::ExecutionResult, context_interface::result::ResultAndState, database::State,
-    primitives::StorageKey, state::Account, DatabaseCommit, Inspector,
+    context::{result::ExecutionResult, JournalTr},
+    context_interface::result::ResultAndState,
+    database::State,
+    primitives::StorageKey,
+    state::Account,
+    DatabaseCommit, Inspector,
 };
 
 /// Context for Ethereum block execution.
@@ -89,7 +93,7 @@ where
 
 impl<'db, DB, E, Spec, R> BlockExecutor for EthBlockExecutor<'_, E, Spec, R>
 where
-    DB: Database + 'db,
+    DB: Database + 'db + JournalTr,
     E: Evm<
         DB = &'db mut State<DB>,
         Tx: FromRecoveredTx<R::Transaction> + FromTxWithEncoded<R::Transaction>,
@@ -160,22 +164,22 @@ where
         // Commit the state changes.
         self.evm.db_mut().commit(state.clone());
 
-        if let Some(recipient) = tx.tx().to() {
-            if let Some(acc) = state.get(&recipient) {
-                self.block_access_list
-                    .clone()
-                    .unwrap()
-                    .account_changes
-                    .push(from_account(recipient, acc.clone()));
-            }
-            if let Some(acc) = state.get(tx.signer()) {
-                self.block_access_list
-                    .clone()
-                    .unwrap()
-                    .account_changes
-                    .push(from_account(*tx.signer(), acc.clone()));
-            }
-        }
+        // if let Some(recipient) = tx.tx().to() {
+        //     if let Some(acc) = state.get(&recipient) {
+        //         self.block_access_list
+        //             .clone()
+        //             .unwrap()
+        //             .account_changes
+        //             .push(from_account(recipient, acc.clone()));
+        //     }
+        //     if let Some(acc) = state.get(tx.signer()) {
+        //         self.block_access_list
+        //             .clone()
+        //             .unwrap()
+        //             .account_changes
+        //             .push(from_account(*tx.signer(), acc.clone()));
+        //     }
+        //}
 
         Ok(Some(gas_used))
     }
@@ -233,7 +237,7 @@ where
         self.evm
             .db_mut()
             .increment_balances(balance_increments.clone())
-            .map_err(|_| BlockValidationError::IncrementBalanceFailed)?;
+            .map_err(|_| BlockValidationError::IncrementBalanceFailed)?; //we can do this in revm
 
         // call state hook with changes due to balance increments.
         self.system_caller.try_on_state_with(|| {
@@ -244,14 +248,14 @@ where
                 )
             })
         })?;
-        // for address in self.receipts.iter().flat_map(|r| r.logs().iter().map(|l| l.address)) {
-        //     let acc = self.evm.db_mut().database.load_account(address).unwrap().data;
-        //     self.block_access_list
-        //         .clone()
-        //         .unwrap()
-        //         .account_changes
-        //         .push(from_account(address, acc.clone()));
-        //}
+        for address in self.receipts.iter().flat_map(|r| r.logs().iter().map(|l| l.address)) {
+            let acc = self.evm.db_mut().database.load_account(address).unwrap().data;
+            self.block_access_list
+                .clone()
+                .unwrap()
+                .account_changes
+                .push(from_account(address, acc.clone()));
+        }
         Ok((
             self.evm,
             BlockExecutionResult {
@@ -336,7 +340,7 @@ where
         ctx: Self::ExecutionCtx<'a>,
     ) -> impl BlockExecutorFor<'a, Self, DB, I>
     where
-        DB: Database + 'a,
+        DB: Database + JournalTr + 'a,
         I: Inspector<EvmF::Context<&'a mut State<DB>>> + 'a,
     {
         EthBlockExecutor::new(evm, ctx, &self.spec, &self.receipt_builder)
