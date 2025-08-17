@@ -369,16 +369,20 @@ pub fn from_account(address: Address, account: AccountInfo) -> AccountChanges {
     for (slot, changes) in slot_map {
         account_changes.storage_changes.push(SlotChanges { slot: slot.into(), changes });
     }
-    for (tx_index, (_pre_balance, post_balance)) in &account.balance_change.change {
-        account_changes
-            .balance_changes
-            .push(BalanceChange { tx_index: *tx_index, post_balance: *post_balance });
+    for (tx_index, (pre_balance, post_balance)) in &account.balance_change.change {
+        if pre_balance != post_balance {
+            account_changes
+                .balance_changes
+                .push(BalanceChange { tx_index: *tx_index, post_balance: *post_balance });
+        }
     }
 
-    for (tx_index, (_pre_nonce, post_nonce)) in &account.nonce_change.change {
-        account_changes
-            .nonce_changes
-            .push(NonceChange { tx_index: *tx_index, new_nonce: *post_nonce });
+    for (tx_index, (pre_nonce, post_nonce)) in &account.nonce_change.change {
+        if pre_nonce != post_nonce {
+            account_changes
+                .nonce_changes
+                .push(NonceChange { tx_index: *tx_index, new_nonce: *post_nonce });
+        }
     }
 
     for (tx_index, code) in &account.code_change.change {
