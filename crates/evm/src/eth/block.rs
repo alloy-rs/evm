@@ -160,22 +160,22 @@ where
         // Commit the state changes.
         self.evm.db_mut().commit(state.clone());
 
-        // if let Some(recipient) = tx.tx().to() {
-        //     if let Some(acc) = state.get(&recipient) {
-        //         self.block_access_list
-        //             .clone()
-        //             .unwrap()
-        //             .account_changes
-        //             .push(from_account(recipient, acc.clone()));
-        //     }
-        //     if let Some(acc) = state.get(tx.signer()) {
-        //         self.block_access_list
-        //             .clone()
-        //             .unwrap()
-        //             .account_changes
-        //             .push(from_account(*tx.signer(), acc.clone()));
-        //     }
-        // }
+        if let Some(recipient) = tx.tx().to() {
+            if let Some(acc) = state.get(&recipient) {
+                self.block_access_list
+                    .clone()
+                    .unwrap()
+                    .account_changes
+                    .push(from_account(recipient, &acc.info));
+            }
+            if let Some(acc) = state.get(tx.signer()) {
+                self.block_access_list
+                    .clone()
+                    .unwrap()
+                    .account_changes
+                    .push(from_account(*tx.signer(), &acc.info));
+            }
+        }
 
         Ok(Some(gas_used))
     }
@@ -244,14 +244,14 @@ where
                 )
             })
         })?;
-        for address in self.receipts.iter().flat_map(|r| r.logs().iter().map(|l| l.address)) {
-            let acc = self.evm.db_mut().database.basic(address).unwrap();
-            self.block_access_list
-                .clone()
-                .unwrap()
-                .account_changes
-                .push(from_account(address, acc.unwrap().clone()))
-        }
+        // for address in self.receipts.iter().flat_map(|r| r.logs().iter().map(|l| l.address)) {
+        //     let acc = self.evm.db_mut().database.basic(address).unwrap();
+        //     self.block_access_list
+        //         .clone()
+        //         .unwrap()
+        //         .account_changes
+        //         .push(from_account(address, &acc.unwrap()))
+        // }
         Ok((
             self.evm,
             BlockExecutionResult {
@@ -344,7 +344,7 @@ where
 }
 
 /// An utility function to build block access list
-pub fn from_account(address: Address, account: AccountInfo) -> AccountChanges {
+pub fn from_account(address: Address, account: &AccountInfo) -> AccountChanges {
     let mut account_changes = AccountChanges::default();
 
     for read_keys in account.storage_access.reads.values() {
