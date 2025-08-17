@@ -4,7 +4,7 @@ use crate::{
     block::{BlockExecutionError, OnStateHook},
     Evm,
 };
-use alloc::{borrow::Cow, boxed::Box};
+use alloc::{borrow::Cow, boxed::Box, vec::Vec};
 use alloy_block_access_list::{AccountChanges, SlotChanges, StorageChange};
 use alloy_consensus::BlockHeader;
 use alloy_eips::{
