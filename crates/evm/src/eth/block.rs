@@ -19,7 +19,7 @@ use crate::{
 };
 use alloc::{borrow::Cow, boxed::Box, vec::Vec};
 use alloy_block_access_list::{
-    balance_change::BalanceChange, code_change::CodeChange, nonce_change::NonceChange,
+    balance_change::BalanceChanges, code_change::CodeChanges, nonce_change::NonceChanges,
     AccountChanges, BlockAccessList, SlotChanges, StorageChange,
 };
 use alloy_consensus::{Header, Transaction, TxReceipt};
@@ -361,7 +361,7 @@ pub fn from_account(address: Address, account: AccountInfo) -> AccountChanges {
             slot_map
                 .entry(*slot)
                 .or_default()
-                .push(StorageChange { tx_index: *tx_index, new_value: *post });
+                .push(StorageChange { block_access_index: *tx_index, new_value: *post });
         }
     }
 
@@ -371,9 +371,10 @@ pub fn from_account(address: Address, account: AccountInfo) -> AccountChanges {
     }
     for (tx_index, (pre_balance, post_balance)) in &account.balance_change.change {
         if pre_balance != post_balance {
-            account_changes
-                .balance_changes
-                .push(BalanceChange { tx_index: *tx_index, post_balance: *post_balance });
+            account_changes.balance_changes.push(BalanceChanges {
+                block_access_index: *tx_index,
+                post_balance: *post_balance,
+            });
         }
     }
 
@@ -381,14 +382,14 @@ pub fn from_account(address: Address, account: AccountInfo) -> AccountChanges {
         if pre_nonce != post_nonce {
             account_changes
                 .nonce_changes
-                .push(NonceChange { tx_index: *tx_index, new_nonce: *post_nonce });
+                .push(NonceChanges { block_access_index: *tx_index, new_nonce: *post_nonce });
         }
     }
 
     for (tx_index, code) in &account.code_change.change {
         account_changes
             .code_changes
-            .push(CodeChange { tx_index: *tx_index, new_code: code.clone() });
+            .push(CodeChanges { block_access_index: *tx_index, new_code: code.clone() });
     }
 
     account_changes.address = address;
