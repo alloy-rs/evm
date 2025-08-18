@@ -326,11 +326,10 @@ where
         // 3. Build for all post execution
         // 4. Sort
         for address in self.touched_addresses.iter() {
-            let acc_change = from_account(
-                *address,
-                &self.evm.db_mut().database.basic(*address).unwrap().unwrap(),
-            );
-            self.block_access_list.as_mut().unwrap().account_changes.push(acc_change);
+            if let Ok(Some(account)) = self.evm.db_mut().database.basic(*address) {
+                let acc_change = from_account(*address, &account);
+                self.block_access_list.as_mut().unwrap().account_changes.push(acc_change);
+            }
         }
 
         // All post tx balance increments
