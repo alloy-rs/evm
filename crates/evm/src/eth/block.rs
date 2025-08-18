@@ -640,8 +640,23 @@ mod tests {
         let tx_with_encoded1 = WithEncoded::new(tx1.encoded_2718().into(), tx1);
         let tx_with_encoded2 = WithEncoded::new(tx2.encoded_2718().into(), tx2);
 
-        let result = executor.execute_block([&tx_with_encoded1, &tx_with_encoded2]).unwrap();
+        let _result = executor.execute_block([&tx_with_encoded1, &tx_with_encoded2]).unwrap();
 
-        println!("Execution outcome: Block Accesss List {:?}", result.block_access_list);
+        // println!("Execution outcome: Block Accesss List {:?}", result.block_access_list);
+        /*
+         * * Execution outcome: Block Accesss List Some(BlockAccessList { account_changes:
+         * [AccountChanges { address: 0x0000000000000000000000000000000000000000,
+         * storage_changes: [], storage_reads: [], balance_changes: [BalanceChanges {
+         * block_access_index: 3, post_balance: 5000000000000000000 }], nonce_changes: [],
+         * code_changes: [] }, AccountChanges { address:
+         * 0x000000000000000000000000000000000000beef, storage_changes: [], storage_reads: [],
+         * balance_changes: [BalanceChanges { block_access_index: 0, post_balance:
+         * 49999899999979000 }, BalanceChanges { block_access_index: 0, post_balance:
+         * 49999799999958000 }], nonce_changes: [NonceChanges { block_access_index: 0, new_nonce:
+         * 1 }, NonceChanges { block_access_index: 0, new_nonce: 2 }], code_changes: [] },
+         * AccountChanges { address: 0x000000000000000000000000000000000000dead, storage_changes:
+         * [], storage_reads: [], balance_changes: [BalanceChanges { block_access_index: 0,
+         * post_balance: 150000100000000000 }, BalanceChanges { block_access_index: 0,
+         * post_balance: 150000200000000000 }], nonce_changes: [], code_changes: [] }] }) */
     }
 }
