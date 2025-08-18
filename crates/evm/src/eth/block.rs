@@ -30,8 +30,12 @@ use alloy_eips::{
 use alloy_hardforks::EthereumHardfork;
 use alloy_primitives::{Address, Log, B256};
 use revm::{
-    context::result::ExecutionResult, context_interface::result::ResultAndState, database::State,
-    primitives::StorageKey, state::AccountInfo, DatabaseCommit, Inspector,
+    context::result::ExecutionResult,
+    context_interface::result::ResultAndState,
+    database::State,
+    primitives::{StorageKey, StorageValue},
+    state::AccountInfo,
+    DatabaseCommit, Inspector,
 };
 
 /// Context for Ethereum block execution.
@@ -210,22 +214,65 @@ where
                 requests.push_request_with_type(eip6110::DEPOSIT_REQUEST_TYPE, deposit_requests);
             }
 
+            let mut pre_withdrawal = Vec::new();
+            for i in 0..=3 {
+                let value = self
+                    .evm
+                    .db_mut()
+                    .database
+                    .storage(WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS, StorageKey::from(i))
+                    .unwrap();
+                pre_withdrawal.push(value);
+            }
+
+            let mut pre_consolidation = Vec::new();
+            for i in 0..=3 {
+                let value = self
+                    .evm
+                    .db_mut()
+                    .database
+                    .storage(CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS, StorageKey::from(i))
+                    .unwrap();
+                pre_consolidation.push(value);
+            }
+
             requests.extend(self.system_caller.apply_post_execution_changes(&mut self.evm)?);
 
-            let consolidated_acc =
-                self.evm.db_mut().database.basic(CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS).unwrap();
-            acc_changes.push(set_storage_change(
-                CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS,
-                &consolidated_acc.unwrap(),
-                total_txns as u64,
-            ));
-            let withdrawl_acc =
-                self.evm.db_mut().database.basic(WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS).unwrap();
-            acc_changes.push(set_storage_change(
+            let mut post_withdrawal = Vec::new();
+            for i in 0..=3 {
+                let value = self
+                    .evm
+                    .db_mut()
+                    .database
+                    .storage(WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS, StorageKey::from(i))
+                    .unwrap();
+                post_withdrawal.push(value);
+            }
+
+            let mut post_consolidation = Vec::new();
+            for i in 0..=3 {
+                let value = self
+                    .evm
+                    .db_mut()
+                    .database
+                    .storage(CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS, StorageKey::from(i))
+                    .unwrap();
+                post_consolidation.push(value);
+            }
+
+            acc_changes.push(build_post_execution_system_contract_account_change(
                 WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS,
-                &withdrawl_acc.unwrap(),
-                total_txns as u64,
+                pre_withdrawal,
+                post_withdrawal,
+                total_txns as BlockAccessIndex,
             ));
+            acc_changes.push(build_post_execution_system_contract_account_change(
+                CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS,
+                pre_consolidation,
+                post_consolidation,
+                total_txns as BlockAccessIndex,
+            ));
+
             requests
         } else {
             Requests::default()
@@ -261,7 +308,7 @@ where
         self.evm
             .db_mut()
             .increment_balances(balance_increments.clone())
-            .map_err(|_| BlockValidationError::IncrementBalanceFailed)?; //we can do this in revm
+            .map_err(|_| BlockValidationError::IncrementBalanceFailed)?;
 
         // call state hook with changes due to balance increments.
         self.system_caller.try_on_state_with(|| {
@@ -372,32 +419,28 @@ where
     }
 }
 
-/// An utility function to set storage change for bal
-pub fn set_storage_change(
+/// An utility function for system contract storage allocation.
+pub fn build_post_execution_system_contract_account_change(
     address: Address,
-    account: &AccountInfo,
-    block_access_index: BlockAccessIndex,
+    pre: Vec<StorageValue>,
+    post: Vec<StorageValue>,
+    tx_index: BlockAccessIndex,
 ) -> AccountChanges {
-    let mut account_changes = AccountChanges::default();
+    let mut account_changes = AccountChanges::new(address);
 
-    // Group writes by slots
-    let mut slot_map: BTreeMap<StorageKey, Vec<StorageChange>> = BTreeMap::new();
+    for (i, (pre_val, post_val)) in pre.into_iter().zip(post.into_iter()).enumerate() {
+        let slot = StorageKey::from(i as u64);
 
-    for (_tx_index, writes_map) in &account.storage_access.writes {
-        for (slot, (_pre, post)) in writes_map {
-            slot_map
-                .entry(*slot)
-                .or_default()
-                .push(StorageChange { block_access_index, new_value: *post });
+        if pre_val != post_val {
+            let change = StorageChange { block_access_index: tx_index, new_value: post_val };
+            account_changes
+                .storage_changes
+                .push(SlotChanges::default().with_slot(slot.into()).with_change(change));
+        } else {
+            account_changes.storage_reads.push(slot.into());
         }
     }
 
-    // Convert slot_map into SlotChanges and push into account_changes
-    for (slot, changes) in slot_map {
-        account_changes.storage_changes.push(SlotChanges { slot: slot.into(), changes });
-    }
-
-    account_changes.address = address;
     account_changes
 }
 
