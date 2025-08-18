@@ -181,13 +181,16 @@ where
         self.evm.db_mut().commit(state.clone());
 
         if let Some(recipient) = tx.tx().to() {
-            if !self.touched_addresses.contains(&recipient) {
-                self.touched_addresses.push(recipient);
+            if let Some(acc) = state.get(&recipient) {
+                if let Some(bal) = self.block_access_list.as_mut() {
+                    bal.account_changes.push(from_account(recipient, &acc.info));
+                }
             }
 
-            let signer = *tx.signer();
-            if !self.touched_addresses.contains(&signer) {
-                self.touched_addresses.push(signer);
+            if let Some(acc) = state.get(tx.signer()) {
+                if let Some(bal) = self.block_access_list.as_mut() {
+                    bal.account_changes.push(from_account(*tx.signer(), &acc.info));
+                }
             }
         }
 
@@ -325,12 +328,12 @@ where
         // 2. Build for all the touched addresses.
         // 3. Build for all post execution
         // 4. Sort
-        for address in self.touched_addresses.iter() {
-            if let Ok(Some(account)) = self.evm.db_mut().database.basic(*address) {
-                let acc_change = from_account(*address, &account);
-                self.block_access_list.as_mut().unwrap().account_changes.push(acc_change);
-            }
-        }
+        // for address in self.touched_addresses.iter() {
+        //     if let Ok(Some(account)) = self.evm.db_mut().database.basic(*address) {
+        //         let acc_change = from_account(*address, &account);
+        //         self.block_access_list.as_mut().unwrap().account_changes.push(acc_change);
+        //     }
+        // }
 
         // All post tx balance increments
         for (address, increment) in balance_increments {
@@ -523,7 +526,6 @@ pub fn from_account(address: Address, account: &AccountInfo) -> AccountChanges {
 /// Sort block-level access list and removes duplicates entries by merging them together.
 pub fn sort_and_remove_duplicates_in_bal(mut bal: BlockAccessList) -> BlockAccessList {
     bal.account_changes.sort_by_key(|ac| ac.address);
-
     let mut merged: Vec<AccountChanges> = Vec::new();
 
     for account in bal.account_changes {
@@ -579,7 +581,7 @@ mod tests {
             gas_price: 1,
             gas_limit: 21_000,
             to: TxKind::Call(address!("000000000000000000000000000000000000dead")),
-            value: U256::from(1_000_000_000u64),
+            value: U256::from(1_000_000_00000u64),
             input: Default::default(),
         };
         let legacy2 = TxLegacy {
@@ -588,7 +590,7 @@ mod tests {
             gas_price: 1,
             gas_limit: 21_000,
             to: TxKind::Call(address!("000000000000000000000000000000000000dead")),
-            value: U256::from(1_000_000_000u64),
+            value: U256::from(1_000_000_00000u64),
             input: Default::default(),
         };
         let sender = address!("000000000000000000000000000000000000beef");
@@ -602,7 +604,7 @@ mod tests {
         db.database.insert_account_info(
             sender,
             AccountInfo {
-                balance: U256::from(5_000_000_000u64),
+                balance: U256::from(5_000_0000000000_000u64),
                 nonce: 0,
                 code_hash: B256::ZERO,
                 ..Default::default()
@@ -611,7 +613,7 @@ mod tests {
         db.database.insert_account_info(
             address!("000000000000000000000000000000000000dead"),
             AccountInfo {
-                balance: U256::from(5_000_000_000u64),
+                balance: U256::from(15_000_0000000000_000u64),
                 nonce: 0,
                 code_hash: B256::ZERO,
                 ..Default::default()
@@ -620,22 +622,21 @@ mod tests {
         let evm = factory.evm_factory.create_evm(&mut db, EvmEnv::default());
         let executor = factory.create_executor(evm, ctx);
 
+        let sig = Signature::new(
+            U256::from(1), // r
+            U256::from(2), // s
+            true,          // v (valid recovery id)
+        );
+
+        // Wrap legacy1
         let tx1 = Recovered::new_unchecked(
-            EthereumTxEnvelope::Legacy(legacy1.into_signed(Signature::new(
-                Default::default(),
-                Default::default(),
-                Default::default(),
-            ))),
+            EthereumTxEnvelope::Legacy(legacy1.into_signed(sig.clone())),
             sender,
         );
-        let tx2 = Recovered::new_unchecked(
-            EthereumTxEnvelope::Legacy(legacy2.into_signed(Signature::new(
-                Default::default(),
-                Default::default(),
-                Default::default(),
-            ))),
-            sender,
-        );
+
+        // Wrap legacy2
+        let tx2 =
+            Recovered::new_unchecked(EthereumTxEnvelope::Legacy(legacy2.into_signed(sig)), sender);
         let tx_with_encoded1 = WithEncoded::new(tx1.encoded_2718().into(), tx1);
         let tx_with_encoded2 = WithEncoded::new(tx2.encoded_2718().into(), tx2);
 
