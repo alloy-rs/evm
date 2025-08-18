@@ -28,7 +28,7 @@ use alloy_eips::{
     eip7251::CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS, eip7685::Requests, Encodable2718,
 };
 use alloy_hardforks::EthereumHardfork;
-use alloy_primitives::{Address, Log, B256};
+use alloy_primitives::{Address, Log, B256, U256};
 use revm::{
     context::result::ExecutionResult,
     context_interface::result::ResultAndState,
@@ -197,8 +197,8 @@ where
     fn finish(
         mut self,
     ) -> Result<(Self::Evm, BlockExecutionResult<R::Receipt>), BlockExecutionError> {
-        let total_txns = self.receipts.len() + 1;
-        let mut acc_changes: Vec<AccountChanges> = Vec::new();
+        let post_system_tx = self.receipts.len() + 1;
+        let mut post_system_acc_changes: Vec<AccountChanges> = Vec::new();
 
         let requests = if self
             .spec
@@ -260,17 +260,17 @@ where
                 post_consolidation.push(value);
             }
 
-            acc_changes.push(build_post_execution_system_contract_account_change(
+            post_system_acc_changes.push(build_post_execution_system_contract_account_change(
                 WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS,
                 pre_withdrawal,
                 post_withdrawal,
-                total_txns as BlockAccessIndex,
+                post_system_tx as BlockAccessIndex,
             ));
-            acc_changes.push(build_post_execution_system_contract_account_change(
+            post_system_acc_changes.push(build_post_execution_system_contract_account_change(
                 CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS,
                 pre_consolidation,
                 post_consolidation,
-                total_txns as BlockAccessIndex,
+                post_system_tx as BlockAccessIndex,
             ));
 
             requests
@@ -320,21 +320,49 @@ where
             })
         })?;
 
-        // for address in self.receipts.iter().flat_map(|r| r.logs().iter().map(|l| l.address)) {
-        //     let acc = self.evm.db_mut().database.basic(address).unwrap();
-        //     self.block_access_list
-        //         .clone()
-        //         .unwrap()
-        //         .account_changes
-        //         .push(from_account(address, &acc.unwrap()))
-        // }
+        // Build Block-level Access List here
+        // 1. Build for all pre execution (Done in `apply_pre_execution_changes`)
+        // 2. Build for all the touched addresses.
+        // 3. Build for all post execution
+        // 4. Sort
+        for address in self.touched_addresses.iter() {
+            let acc_change = from_account(
+                *address,
+                &self.evm.db_mut().database.basic(*address).unwrap().unwrap(),
+            );
+            self.block_access_list.as_mut().unwrap().account_changes.push(acc_change);
+        }
+
+        // All post tx balance increments
+        for (address, increment) in balance_increments {
+            if increment != 0 {
+                self.block_access_list.as_mut().unwrap().account_changes.push(
+                    AccountChanges::default().with_address(address).with_balance_change(
+                        BalanceChanges {
+                            block_access_index: post_system_tx as u64,
+                            post_balance: U256::from(increment),
+                        },
+                    ),
+                );
+            }
+        }
+
+        // Add post execution system contract account changes
+        self.block_access_list
+            .as_mut()
+            .unwrap()
+            .account_changes
+            .extend(post_system_acc_changes.into_iter());
+
+        //TODO: Sort and fix duplicates in the block access list.
+
         Ok((
             self.evm,
             BlockExecutionResult {
                 receipts: self.receipts,
                 requests,
                 gas_used: self.gas_used,
-                block_access_list: None,
+                block_access_list: self.block_access_list,
             },
         ))
     }
