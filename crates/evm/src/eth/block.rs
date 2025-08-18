@@ -356,7 +356,9 @@ where
                 receipts: self.receipts,
                 requests,
                 gas_used: self.gas_used,
-                block_access_list: Some(sort_and_remove_bal(self.block_access_list.unwrap())),
+                block_access_list: Some(sort_and_remove_duplicates_in_bal(
+                    self.block_access_list.unwrap(),
+                )),
             },
         ))
     }
@@ -520,7 +522,7 @@ pub fn from_account(address: Address, account: &AccountInfo) -> AccountChanges {
 }
 
 /// Sort block-level access list and deduplicates it.
-pub fn sort_and_remove_bal(mut bal: BlockAccessList) -> BlockAccessList {
+pub fn sort_and_remove_duplicates_in_bal(mut bal: BlockAccessList) -> BlockAccessList {
     bal.account_changes.sort_by_key(|ac| ac.address);
 
     let mut merged: Vec<AccountChanges> = Vec::new();
