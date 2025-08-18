@@ -20,10 +20,13 @@ use crate::{
 use alloc::{borrow::Cow, boxed::Box, vec::Vec};
 use alloy_block_access_list::{
     balance_change::BalanceChanges, code_change::CodeChanges, nonce_change::NonceChanges,
-    AccountChanges, BlockAccessList, SlotChanges, StorageChange,
+    AccountChanges, BlockAccessIndex, BlockAccessList, SlotChanges, StorageChange,
 };
 use alloy_consensus::{Header, Transaction, TxReceipt};
-use alloy_eips::{eip4895::Withdrawals, eip7685::Requests, Encodable2718};
+use alloy_eips::{
+    eip4895::Withdrawals, eip7002::WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS,
+    eip7251::CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS, eip7685::Requests, Encodable2718,
+};
 use alloy_hardforks::EthereumHardfork;
 use alloy_primitives::{Address, Log, B256};
 use revm::{
@@ -190,6 +193,9 @@ where
     fn finish(
         mut self,
     ) -> Result<(Self::Evm, BlockExecutionResult<R::Receipt>), BlockExecutionError> {
+        let total_txns = self.receipts.len() + 1;
+        let mut acc_changes: Vec<AccountChanges> = Vec::new();
+
         let requests = if self
             .spec
             .is_prague_active_at_timestamp(self.evm.block().timestamp.saturating_to())
@@ -205,6 +211,21 @@ where
             }
 
             requests.extend(self.system_caller.apply_post_execution_changes(&mut self.evm)?);
+
+            let consolidated_acc =
+                self.evm.db_mut().database.basic(CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS).unwrap();
+            acc_changes.push(set_storage_change(
+                CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS,
+                &consolidated_acc.unwrap(),
+                total_txns as u64,
+            ));
+            let withdrawl_acc =
+                self.evm.db_mut().database.basic(WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS).unwrap();
+            acc_changes.push(set_storage_change(
+                WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS,
+                &withdrawl_acc.unwrap(),
+                total_txns as u64,
+            ));
             requests
         } else {
             Requests::default()
@@ -251,6 +272,7 @@ where
                 )
             })
         })?;
+
         // for address in self.receipts.iter().flat_map(|r| r.logs().iter().map(|l| l.address)) {
         //     let acc = self.evm.db_mut().database.basic(address).unwrap();
         //     self.block_access_list
@@ -348,6 +370,35 @@ where
     {
         EthBlockExecutor::new(evm, ctx, &self.spec, &self.receipt_builder)
     }
+}
+
+/// An utility function to set storage change for bal
+pub fn set_storage_change(
+    address: Address,
+    account: &AccountInfo,
+    block_access_index: BlockAccessIndex,
+) -> AccountChanges {
+    let mut account_changes = AccountChanges::default();
+
+    // Group writes by slots
+    let mut slot_map: BTreeMap<StorageKey, Vec<StorageChange>> = BTreeMap::new();
+
+    for (_tx_index, writes_map) in &account.storage_access.writes {
+        for (slot, (_pre, post)) in writes_map {
+            slot_map
+                .entry(*slot)
+                .or_default()
+                .push(StorageChange { block_access_index, new_value: *post });
+        }
+    }
+
+    // Convert slot_map into SlotChanges and push into account_changes
+    for (slot, changes) in slot_map {
+        account_changes.storage_changes.push(SlotChanges { slot: slot.into(), changes });
+    }
+
+    account_changes.address = address;
+    account_changes
 }
 
 /// An utility function to build block access list
