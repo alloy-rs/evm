@@ -543,3 +543,86 @@ pub fn sort_and_remove_duplicates_in_bal(mut bal: BlockAccessList) -> BlockAcces
 
     alloy_block_access_list::BlockAccessList { account_changes: merged }
 }
+
+#[cfg(test)]
+mod tests {
+    use alloy_consensus::{
+        transaction::Recovered, EthereumTxEnvelope, SignableTransaction, TxLegacy,
+    };
+    use alloy_eips::{eip2718::WithEncoded, Encodable2718};
+    use alloy_primitives::{address, Signature, TxKind, B256, U256};
+    use revm::{
+        database::{CacheDB, EmptyDB, State},
+        state::AccountInfo,
+    };
+
+    use crate::{
+        block::{BlockExecutor, BlockExecutorFactory},
+        eth::{
+            receipt_builder::AlloyReceiptBuilder, spec::EthSpec, EthBlockExecutionCtx,
+            EthBlockExecutorFactory,
+        },
+        EthEvmFactory, EvmEnv, EvmFactory,
+    };
+
+    #[test]
+    fn test_bal_building() {
+        let ctx = EthBlockExecutionCtx {
+            parent_hash: B256::ZERO,
+            parent_beacon_block_root: Some(B256::ZERO),
+            ommers: &[],
+            withdrawals: None,
+        };
+        let legacy = TxLegacy {
+            chain_id: None,
+            nonce: 0,
+            gas_price: 1,
+            gas_limit: 21_000,
+            to: TxKind::Call(address!("000000000000000000000000000000000000dead")),
+            value: U256::from(1_000_000_000u64),
+            input: Default::default(),
+        };
+        let sender = address!("000000000000000000000000000000000000beef");
+
+        let factory = EthBlockExecutorFactory::new(
+            AlloyReceiptBuilder::default(),
+            EthSpec::mainnet(),
+            EthEvmFactory::default(),
+        );
+        let mut db = State::builder().with_database(CacheDB::<EmptyDB>::default()).build();
+        db.database.insert_account_info(
+            sender,
+            AccountInfo {
+                balance: U256::from(5_000_000_000u64),
+                nonce: 0,
+                code_hash: B256::ZERO,
+                ..Default::default()
+            },
+        );
+        db.database.insert_account_info(
+            address!("000000000000000000000000000000000000dead"),
+            AccountInfo {
+                balance: U256::from(5_000_000_000u64),
+                nonce: 0,
+                code_hash: B256::ZERO,
+                ..Default::default()
+            },
+        );
+        let evm = factory.evm_factory.create_evm(&mut db, EvmEnv::default());
+        let executor = factory.create_executor(evm, ctx);
+
+        let tx = Recovered::new_unchecked(
+            EthereumTxEnvelope::Legacy(legacy.into_signed(Signature::new(
+                Default::default(),
+                Default::default(),
+                Default::default(),
+            ))),
+            sender,
+        );
+        let tx_with_encoded = WithEncoded::new(tx.encoded_2718().into(), tx.clone());
+
+        let result = executor.execute_block([&tx_with_encoded].into_iter()).unwrap();
+
+        println!("Execution outcome: Block Accesss List {:?}", result.block_access_list);
+    }
+}
