@@ -521,7 +521,7 @@ pub fn from_account(address: Address, account: &AccountInfo) -> AccountChanges {
     account_changes
 }
 
-/// Sort block-level access list and deduplicates it.
+/// Sort block-level access list and removes duplicates entries by merging them together.
 pub fn sort_and_remove_duplicates_in_bal(mut bal: BlockAccessList) -> BlockAccessList {
     bal.account_changes.sort_by_key(|ac| ac.address);
 
