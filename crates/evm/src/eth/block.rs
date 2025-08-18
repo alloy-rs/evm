@@ -619,9 +619,9 @@ mod tests {
             ))),
             sender,
         );
-        let tx_with_encoded = WithEncoded::new(tx.encoded_2718().into(), tx.clone());
+        let tx_with_encoded = WithEncoded::new(tx.encoded_2718().into(), tx);
 
-        let result = executor.execute_block([&tx_with_encoded].into_iter()).unwrap();
+        let result = executor.execute_block([&tx_with_encoded]).unwrap();
 
         println!("Execution outcome: Block Accesss List {:?}", result.block_access_list);
     }
