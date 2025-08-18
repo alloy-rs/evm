@@ -160,7 +160,7 @@ where
         if !f(&result).should_commit() {
             return Ok(None);
         }
-
+        // updated
         self.system_caller.on_state(StateChangeSource::Transaction(self.receipts.len()), &state);
 
         let gas_used = result.gas_used();
