@@ -63,8 +63,10 @@ pub struct EthBlockExecutor<'a, Evm, Spec, R: ReceiptBuilder> {
     receipts: Vec<R::Receipt>,
     /// Total gas used by transactions in this block.
     gas_used: u64,
-    /// optional store for building bal
+    /// Optional store for building bal
     pub block_access_list: Option<BlockAccessList>,
+    /// All touched accounts in the block.
+    pub touched_addresses: Vec<Address>,
 }
 
 impl<'a, Evm, Spec, R> EthBlockExecutor<'a, Evm, Spec, R>
@@ -83,6 +85,7 @@ where
             spec,
             receipt_builder,
             block_access_list: None,
+            touched_addresses: Vec::new(),
         }
     }
 }
@@ -171,19 +174,13 @@ where
         self.evm.db_mut().commit(state.clone());
 
         if let Some(recipient) = tx.tx().to() {
-            if let Some(acc) = state.get(&recipient) {
-                self.block_access_list
-                    .clone()
-                    .unwrap()
-                    .account_changes
-                    .push(from_account(recipient, &acc.info));
+            if !self.touched_addresses.contains(&recipient) {
+                self.touched_addresses.push(recipient);
             }
-            if let Some(acc) = state.get(tx.signer()) {
-                self.block_access_list
-                    .clone()
-                    .unwrap()
-                    .account_changes
-                    .push(from_account(*tx.signer(), &acc.info));
+
+            let signer = *tx.signer();
+            if !self.touched_addresses.contains(&signer) {
+                self.touched_addresses.push(signer);
             }
         }
 

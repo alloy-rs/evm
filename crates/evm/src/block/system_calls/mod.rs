@@ -109,8 +109,9 @@ where
                     StateChangeSource::PreBlock(StateChangePreBlockSource::BlockHashesContract),
                     &res.state,
                 );
-            } //TODO
+            }
             evm.db_mut().commit(res.state);
+
             slot_change = SlotChanges::default()
                 .with_change(StorageChange {
                     block_access_index: 0,
@@ -148,7 +149,7 @@ where
                 SlotChanges::default()
                     .with_change(StorageChange {
                         block_access_index: 0,
-                        new_value: U256::from(timestamp).into(),
+                        new_value: U256::from(timestamp),
                     })
                     .with_slot(U256::from((timestamp % 8192) + 8192).into()),
             );
