@@ -91,7 +91,7 @@ where
             system_caller: SystemCaller::new(spec.clone()),
             spec,
             receipt_builder,
-            block_access_list: None,
+            block_access_list: Some(BlockAccessList::default()),
             touched_addresses: Vec::new(),
         }
     }
