@@ -573,9 +573,18 @@ mod tests {
             ommers: &[],
             withdrawals: None,
         };
-        let legacy = TxLegacy {
+        let legacy1 = TxLegacy {
             chain_id: None,
             nonce: 0,
+            gas_price: 1,
+            gas_limit: 21_000,
+            to: TxKind::Call(address!("000000000000000000000000000000000000dead")),
+            value: U256::from(1_000_000_000u64),
+            input: Default::default(),
+        };
+        let legacy2 = TxLegacy {
+            chain_id: None,
+            nonce: 1,
             gas_price: 1,
             gas_limit: 21_000,
             to: TxKind::Call(address!("000000000000000000000000000000000000dead")),
@@ -611,18 +620,27 @@ mod tests {
         let evm = factory.evm_factory.create_evm(&mut db, EvmEnv::default());
         let executor = factory.create_executor(evm, ctx);
 
-        let tx = Recovered::new_unchecked(
-            EthereumTxEnvelope::Legacy(legacy.into_signed(Signature::new(
+        let tx1 = Recovered::new_unchecked(
+            EthereumTxEnvelope::Legacy(legacy1.into_signed(Signature::new(
                 Default::default(),
                 Default::default(),
                 Default::default(),
             ))),
             sender,
         );
-        let tx_with_encoded = WithEncoded::new(tx.encoded_2718().into(), tx);
+        let tx2 = Recovered::new_unchecked(
+            EthereumTxEnvelope::Legacy(legacy2.into_signed(Signature::new(
+                Default::default(),
+                Default::default(),
+                Default::default(),
+            ))),
+            sender,
+        );
+        let tx_with_encoded1 = WithEncoded::new(tx1.encoded_2718().into(), tx1);
+        let tx_with_encoded2 = WithEncoded::new(tx2.encoded_2718().into(), tx2);
 
-        let result = executor.execute_block([&tx_with_encoded]).unwrap();
+        let result = executor.execute_block([&tx_with_encoded1, &tx_with_encoded2]).unwrap();
 
-        // println!("Execution outcome: Block Accesss List {:?}", result.block_access_list);
+        println!("Execution outcome: Block Accesss List {:?}", result.block_access_list);
     }
 }
