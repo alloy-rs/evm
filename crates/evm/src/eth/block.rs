@@ -348,13 +348,7 @@ where
         }
 
         // Add post execution system contract account changes
-        self.block_access_list
-            .as_mut()
-            .unwrap()
-            .account_changes
-            .extend(post_system_acc_changes.into_iter());
-
-        //TODO: Sort and fix duplicates in the block access list.
+        self.block_access_list.as_mut().unwrap().account_changes.extend(post_system_acc_changes);
 
         Ok((
             self.evm,
@@ -362,7 +356,7 @@ where
                 receipts: self.receipts,
                 requests,
                 gas_used: self.gas_used,
-                block_access_list: self.block_access_list,
+                block_access_list: Some(sort_and_remove_bal(self.block_access_list.unwrap())),
             },
         ))
     }
@@ -523,4 +517,28 @@ pub fn from_account(address: Address, account: &AccountInfo) -> AccountChanges {
 
     account_changes.address = address;
     account_changes
+}
+
+/// Sort block-level access list and deduplicates it.
+pub fn sort_and_remove_bal(mut bal: BlockAccessList) -> BlockAccessList {
+    bal.account_changes.sort_by_key(|ac| ac.address);
+
+    let mut merged: Vec<AccountChanges> = Vec::new();
+
+    for account in bal.account_changes {
+        if let Some(last) = merged.last_mut() {
+            if last.address == account.address {
+                // Same address → extend fields
+                last.storage_changes.extend(account.storage_changes);
+                last.storage_reads.extend(account.storage_reads);
+                last.balance_changes.extend(account.balance_changes);
+                last.nonce_changes.extend(account.nonce_changes);
+                last.code_changes.extend(account.code_changes);
+                continue;
+            }
+        }
+        merged.push(account);
+    }
+
+    alloy_block_access_list::BlockAccessList { account_changes: merged }
 }
