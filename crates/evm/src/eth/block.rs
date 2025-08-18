@@ -623,6 +623,6 @@ mod tests {
 
         let result = executor.execute_block([&tx_with_encoded].into_iter()).unwrap();
 
-        println!("Execution outcome: Block Accesss List {:?}", result.block_access_list);
+        // println!("Execution outcome: Block Accesss List {:?}", result.block_access_list);
     }
 }
