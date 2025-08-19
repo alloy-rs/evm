@@ -506,7 +506,7 @@ pub fn from_account_with_tx_index(
     // Group writes by slots
     let mut slot_map: BTreeMap<StorageKey, Vec<StorageChange>> = BTreeMap::new();
 
-    for (_tx_index, writes_map) in &account.storage_access.writes {
+    for writes_map in account.storage_access.writes.values() {
         for (slot, (_pre, post)) in writes_map {
             slot_map
                 .entry(*slot)
@@ -519,7 +519,7 @@ pub fn from_account_with_tx_index(
     for (slot, changes) in slot_map {
         account_changes.storage_changes.push(SlotChanges { slot: slot.into(), changes });
     }
-    for (_tx_index, (pre_balance, post_balance)) in &account.balance_change.change {
+    for (pre_balance, post_balance) in account.balance_change.change.values() {
         if pre_balance != post_balance {
             account_changes
                 .balance_changes
@@ -527,7 +527,7 @@ pub fn from_account_with_tx_index(
         }
     }
 
-    for (_tx_index, (pre_nonce, post_nonce)) in &account.nonce_change.change {
+    for (pre_nonce, post_nonce) in account.nonce_change.change.values() {
         if pre_nonce != post_nonce {
             account_changes
                 .nonce_changes
@@ -535,7 +535,7 @@ pub fn from_account_with_tx_index(
         }
     }
 
-    for (_tx_index, code) in &account.code_change.change {
+    for code in account.code_change.change.values() {
         account_changes
             .code_changes
             .push(CodeChanges { block_access_index, new_code: code.clone() });
