@@ -581,7 +581,7 @@ mod tests {
             gas_price: 1,
             gas_limit: 21_000,
             to: TxKind::Call(address!("000000000000000000000000000000000000dead")),
-            value: U256::from(1_000_000_00000u64),
+            value: U256::from(100_000_000_000_u64),
             input: Default::default(),
         };
         let legacy2 = TxLegacy {
@@ -590,7 +590,7 @@ mod tests {
             gas_price: 1,
             gas_limit: 21_000,
             to: TxKind::Call(address!("000000000000000000000000000000000000dead")),
-            value: U256::from(1_000_000_00000u64),
+            value: U256::from(100_000_000_000_u64),
             input: Default::default(),
         };
         let sender = address!("000000000000000000000000000000000000beef");
@@ -604,7 +604,7 @@ mod tests {
         db.database.insert_account_info(
             sender,
             AccountInfo {
-                balance: U256::from(5_000_0000000000_000u64),
+                balance: U256::from(50_000_000_000_000_000_u64),
                 nonce: 0,
                 code_hash: B256::ZERO,
                 ..Default::default()
@@ -629,10 +629,8 @@ mod tests {
         );
 
         // Wrap legacy1
-        let tx1 = Recovered::new_unchecked(
-            EthereumTxEnvelope::Legacy(legacy1.into_signed(sig.clone())),
-            sender,
-        );
+        let tx1 =
+            Recovered::new_unchecked(EthereumTxEnvelope::Legacy(legacy1.into_signed(sig)), sender);
 
         // Wrap legacy2
         let tx2 =
@@ -642,21 +640,67 @@ mod tests {
 
         let _result = executor.execute_block([&tx_with_encoded1, &tx_with_encoded2]).unwrap();
 
-        // println!("Execution outcome: Block Accesss List {:?}", result.block_access_list);
-        /*
-         * * Execution outcome: Block Accesss List Some(BlockAccessList { account_changes:
-         * [AccountChanges { address: 0x0000000000000000000000000000000000000000,
-         * storage_changes: [], storage_reads: [], balance_changes: [BalanceChanges {
-         * block_access_index: 3, post_balance: 5000000000000000000 }], nonce_changes: [],
-         * code_changes: [] }, AccountChanges { address:
-         * 0x000000000000000000000000000000000000beef, storage_changes: [], storage_reads: [],
-         * balance_changes: [BalanceChanges { block_access_index: 0, post_balance:
-         * 49999899999979000 }, BalanceChanges { block_access_index: 0, post_balance:
-         * 49999799999958000 }], nonce_changes: [NonceChanges { block_access_index: 0, new_nonce:
-         * 1 }, NonceChanges { block_access_index: 0, new_nonce: 2 }], code_changes: [] },
-         * AccountChanges { address: 0x000000000000000000000000000000000000dead, storage_changes:
-         * [], storage_reads: [], balance_changes: [BalanceChanges { block_access_index: 0,
-         * post_balance: 150000100000000000 }, BalanceChanges { block_access_index: 0,
-         * post_balance: 150000200000000000 }], nonce_changes: [], code_changes: [] }] }) */
+        //        {
+        //   "block_access_list": {
+        //     "account_changes": [
+        //       {
+        //         "address": "0x0000000000000000000000000000000000000000",
+        //         "storage_changes": [],
+        //         "storage_reads": [],
+        //         "balance_changes": [
+        //           {
+        //             "block_access_index": 3,
+        //             "post_balance": "5000000000000000000"
+        //           }
+        //         ],
+        //         "nonce_changes": [],
+        //         "code_changes": []
+        //       },
+        //       {
+        //         "address": "0x000000000000000000000000000000000000beef",
+        //         "storage_changes": [],
+        //         "storage_reads": [],
+        //         "balance_changes": [
+        //           {
+        //             "block_access_index": 0,
+        //             "post_balance": "49999899999979000"
+        //           },
+        //           {
+        //             "block_access_index": 0,
+        //             "post_balance": "49999799999958000"
+        //           }
+        //         ],
+        //         "nonce_changes": [
+        //           {
+        //             "block_access_index": 0,
+        //             "new_nonce": 1
+        //           },
+        //           {
+        //             "block_access_index": 0,
+        //             "new_nonce": 2
+        //           }
+        //         ],
+        //         "code_changes": []
+        //       },
+        //       {
+        //         "address": "0x000000000000000000000000000000000000dead",
+        //         "storage_changes": [],
+        //         "storage_reads": [],
+        //         "balance_changes": [
+        //           {
+        //             "block_access_index": 0,
+        //             "post_balance": "150000100000000000"
+        //           },
+        //           {
+        //             "block_access_index": 0,
+        //             "post_balance": "150000200000000000"
+        //           }
+        //         ],
+        //         "nonce_changes": [],
+        //         "code_changes": []
+        //       }
+        //     ]
+        //   }
+        // }
     }
 }
