@@ -152,7 +152,7 @@ where
         }
 
         // Execute transaction.
-        let ResultAndState { result, state } = self
+        let ResultAndState { result, mut state } = self
             .evm
             .transact(&tx)
             .map_err(|err| BlockExecutionError::evm(err, tx.tx().trie_hash()))?;
@@ -183,17 +183,36 @@ where
         if let Some(recipient) = tx.tx().to() {
             if let Some(acc) = state.get(&recipient) {
                 if let Some(bal) = self.block_access_list.as_mut() {
-                    bal.account_changes.push(from_account(recipient, &acc.info));
+                    bal.account_changes.push(from_account_with_tx_index(
+                        recipient,
+                        self.receipts.len() as u64,
+                        &acc.info,
+                    ));
+                    state.get_mut(&recipient).unwrap().info.storage_access.reads.clear();
+                    state.get_mut(&recipient).unwrap().info.storage_access.writes.clear();
+                    state.get_mut(&recipient).unwrap().info.balance_change.change.clear();
+                    state.get_mut(&recipient).unwrap().info.nonce_change.change.clear();
+                    state.get_mut(&recipient).unwrap().info.code_change.change.clear();
                 }
             }
 
             if let Some(acc) = state.get(tx.signer()) {
                 if let Some(bal) = self.block_access_list.as_mut() {
-                    bal.account_changes.push(from_account(*tx.signer(), &acc.info));
+                    bal.account_changes.push(from_account_with_tx_index(
+                        *tx.signer(),
+                        self.receipts.len() as u64,
+                        &acc.info,
+                    ));
+                    state.get_mut(tx.signer()).unwrap().info.storage_access.reads.clear();
+                    state.get_mut(tx.signer()).unwrap().info.storage_access.writes.clear();
+                    state.get_mut(tx.signer()).unwrap().info.balance_change.change.clear();
+                    state.get_mut(tx.signer()).unwrap().info.nonce_change.change.clear();
+                    state.get_mut(tx.signer()).unwrap().info.code_change.change.clear();
                 }
             }
         }
-
+        // Commit the state changes.
+        self.evm.db_mut().commit(state.clone());
         Ok(Some(gas_used))
     }
 
@@ -470,8 +489,12 @@ pub fn build_post_execution_system_contract_account_change(
     account_changes
 }
 
-/// An utility function to build block access list
-pub fn from_account(address: Address, account: &AccountInfo) -> AccountChanges {
+/// An utility function to build block access list with tx_index
+pub fn from_account_with_tx_index(
+    address: Address,
+    block_access_index: u64,
+    account: &AccountInfo,
+) -> AccountChanges {
     let mut account_changes = AccountChanges::default();
 
     for read_keys in account.storage_access.reads.values() {
@@ -483,12 +506,12 @@ pub fn from_account(address: Address, account: &AccountInfo) -> AccountChanges {
     // Group writes by slots
     let mut slot_map: BTreeMap<StorageKey, Vec<StorageChange>> = BTreeMap::new();
 
-    for (tx_index, writes_map) in &account.storage_access.writes {
+    for (_tx_index, writes_map) in &account.storage_access.writes {
         for (slot, (_pre, post)) in writes_map {
             slot_map
                 .entry(*slot)
                 .or_default()
-                .push(StorageChange { block_access_index: *tx_index, new_value: *post });
+                .push(StorageChange { block_access_index, new_value: *post });
         }
     }
 
@@ -496,27 +519,26 @@ pub fn from_account(address: Address, account: &AccountInfo) -> AccountChanges {
     for (slot, changes) in slot_map {
         account_changes.storage_changes.push(SlotChanges { slot: slot.into(), changes });
     }
-    for (tx_index, (pre_balance, post_balance)) in &account.balance_change.change {
+    for (_tx_index, (pre_balance, post_balance)) in &account.balance_change.change {
         if pre_balance != post_balance {
-            account_changes.balance_changes.push(BalanceChanges {
-                block_access_index: *tx_index,
-                post_balance: *post_balance,
-            });
+            account_changes
+                .balance_changes
+                .push(BalanceChanges { block_access_index, post_balance: *post_balance });
         }
     }
 
-    for (tx_index, (pre_nonce, post_nonce)) in &account.nonce_change.change {
+    for (_tx_index, (pre_nonce, post_nonce)) in &account.nonce_change.change {
         if pre_nonce != post_nonce {
             account_changes
                 .nonce_changes
-                .push(NonceChanges { block_access_index: *tx_index, new_nonce: *post_nonce });
+                .push(NonceChanges { block_access_index, new_nonce: *post_nonce });
         }
     }
 
-    for (tx_index, code) in &account.code_change.change {
+    for (_tx_index, code) in &account.code_change.change {
         account_changes
             .code_changes
-            .push(CodeChanges { block_access_index: *tx_index, new_code: code.clone() });
+            .push(CodeChanges { block_access_index, new_code: code.clone() });
     }
 
     account_changes.address = address;
@@ -636,67 +658,65 @@ mod tests {
 
         let _result = executor.execute_block([&tx_with_encoded1, &tx_with_encoded2]).unwrap();
 
-        // {
-        //   "block_access_list": {
-        //     "account_changes": [
-        //       {
-        //         "address": "0x0000000000000000000000000000000000000000",
-        //         "storage_changes": [],
-        //         "storage_reads": [],
-        //         "balance_changes": [
-        //           {
-        //             "block_access_index": 3,
-        //             "post_balance": "5000000000000000000"
-        //           }
-        //         ],
-        //         "nonce_changes": [],
-        //         "code_changes": []
-        //       },
-        //       {
-        //         "address": "0x000000000000000000000000000000000000beef",
-        //         "storage_changes": [],
-        //         "storage_reads": [],
-        //         "balance_changes": [
-        //           {
-        //             "block_access_index": 0,
-        //             "post_balance": "49999899999979000"
-        //           },
-        //           {
-        //             "block_access_index": 0,
-        //             "post_balance": "49999799999958000"
-        //           }
-        //         ],
-        //         "nonce_changes": [
-        //           {
-        //             "block_access_index": 0,
-        //             "new_nonce": 1
-        //           },
-        //           {
-        //             "block_access_index": 0,
-        //             "new_nonce": 2
-        //           }
-        //         ],
-        //         "code_changes": []
-        //       },
-        //       {
-        //         "address": "0x000000000000000000000000000000000000dead",
-        //         "storage_changes": [],
-        //         "storage_reads": [],
-        //         "balance_changes": [
-        //           {
-        //             "block_access_index": 0,
-        //             "post_balance": "150000100000000000"
-        //           },
-        //           {
-        //             "block_access_index": 0,
-        //             "post_balance": "150000200000000000"
-        //           }
-        //         ],
-        //         "nonce_changes": [],
-        //         "code_changes": []
-        //       }
-        //     ]
-        //   }
+        //    BlockAccessList {
+        //     account_changes: [
+        //         AccountChanges {
+        //             address: 0x0000000000000000000000000000000000000000,
+        //             storage_changes: [],
+        //             storage_reads: [],
+        //             balance_changes: [
+        //                 BalanceChanges {
+        //                     block_access_index: 3,
+        //                     post_balance: 5000000000000000000,
+        //                 },
+        //             ],
+        //             nonce_changes: [],
+        //             code_changes: [],
+        //         },
+        //         AccountChanges {
+        //             address: 0x000000000000000000000000000000000000beef,
+        //             storage_changes: [],
+        //             storage_reads: [],
+        //             balance_changes: [
+        //                 BalanceChanges {
+        //                     block_access_index: 1,
+        //                     post_balance: 49999899999979000,
+        //                 },
+        //                 BalanceChanges {
+        //                     block_access_index: 2,
+        //                     post_balance: 49999799999958000,
+        //                 },
+        //             ],
+        //             nonce_changes: [
+        //                 NonceChanges {
+        //                     block_access_index: 1,
+        //                     new_nonce: 1,
+        //                 },
+        //                 NonceChanges {
+        //                     block_access_index: 2,
+        //                     new_nonce: 2,
+        //                 },
+        //             ],
+        //             code_changes: [],
+        //         },
+        //         AccountChanges {
+        //             address: 0x000000000000000000000000000000000000dead,
+        //             storage_changes: [],
+        //             storage_reads: [],
+        //             balance_changes: [
+        //                 BalanceChanges {
+        //                     block_access_index: 1,
+        //                     post_balance: 150000100000000000,
+        //                 },
+        //                 BalanceChanges {
+        //                     block_access_index: 2,
+        //                     post_balance: 150000200000000000,
+        //                 },
+        //             ],
+        //             nonce_changes: [],
+        //             code_changes: [],
+        //         },
+        //     ],
         // }
     }
 }
