@@ -613,7 +613,7 @@ mod tests {
         db.database.insert_account_info(
             address!("000000000000000000000000000000000000dead"),
             AccountInfo {
-                balance: U256::from(15_000_0000000000_000u64),
+                balance: U256::from(150_000_000_000_000_000_u64),
                 nonce: 0,
                 code_hash: B256::ZERO,
                 ..Default::default()
@@ -622,11 +622,7 @@ mod tests {
         let evm = factory.evm_factory.create_evm(&mut db, EvmEnv::default());
         let executor = factory.create_executor(evm, ctx);
 
-        let sig = Signature::new(
-            U256::from(1), // r
-            U256::from(2), // s
-            true,          // v (valid recovery id)
-        );
+        let sig = Signature::new(U256::from(1), U256::from(2), true);
 
         // Wrap legacy1
         let tx1 =
@@ -640,7 +636,7 @@ mod tests {
 
         let _result = executor.execute_block([&tx_with_encoded1, &tx_with_encoded2]).unwrap();
 
-        //        {
+        // {
         //   "block_access_list": {
         //     "account_changes": [
         //       {
