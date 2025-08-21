@@ -489,45 +489,41 @@ pub fn from_account_with_tx_index(
 ) -> AccountChanges {
     let mut account_changes = AccountChanges::default();
 
-    for read_keys in account.storage_access.reads.values() {
-        for key in read_keys {
-            account_changes.storage_reads.push((*key).into());
-        }
+    for key in &account.storage_access.reads {
+        account_changes.storage_reads.push((*key).into());
     }
 
     // Group writes by slots
     let mut slot_map: BTreeMap<StorageKey, Vec<StorageChange>> = BTreeMap::new();
 
-    for writes_map in account.storage_access.writes.values() {
-        for (slot, (_pre, post)) in writes_map {
-            slot_map
-                .entry(*slot)
-                .or_default()
-                .push(StorageChange { block_access_index, new_value: *post });
-        }
+    for (slot, (_pre, post)) in &account.storage_access.writes {
+        slot_map
+            .entry(*slot)
+            .or_default()
+            .push(StorageChange { block_access_index, new_value: *post });
     }
 
     // Convert slot_map into SlotChanges and push into account_changes
     for (slot, changes) in slot_map {
         account_changes.storage_changes.push(SlotChanges { slot: slot.into(), changes });
     }
-    for (pre_balance, post_balance) in account.balance_change.change.values() {
-        if pre_balance != post_balance {
-            account_changes
-                .balance_changes
-                .push(BalanceChanges { block_access_index, post_balance: *post_balance });
-        }
+
+    // False if zero value transfer
+    if !account.balance_change.1 {
+        account_changes
+            .balance_changes
+            .push(BalanceChanges { block_access_index, post_balance: account.balance_change.0 });
     }
 
-    for (pre_nonce, post_nonce) in account.nonce_change.change.values() {
-        if pre_nonce != post_nonce {
-            account_changes
-                .nonce_changes
-                .push(NonceChanges { block_access_index, new_nonce: *post_nonce });
-        }
+    let (pre_nonce, post_nonce) = account.nonce_change;
+    if pre_nonce != post_nonce {
+        account_changes
+            .nonce_changes
+            .push(NonceChanges { block_access_index, new_nonce: post_nonce });
     }
 
-    for code in account.code_change.change.values() {
+    let code = &account.code_change;
+    if !code.is_empty() {
         account_changes
             .code_changes
             .push(CodeChanges { block_access_index, new_code: code.clone() });
