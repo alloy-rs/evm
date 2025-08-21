@@ -188,11 +188,7 @@ where
                         self.receipts.len() as u64,
                         &acc.info,
                     ));
-                    state.get_mut(&recipient).unwrap().info.storage_access.reads.clear();
-                    state.get_mut(&recipient).unwrap().info.storage_access.writes.clear();
-                    state.get_mut(&recipient).unwrap().info.balance_change.change.clear();
-                    state.get_mut(&recipient).unwrap().info.nonce_change.change.clear();
-                    state.get_mut(&recipient).unwrap().info.code_change.change.clear();
+                    state.get_mut(&recipient).unwrap().info.clear_state_changes();
                 }
             }
 
@@ -203,11 +199,7 @@ where
                         self.receipts.len() as u64,
                         &acc.info,
                     ));
-                    state.get_mut(tx.signer()).unwrap().info.storage_access.reads.clear();
-                    state.get_mut(tx.signer()).unwrap().info.storage_access.writes.clear();
-                    state.get_mut(tx.signer()).unwrap().info.balance_change.change.clear();
-                    state.get_mut(tx.signer()).unwrap().info.nonce_change.change.clear();
-                    state.get_mut(tx.signer()).unwrap().info.code_change.change.clear();
+                    state.get_mut(&recipient).unwrap().info.clear_state_changes();
                 }
             }
         }
