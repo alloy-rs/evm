@@ -21,6 +21,7 @@ alloy-eips.workspace = true
 alloy-hardforks.workspace = true
 alloy-rpc-types-eth = { workspace = true, optional = true }
 alloy-block-access-list.workspace = true
+alloy-rlp.workspace = true
 
 revm = { workspace = true, features = ["glamsterdam"] }
 op-revm = { workspace = true, optional = true }

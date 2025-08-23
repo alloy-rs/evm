@@ -561,9 +561,9 @@ pub fn sort_and_remove_duplicates_in_bal(mut bal: BlockAccessList) -> BlockAcces
 pub fn validate_block_access_list_against_execution(block_access_list: &BlockAccessList) -> bool {
     // 1. Validate structural constraints
     for account in block_access_list {
-        let changed_slots: std::collections::HashSet<_> =
+        let changed_slots: alloy_primitives::map::HashSet<_> =
             account.storage_changes.iter().map(|sc| sc.slot).collect();
-        let read_slots: std::collections::HashSet<_> =
+        let read_slots: alloy_primitives::map::HashSet<_> =
             account.storage_reads.iter().cloned().collect();
 
         // A slot should not be in both changes and reads (per EIP-7928)
@@ -658,17 +658,19 @@ pub fn validate_block_access_list_against_execution(block_access_list: &BlockAcc
         }
     }
 
-    // 4. If Block Access List builder provided, validate against it by comparing hashes
-    // if let Some(builder) = block_access_list_builder {
-    //     // You must implement build and compute_block_access_list_hash functions
-    //     let expected_block_access_list = build(builder);
-    //     if compute_block_access_list_hash(block_access_list)
-    //         != compute_block_access_list_hash(&expected_block_access_list)
-    //     {
-    //         return false;
-    //     }
-    //      }
+    true
+}
 
+/// Validate the block access list against an expected block access list
+pub fn validate_block_access_list(
+    block_access_list: &BlockAccessList,
+    expected_block_access_list: &BlockAccessList,
+) -> bool {
+    if alloy_primitives::keccak256(alloy_rlp::encode(block_access_list))
+        != alloy_primitives::keccak256(alloy_rlp::encode(expected_block_access_list))
+    {
+        return false;
+    }
     true
 }
 
