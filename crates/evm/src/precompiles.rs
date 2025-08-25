@@ -406,6 +406,8 @@ where
             caller: inputs.caller_address,
             value: inputs.call_value,
             internals: EvmInternals::new(journal, &context.block),
+            target_address: inputs.target_address,
+            bytecode_address: inputs.bytecode_address.expect("always set for precompile calls"),
         });
 
         match precompile_result {
@@ -524,8 +526,55 @@ pub struct PrecompileInput<'a> {
     pub caller: Address,
     /// Value sent with the call.
     pub value: U256,
+    /// Target address of the call. Would be the same as `bytecode_address` unless it's a
+    /// DELEGATECALL.
+    pub target_address: Address,
+    /// Bytecode address of the call.
+    pub bytecode_address: Address,
     /// Various hooks for interacting with the EVM state.
     pub internals: EvmInternals<'a>,
+}
+
+impl<'a> PrecompileInput<'a> {
+    /// Returns the calldata of the call.
+    pub fn data(&self) -> &[u8] {
+        self.data
+    }
+
+    /// Returns the caller address of the call.
+    pub fn caller(&self) -> &Address {
+        &self.caller
+    }
+
+    /// Returns the gas limit of the call.
+    pub fn gas(&self) -> u64 {
+        self.gas
+    }
+
+    /// Returns the value of the call.
+    pub fn value(&self) -> &U256 {
+        &self.value
+    }
+
+    /// Returns the target address of the call.
+    pub fn target_address(&self) -> &Address {
+        &self.target_address
+    }
+
+    /// Returns the bytecode address of the call.
+    pub fn bytecode_address(&self) -> &Address {
+        &self.bytecode_address
+    }
+
+    /// Returns the [`EvmInternals`].
+    pub fn internals(&self) -> &EvmInternals<'_> {
+        &self.internals
+    }
+
+    /// Returns a mutable reference to the [`EvmInternals`].
+    pub fn internals_mut(&mut self) -> &mut EvmInternals<'a> {
+        &mut self.internals
+    }
 }
 
 /// Trait for implementing precompiled contracts.
@@ -697,6 +746,8 @@ mod tests {
                 caller: Address::ZERO,
                 value: U256::ZERO,
                 internals: EvmInternals::new(&mut ctx.journaled_state, &ctx.block),
+                target_address: identity_address,
+                bytecode_address: identity_address,
             })
             .unwrap();
         assert_eq!(result.bytes, test_input, "Identity precompile should return the input data");
@@ -729,6 +780,8 @@ mod tests {
                 caller: Address::ZERO,
                 value: U256::ZERO,
                 internals: EvmInternals::new(&mut ctx.journaled_state, &ctx.block),
+                target_address: identity_address,
+                bytecode_address: identity_address,
             })
             .unwrap();
         assert_eq!(
@@ -762,6 +815,8 @@ mod tests {
                 caller: Address::ZERO,
                 value: U256::ZERO,
                 internals: EvmInternals::new(&mut ctx.journaled_state, &ctx.block),
+                target_address: Address::ZERO,
+                bytecode_address: Address::ZERO,
             })
             .unwrap();
         assert_eq!(result.gas_used, 15);
@@ -832,6 +887,8 @@ mod tests {
                 caller: Address::ZERO,
                 value: U256::ZERO,
                 internals: EvmInternals::new(&mut ctx.journaled_state, &ctx.block),
+                target_address: dynamic_address,
+                bytecode_address: dynamic_address,
             })
             .unwrap();
         assert_eq!(result.gas_used, 100);
@@ -863,6 +920,8 @@ mod tests {
                 gas: gas_limit,
                 caller: Address::ZERO,
                 value: U256::ZERO,
+                target_address: identity_address,
+                bytecode_address: identity_address,
                 internals: EvmInternals::new(&mut ctx.journaled_state, &ctx.block),
             })
             .unwrap();
@@ -891,6 +950,8 @@ mod tests {
                 caller: Address::ZERO,
                 value: U256::ZERO,
                 internals: EvmInternals::new(&mut ctx.journaled_state, &ctx.block),
+                target_address: identity_address,
+                bytecode_address: identity_address,
             })
             .unwrap();
         assert_eq!(
