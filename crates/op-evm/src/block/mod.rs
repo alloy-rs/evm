@@ -214,7 +214,7 @@ where
         Ok(Some(gas_used))
     }
 
-    fn execute_transaction_with_cached_result(
+    fn commit_cached_execution(
         &mut self,
         tx: impl ExecutableTx<Self>,
         ResultAndState { result, state }: ResultAndState<<Self::Evm as Evm>::HaltReason>,

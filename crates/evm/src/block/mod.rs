@@ -200,7 +200,7 @@ pub trait BlockExecutor {
         f: impl FnOnce(&ExecutionResult<<Self::Evm as Evm>::HaltReason>) -> CommitChanges,
     ) -> Result<Option<u64>, BlockExecutionError>;
 
-    fn execute_transaction_with_cached_result(
+    fn commit_cached_execution(
         &mut self,
         tx: impl ExecutableTx<Self>,
         result: ResultAndState<<Self::Evm as Evm>::HaltReason>,
