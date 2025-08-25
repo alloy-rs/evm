@@ -55,8 +55,8 @@ alloy-op-hardforks = { version = "0.2" }
 op-alloy-consensus = { version = "0.18", default-features = false }
 
 # revm
-revm = { version = "28.0.1", default-features = false }
-op-revm = { version = "9.0.1", default-features = false }
+revm = { version = "29.0.0", default-features = false }
+op-revm = { version = "10.0.0", default-features = false}
 
 # misc
 auto_impl = "1"
@@ -66,8 +66,8 @@ thiserror = { version = "2.0.0", default-features = false }
 serde_json = "1"
 
 [patch.crates-io]
-revm = { git = "https://github.com/Soubhik-10/revm", branch = "remove-tx-index" }
-op-revm = { git = "https://github.com/Soubhik-10/revm", branch = "remove-tx-index"}
+revm = { git = "https://github.com/Soubhik-10/revm", branch = "bal" }
+op-revm = { git = "https://github.com/Soubhik-10/revm", branch = "bal"}
 alloy-block-access-list = { git = "https://github.com/Soubhik-10/alloy", branch = "bal" }
 # alloy-consensus = { git = "https://github.com/Soubhik-10/alloy", branch = "bal" }
 # alloy-rpc-types-eth = { git = "https://github.com/Soubhik-10/alloy", branch = "bal" }
