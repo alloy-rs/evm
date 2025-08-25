@@ -4,13 +4,18 @@ use crate::{
     block::{BlockExecutionError, OnStateHook},
     Evm,
 };
-use alloc::{borrow::Cow, boxed::Box};
+use alloc::{borrow::Cow, boxed::Box, vec::Vec};
+use alloy_block_access_list::{AccountChanges, SlotChanges, StorageChange};
 use alloy_consensus::BlockHeader;
 use alloy_eips::{
-    eip7002::WITHDRAWAL_REQUEST_TYPE, eip7251::CONSOLIDATION_REQUEST_TYPE, eip7685::Requests,
+    eip2935::{HISTORY_SERVE_WINDOW, HISTORY_STORAGE_ADDRESS},
+    eip4788::BEACON_ROOTS_ADDRESS,
+    eip7002::WITHDRAWAL_REQUEST_TYPE,
+    eip7251::CONSOLIDATION_REQUEST_TYPE,
+    eip7685::Requests,
 };
 use alloy_hardforks::EthereumHardforks;
-use alloy_primitives::{Bytes, B256};
+use alloy_primitives::{BlockNumber, Bytes, B256, U256};
 use revm::{state::EvmState, DatabaseCommit};
 
 use super::{StateChangePostBlockSource, StateChangePreBlockSource, StateChangeSource};
@@ -55,8 +60,12 @@ where
         header: impl BlockHeader,
         evm: &mut impl Evm<DB: DatabaseCommit>,
     ) -> Result<(), BlockExecutionError> {
-        self.apply_blockhashes_contract_call(header.parent_hash(), evm)?;
-        self.apply_beacon_root_contract_call(header.parent_beacon_block_root(), evm)?;
+        self.apply_blockhashes_contract_call(header.parent_hash(), header.number(), evm)?;
+        self.apply_beacon_root_contract_call(
+            header.timestamp(),
+            header.parent_beacon_block_root(),
+            evm,
+        )?;
 
         Ok(())
     }
@@ -87,8 +96,10 @@ where
     pub fn apply_blockhashes_contract_call(
         &mut self,
         parent_block_hash: B256,
+        block_num: BlockNumber,
         evm: &mut impl Evm<DB: DatabaseCommit>,
-    ) -> Result<(), BlockExecutionError> {
+    ) -> Result<AccountChanges, BlockExecutionError> {
+        let mut slot_change = SlotChanges::default();
         let result_and_state =
             eip2935::transact_blockhashes_contract_call(&self.spec, parent_block_hash, evm)?;
 
@@ -100,17 +111,29 @@ where
                 );
             }
             evm.db_mut().commit(res.state);
-        }
 
-        Ok(())
+            slot_change = SlotChanges::default()
+                .with_change(StorageChange {
+                    block_access_index: 0,
+                    new_value: parent_block_hash.into(),
+                })
+                .with_slot(U256::from((block_num - 1) % HISTORY_SERVE_WINDOW as u64).into());
+        }
+        let acc_changes = AccountChanges::default()
+            .with_storage_change(slot_change)
+            .with_address(HISTORY_STORAGE_ADDRESS);
+
+        Ok(acc_changes)
     }
 
     /// Applies the pre-block call to the EIP-4788 beacon root contract.
     pub fn apply_beacon_root_contract_call(
         &mut self,
+        timestamp: u64,
         parent_beacon_block_root: Option<B256>,
         evm: &mut impl Evm<DB: DatabaseCommit>,
-    ) -> Result<(), BlockExecutionError> {
+    ) -> Result<AccountChanges, BlockExecutionError> {
+        let mut slot_changes: Vec<SlotChanges> = Vec::new();
         let result_and_state =
             eip4788::transact_beacon_root_contract_call(&self.spec, parent_beacon_block_root, evm)?;
 
@@ -122,9 +145,28 @@ where
                 );
             }
             evm.db_mut().commit(res.state);
+            slot_changes.push(
+                SlotChanges::default()
+                    .with_change(StorageChange {
+                        block_access_index: 0,
+                        new_value: U256::from(timestamp),
+                    })
+                    .with_slot(U256::from((timestamp % 8192) + 8192).into()),
+            );
+            slot_changes.push(
+                SlotChanges::default()
+                    .with_change(StorageChange {
+                        block_access_index: 0,
+                        new_value: parent_beacon_block_root.unwrap().into(),
+                    })
+                    .with_slot(U256::from(timestamp % 8192).into()),
+            );
         }
+        let account_changes = AccountChanges::default()
+            .with_address(BEACON_ROOTS_ADDRESS)
+            .extend_storage_changes(slot_changes);
 
-        Ok(())
+        Ok(account_changes)
     }
 
     /// Applies the post-block call to the EIP-7002 withdrawal request contract.

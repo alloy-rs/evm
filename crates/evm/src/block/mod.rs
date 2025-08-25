@@ -2,6 +2,7 @@
 
 use crate::{Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, RecoveredTx, ToTxEnv};
 use alloc::{boxed::Box, vec::Vec};
+use alloy_block_access_list::BlockAccessList;
 use alloy_eips::eip7685::Requests;
 use revm::{
     context::result::ExecutionResult, database::State, inspector::NoOpInspector, Inspector,
@@ -29,6 +30,8 @@ pub struct BlockExecutionResult<T> {
     pub requests: Requests,
     /// The total gas used by the block.
     pub gas_used: u64,
+    /// block-level access list
+    pub block_access_list: Option<BlockAccessList>,
 }
 
 /// Helper trait to encapsulate requirements for a type to be used as input for [`BlockExecutor`].
