@@ -3,9 +3,9 @@ members = ["crates/*"]
 resolver = "2"
 
 [workspace.package]
-version = "0.17.0"
+version = "0.18.4"
 edition = "2021"
-rust-version = "1.86"
+rust-version = "1.88"
 authors = ["Alloy Contributors"]
 license = "MIT OR Apache-2.0"
 homepage = "https://github.com/alloy-rs/alloy-evm"
@@ -35,8 +35,8 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [workspace.dependencies]
-alloy-evm = { version = "0.17.0", path = "crates/evm", default-features = false }
-alloy-op-evm = { version = "0.17.0", path = "crates/op-evm", default-features = false }
+alloy-evm = { version = "0.18.4", path = "crates/evm", default-features = false }
+alloy-op-evm = { version = "0.18.4", path = "crates/op-evm", default-features = false }
 
 # alloy
 alloy-eip2124 = { version = "0.2", default-features = false }
