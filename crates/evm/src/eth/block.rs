@@ -19,8 +19,9 @@ use crate::{
 };
 use alloc::{borrow::Cow, boxed::Box, vec::Vec};
 use alloy_block_access_list::{
-    balance_change::BalanceChanges, code_change::CodeChanges, nonce_change::NonceChanges,
-    AccountChanges, BlockAccessIndex, BlockAccessList, SlotChanges, StorageChange,
+    balance_change::BalanceChange, code_change::CodeChange, nonce_change::NonceChange,
+    AccountChanges, BlockAccessIndex, BlockAccessList, SlotChanges, StorageChange, MAX_CODE_SIZE,
+    MAX_TXS,
 };
 use alloy_consensus::{Header, Transaction, TxReceipt};
 use alloy_eips::{
@@ -123,7 +124,7 @@ where
             &mut self.evm,
         )?;
 
-        self.block_access_list.clone().unwrap().account_changes.push(contract_acc_change);
+        self.block_access_list.clone().unwrap().push(contract_acc_change);
 
         self.system_caller.apply_beacon_root_contract_call(
             self.evm.block().timestamp.saturating_to(),
@@ -183,31 +184,23 @@ where
         if let Some(recipient) = tx.tx().to() {
             if let Some(acc) = state.get(&recipient) {
                 if let Some(bal) = self.block_access_list.as_mut() {
-                    bal.account_changes.push(from_account_with_tx_index(
+                    bal.push(from_account_with_tx_index(
                         recipient,
                         self.receipts.len() as u64,
                         &acc.info,
                     ));
-                    state.get_mut(&recipient).unwrap().info.storage_access.reads.clear();
-                    state.get_mut(&recipient).unwrap().info.storage_access.writes.clear();
-                    state.get_mut(&recipient).unwrap().info.balance_change.change.clear();
-                    state.get_mut(&recipient).unwrap().info.nonce_change.change.clear();
-                    state.get_mut(&recipient).unwrap().info.code_change.change.clear();
+                    state.get_mut(&recipient).unwrap().info.clear_state_changes();
                 }
             }
 
             if let Some(acc) = state.get(tx.signer()) {
                 if let Some(bal) = self.block_access_list.as_mut() {
-                    bal.account_changes.push(from_account_with_tx_index(
+                    bal.push(from_account_with_tx_index(
                         *tx.signer(),
                         self.receipts.len() as u64,
                         &acc.info,
                     ));
-                    state.get_mut(tx.signer()).unwrap().info.storage_access.reads.clear();
-                    state.get_mut(tx.signer()).unwrap().info.storage_access.writes.clear();
-                    state.get_mut(tx.signer()).unwrap().info.balance_change.change.clear();
-                    state.get_mut(tx.signer()).unwrap().info.nonce_change.change.clear();
-                    state.get_mut(tx.signer()).unwrap().info.code_change.change.clear();
+                    state.get_mut(&recipient).unwrap().info.clear_state_changes();
                 }
             }
         }
@@ -357,9 +350,9 @@ where
         // All post tx balance increments
         for (address, increment) in balance_increments {
             if increment != 0 {
-                self.block_access_list.as_mut().unwrap().account_changes.push(
+                self.block_access_list.as_mut().unwrap().push(
                     AccountChanges::default().with_address(address).with_balance_change(
-                        BalanceChanges {
+                        BalanceChange {
                             block_access_index: post_system_tx as u64,
                             post_balance: U256::from(increment),
                         },
@@ -369,7 +362,7 @@ where
         }
 
         // Add post execution system contract account changes
-        self.block_access_list.as_mut().unwrap().account_changes.extend(post_system_acc_changes);
+        self.block_access_list.as_mut().unwrap().extend(post_system_acc_changes);
 
         Ok((
             self.evm,
@@ -497,48 +490,44 @@ pub fn from_account_with_tx_index(
 ) -> AccountChanges {
     let mut account_changes = AccountChanges::default();
 
-    for read_keys in account.storage_access.reads.values() {
-        for key in read_keys {
-            account_changes.storage_reads.push((*key).into());
-        }
+    for key in &account.storage_access.reads {
+        account_changes.storage_reads.push((*key).into());
     }
 
     // Group writes by slots
     let mut slot_map: BTreeMap<StorageKey, Vec<StorageChange>> = BTreeMap::new();
 
-    for writes_map in account.storage_access.writes.values() {
-        for (slot, (_pre, post)) in writes_map {
-            slot_map
-                .entry(*slot)
-                .or_default()
-                .push(StorageChange { block_access_index, new_value: *post });
-        }
+    for (slot, (_pre, post)) in &account.storage_access.writes {
+        slot_map
+            .entry(*slot)
+            .or_default()
+            .push(StorageChange { block_access_index, new_value: *post });
     }
 
     // Convert slot_map into SlotChanges and push into account_changes
     for (slot, changes) in slot_map {
         account_changes.storage_changes.push(SlotChanges { slot: slot.into(), changes });
     }
-    for (pre_balance, post_balance) in account.balance_change.change.values() {
-        if pre_balance != post_balance {
-            account_changes
-                .balance_changes
-                .push(BalanceChanges { block_access_index, post_balance: *post_balance });
-        }
+
+    // False if zero value transfer
+    if !account.balance_change.1 {
+        account_changes
+            .balance_changes
+            .push(BalanceChange { block_access_index, post_balance: account.balance_change.0 });
     }
 
-    for (pre_nonce, post_nonce) in account.nonce_change.change.values() {
-        if pre_nonce != post_nonce {
-            account_changes
-                .nonce_changes
-                .push(NonceChanges { block_access_index, new_nonce: *post_nonce });
-        }
+    let (pre_nonce, post_nonce) = account.nonce_change;
+    if pre_nonce != post_nonce {
+        account_changes
+            .nonce_changes
+            .push(NonceChange { block_access_index, new_nonce: post_nonce });
     }
 
-    for code in account.code_change.change.values() {
+    let code = &account.code_change;
+    if !code.is_empty() {
         account_changes
             .code_changes
-            .push(CodeChanges { block_access_index, new_code: code.clone() });
+            .push(CodeChange { block_access_index, new_code: code.clone() });
     }
 
     account_changes.address = address;
@@ -547,10 +536,10 @@ pub fn from_account_with_tx_index(
 
 /// Sort block-level access list and removes duplicates entries by merging them together.
 pub fn sort_and_remove_duplicates_in_bal(mut bal: BlockAccessList) -> BlockAccessList {
-    bal.account_changes.sort_by_key(|ac| ac.address);
+    bal.sort_by_key(|ac| ac.address);
     let mut merged: Vec<AccountChanges> = Vec::new();
 
-    for account in bal.account_changes {
+    for account in bal {
         if let Some(last) = merged.last_mut() {
             if last.address == account.address {
                 // Same address → extend fields
@@ -565,7 +554,124 @@ pub fn sort_and_remove_duplicates_in_bal(mut bal: BlockAccessList) -> BlockAcces
         merged.push(account);
     }
 
-    alloy_block_access_list::BlockAccessList { account_changes: merged }
+    merged
+}
+
+/// Validates a Block Access List against execution constraints.
+pub fn validate_block_access_list_against_execution(block_access_list: &BlockAccessList) -> bool {
+    // 1. Validate structural constraints
+    for account in block_access_list {
+        let changed_slots: alloy_primitives::map::HashSet<_> =
+            account.storage_changes.iter().map(|sc| sc.slot).collect();
+        let read_slots: alloy_primitives::map::HashSet<_> =
+            account.storage_reads.iter().cloned().collect();
+
+        // A slot should not be in both changes and reads (per EIP-7928)
+        if !changed_slots.is_disjoint(&read_slots) {
+            return false;
+        }
+    }
+
+    // 2. Validate ordering (addresses should be sorted lexicographically)
+    let addresses: Vec<_> = block_access_list.iter().map(|account| account.address).collect();
+    let mut sorted_addresses = addresses.clone();
+    sorted_addresses.sort();
+    if addresses != sorted_addresses {
+        return false;
+    }
+
+    // 3. Validate all data is within bounds
+    let max_block_access_index = MAX_TXS + 1; // 0 for pre-exec, 1..MAX_TXS for txs, MAX_TXS+1 for post-exec
+    for account in block_access_list {
+        // Validate storage slots are sorted within each account
+        let storage_slots: Vec<_> = account.storage_changes.iter().map(|sc| sc.slot).collect();
+        let mut sorted_storage_slots = storage_slots.clone();
+        sorted_storage_slots.sort();
+        if storage_slots != sorted_storage_slots {
+            return false;
+        }
+
+        // Check storage changes
+        for slot_changes in &account.storage_changes {
+            // Check changes are sorted by block_access_index
+            let indices: Vec<_> =
+                slot_changes.changes.iter().map(|c| c.block_access_index).collect();
+            let mut sorted_indices = indices.clone();
+            sorted_indices.sort();
+            if indices != sorted_indices {
+                return false;
+            }
+
+            for change in &slot_changes.changes {
+                if change.block_access_index > max_block_access_index.try_into().unwrap() {
+                    return false;
+                }
+            }
+        }
+
+        // Check balance changes are sorted by block_access_index
+        let balance_indices: Vec<_> =
+            account.balance_changes.iter().map(|bc| bc.block_access_index).collect();
+        let mut sorted_balance_indices = balance_indices.clone();
+        sorted_balance_indices.sort();
+        if balance_indices != sorted_balance_indices {
+            return false;
+        }
+
+        for balance_change in &account.balance_changes {
+            if balance_change.block_access_index > max_block_access_index.try_into().unwrap() {
+                return false;
+            }
+        }
+
+        // Check nonce changes are sorted by block_access_index
+        let nonce_indices: Vec<_> =
+            account.nonce_changes.iter().map(|nc| nc.block_access_index).collect();
+        let mut sorted_nonce_indices = nonce_indices.clone();
+        sorted_nonce_indices.sort();
+        if nonce_indices != sorted_nonce_indices {
+            return false;
+        }
+
+        for nonce_change in &account.nonce_changes {
+            if nonce_change.block_access_index > max_block_access_index.try_into().unwrap() {
+                return false;
+            }
+        }
+
+        // Check code changes are sorted by block_access_index
+        let code_indices: Vec<_> =
+            account.code_changes.iter().map(|cc| cc.block_access_index).collect();
+        let mut sorted_code_indices = code_indices.clone();
+        sorted_code_indices.sort();
+        if code_indices != sorted_code_indices {
+            return false;
+        }
+
+        for code_change in &account.code_changes {
+            if code_change.block_access_index > max_block_access_index.try_into().unwrap() {
+                return false;
+            }
+            if code_change.new_code.len() > MAX_CODE_SIZE {
+                return false;
+            }
+        }
+    }
+
+    true
+}
+
+/// Validate the block access list against an expected block access list
+pub fn validate_block_access_list(
+    block_access_list: &BlockAccessList,
+    expected_block_access_list: &BlockAccessList,
+) -> bool {
+    if alloy_primitives::keccak256(alloy_rlp::encode(block_access_list))
+        != alloy_primitives::keccak256(alloy_rlp::encode(expected_block_access_list))
+    {
+        return false;
+    }
+    true
 }
 
 #[cfg(test)]
@@ -658,65 +764,63 @@ mod tests {
 
         let _result = executor.execute_block([&tx_with_encoded1, &tx_with_encoded2]).unwrap();
 
-        //    BlockAccessList {
-        //     account_changes: [
-        //         AccountChanges {
-        //             address: 0x0000000000000000000000000000000000000000,
-        //             storage_changes: [],
-        //             storage_reads: [],
-        //             balance_changes: [
-        //                 BalanceChanges {
-        //                     block_access_index: 3,
-        //                     post_balance: 5000000000000000000,
-        //                 },
-        //             ],
-        //             nonce_changes: [],
-        //             code_changes: [],
-        //         },
-        //         AccountChanges {
-        //             address: 0x000000000000000000000000000000000000beef,
-        //             storage_changes: [],
-        //             storage_reads: [],
-        //             balance_changes: [
-        //                 BalanceChanges {
-        //                     block_access_index: 1,
-        //                     post_balance: 49999899999979000,
-        //                 },
-        //                 BalanceChanges {
-        //                     block_access_index: 2,
-        //                     post_balance: 49999799999958000,
-        //                 },
-        //             ],
-        //             nonce_changes: [
-        //                 NonceChanges {
-        //                     block_access_index: 1,
-        //                     new_nonce: 1,
-        //                 },
-        //                 NonceChanges {
-        //                     block_access_index: 2,
-        //                     new_nonce: 2,
-        //                 },
-        //             ],
-        //             code_changes: [],
-        //         },
-        //         AccountChanges {
-        //             address: 0x000000000000000000000000000000000000dead,
-        //             storage_changes: [],
-        //             storage_reads: [],
-        //             balance_changes: [
-        //                 BalanceChanges {
-        //                     block_access_index: 1,
-        //                     post_balance: 150000100000000000,
-        //                 },
-        //                 BalanceChanges {
-        //                     block_access_index: 2,
-        //                     post_balance: 150000200000000000,
-        //                 },
-        //             ],
-        //             nonce_changes: [],
-        //             code_changes: [],
-        //         },
-        //     ],
-        // }
+        //  [
+        //     AccountChanges {
+        //         address: 0x0000000000000000000000000000000000000000,
+        //         storage_changes: [],
+        //         storage_reads: [],
+        //         balance_changes: [
+        //             BalanceChange {
+        //                 block_access_index: 3,
+        //                 post_balance: 5000000000000000000,
+        //             },
+        //         ],
+        //         nonce_changes: [],
+        //         code_changes: [],
+        //     },
+        //     AccountChanges {
+        //         address: 0x000000000000000000000000000000000000beef,
+        //         storage_changes: [],
+        //         storage_reads: [],
+        //         balance_changes: [
+        //             BalanceChange {
+        //                 block_access_index: 1,
+        //                 post_balance: 49999899999979000,
+        //             },
+        //             BalanceChange {
+        //                 block_access_index: 2,
+        //                 post_balance: 49999799999958000,
+        //             },
+        //         ],
+        //         nonce_changes: [
+        //             NonceChange {
+        //                 block_access_index: 1,
+        //                 new_nonce: 1,
+        //             },
+        //             NonceChange {
+        //                 block_access_index: 2,
+        //                 new_nonce: 2,
+        //             },
+        //         ],
+        //         code_changes: [],
+        //     },
+        //     AccountChanges {
+        //         address: 0x000000000000000000000000000000000000dead,
+        //         storage_changes: [],
+        //         storage_reads: [],
+        //         balance_changes: [
+        //             BalanceChange {
+        //                 block_access_index: 1,
+        //                 post_balance: 150000100000000000,
+        //             },
+        //             BalanceChange {
+        //                 block_access_index: 2,
+        //                 post_balance: 150000200000000000,
+        //             },
+        //         ],
+        //         nonce_changes: [],
+        //         code_changes: [],
+        //     },
+        // ]
     }
 }

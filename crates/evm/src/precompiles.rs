@@ -280,13 +280,9 @@ impl PrecompilesMap {
                 Cow::Owned(owned) => owned,
             };
 
-            for (addr, precompile_fn) in
-                static_precompiles.inner().iter().map(|(addr, f)| (addr, *f))
-            {
-                let precompile =
-                    move |input: PrecompileInput<'_>| precompile_fn(input.data, input.gas);
-                dynamic.inner.insert(*addr, precompile.into());
-                dynamic.addresses.insert(*addr);
+            for (&addr, pc) in static_precompiles.inner().iter() {
+                dynamic.inner.insert(addr, DynPrecompile::from(*pc.precompile()));
+                dynamic.addresses.insert(addr);
             }
 
             self.precompiles = PrecompilesKind::Dynamic(dynamic);
@@ -315,9 +311,9 @@ impl PrecompilesMap {
     pub fn get(&self, address: &Address) -> Option<impl Precompile + '_> {
         // First check static precompiles
         let static_result = match &self.precompiles {
-            PrecompilesKind::Builtin(precompiles) => precompiles
-                .get(address)
-                .map(|f| Either::Left(|input: PrecompileInput<'_>| f(input.data, input.gas))),
+            PrecompilesKind::Builtin(precompiles) => precompiles.get(address).map(|pc| {
+                Either::Left(|input: PrecompileInput<'_>| pc.precompile()(input.data, input.gas))
+            }),
             PrecompilesKind::Dynamic(dyn_precompiles) => {
                 dyn_precompiles.inner.get(address).map(Either::Right)
             }
