@@ -566,6 +566,12 @@ impl<'a> PrecompileInput<'a> {
         &self.bytecode_address
     }
 
+    /// Returns whether the call is a direct call, i.e when precompile was called directly and not
+    /// via a DELEGATECALL/CALLCODE.
+    pub fn is_direct_call(&self) -> bool {
+        self.target_address == self.bytecode_address
+    }
+
     /// Returns the [`EvmInternals`].
     pub fn internals(&self) -> &EvmInternals<'_> {
         &self.internals
