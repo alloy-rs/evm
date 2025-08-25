@@ -28,6 +28,90 @@ pub mod spec;
 /// The Ethereum EVM context type.
 pub type EthEvmContext<DB> = Context<BlockEnv, TxEnv, CfgEnv, DB>;
 
+/// Helper builder to construct `EthEvm` instances in a unified way.
+#[derive(Debug)]
+pub struct EthEvmBuilder<DB: Database, I = NoOpInspector> {
+    db: DB,
+    block_env: BlockEnv,
+    cfg_env: CfgEnv,
+    inspector: I,
+    inspect: bool,
+    precompiles: Option<PrecompilesMap>,
+}
+
+impl<DB: Database> EthEvmBuilder<DB, NoOpInspector> {
+    /// Creates a builder from the provided `EvmEnv` and database.
+    pub fn new(db: DB, env: EvmEnv) -> Self {
+        Self {
+            db,
+            block_env: env.block_env,
+            cfg_env: env.cfg_env,
+            inspector: NoOpInspector {},
+            inspect: false,
+            precompiles: None,
+        }
+    }
+}
+
+impl<DB: Database, I> EthEvmBuilder<DB, I> {
+    /// Sets a custom inspector
+    pub fn inspector<J>(self, inspector: J) -> EthEvmBuilder<DB, J> {
+        EthEvmBuilder {
+            db: self.db,
+            block_env: self.block_env,
+            cfg_env: self.cfg_env,
+            inspector,
+            inspect: self.inspect,
+            precompiles: self.precompiles,
+        }
+    }
+
+    /// Sets a custom inspector and enables invoking it during transaction execution.
+    pub fn activate_inspector<J>(self, inspector: J) -> EthEvmBuilder<DB, J> {
+        self.inspector(inspector).inspect()
+    }
+
+    /// Sets whether to invoke the inspector during transaction execution.
+    pub fn set_inspect(mut self, inspect: bool) -> Self {
+        self.inspect = inspect;
+        self
+    }
+
+    /// Enables invoking the inspector during transaction execution.
+    pub fn inspect(self) -> Self {
+        self.set_inspect(true)
+    }
+
+    /// Overrides the precompiles map. If not provided, it will be derived from the `SpecId` in
+    /// `CfgEnv`.
+    pub fn precompiles(mut self, precompiles: PrecompilesMap) -> Self {
+        self.precompiles = Some(precompiles);
+        self
+    }
+
+    /// Builds the `EthEvm` instance.
+    pub fn build(self) -> EthEvm<DB, I, PrecompilesMap>
+    where
+        I: Inspector<EthEvmContext<DB>>,
+    {
+        let precompiles = match self.precompiles {
+            Some(p) => p,
+            None => PrecompilesMap::from_static(Precompiles::new(PrecompileSpecId::from_spec_id(
+                self.cfg_env.spec,
+            ))),
+        };
+
+        let inner = Context::mainnet()
+            .with_block(self.block_env)
+            .with_cfg(self.cfg_env)
+            .with_db(self.db)
+            .build_mainnet_with_inspector(self.inspector)
+            .with_precompiles(precompiles);
+
+        EthEvm { inner, inspect: self.inspect }
+    }
+}
+
 /// Ethereum EVM implementation.
 ///
 /// This is a wrapper type around the `revm` ethereum evm with optional [`Inspector`] (tracing)
@@ -183,18 +267,7 @@ impl EvmFactory for EthEvmFactory {
     type Precompiles = PrecompilesMap;
 
     fn create_evm<DB: Database>(&self, db: DB, input: EvmEnv) -> Self::Evm<DB, NoOpInspector> {
-        let spec_id = input.cfg_env.spec;
-        EthEvm {
-            inner: Context::mainnet()
-                .with_block(input.block_env)
-                .with_cfg(input.cfg_env)
-                .with_db(db)
-                .build_mainnet_with_inspector(NoOpInspector {})
-                .with_precompiles(PrecompilesMap::from_static(Precompiles::new(
-                    PrecompileSpecId::from_spec_id(spec_id),
-                ))),
-            inspect: false,
-        }
+        EthEvmBuilder::new(db, input).build()
     }
 
     fn create_evm_with_inspector<DB: Database, I: Inspector<Self::Context<DB>>>(
@@ -203,18 +276,7 @@ impl EvmFactory for EthEvmFactory {
         input: EvmEnv,
         inspector: I,
     ) -> Self::Evm<DB, I> {
-        let spec_id = input.cfg_env.spec;
-        EthEvm {
-            inner: Context::mainnet()
-                .with_block(input.block_env)
-                .with_cfg(input.cfg_env)
-                .with_db(db)
-                .build_mainnet_with_inspector(inspector)
-                .with_precompiles(PrecompilesMap::from_static(Precompiles::new(
-                    PrecompileSpecId::from_spec_id(spec_id),
-                ))),
-            inspect: true,
-        }
+        EthEvmBuilder::new(db, input).activate_inspector(inspector).build()
     }
 }
 

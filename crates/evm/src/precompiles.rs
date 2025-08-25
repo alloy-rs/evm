@@ -57,9 +57,33 @@ impl PrecompilesMap {
     }
 
     /// Maps all precompiles using the provided function.
-    pub fn map_precompiles<F>(&mut self, mut f: F)
+    pub fn map_precompiles<F>(&mut self, f: F)
     where
         F: FnMut(&Address, DynPrecompile) -> DynPrecompile,
+    {
+        self.map_precompiles_filtered(f, |_, _| true);
+    }
+
+    /// Maps all pure precompiles using the provided function.
+    ///
+    /// This is a variant of [`Self::map_precompiles`] that only applies the transformation
+    /// to precompiles that are pure, see [`Precompile::is_pure`].
+    pub fn map_pure_precompiles<F>(&mut self, f: F)
+    where
+        F: FnMut(&Address, DynPrecompile) -> DynPrecompile,
+    {
+        self.map_precompiles_filtered(f, |_, precompile| precompile.is_pure());
+    }
+
+    /// Internal helper to map precompiles with an optional filter.
+    ///
+    /// The `filter` decides whether to apply the mapping function `f` to a given
+    /// precompile. If the filter returns `false`, the original precompile is kept.
+    #[inline]
+    fn map_precompiles_filtered<F, P>(&mut self, mut f: F, mut filter: P)
+    where
+        F: FnMut(&Address, DynPrecompile) -> DynPrecompile,
+        P: FnMut(&Address, &DynPrecompile) -> bool,
     {
         let dyn_precompiles = self.ensure_dynamic_precompiles();
 
@@ -68,8 +92,12 @@ impl PrecompilesMap {
         let mut new_map =
             HashMap::with_capacity_and_hasher(entries.size_hint().0, Default::default());
         for (addr, precompile) in entries {
-            let transformed = f(&addr, precompile);
-            new_map.insert(addr, transformed);
+            if filter(&addr, &precompile) {
+                let transformed = f(&addr, precompile);
+                new_map.insert(addr, transformed);
+            } else {
+                new_map.insert(addr, precompile);
+            }
         }
 
         dyn_precompiles.inner = new_map;
