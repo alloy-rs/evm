@@ -8,7 +8,7 @@ use alloc::{boxed::Box, string::ToString};
 use alloy_eips::eip4788::BEACON_ROOTS_ADDRESS;
 use alloy_hardforks::EthereumHardforks;
 use alloy_primitives::B256;
-use revm::context_interface::result::ResultAndState;
+use revm::{context_interface::result::ResultAndState, state::EvmState};
 
 /// Applies the pre-block call to the [EIP-4788] beacon block root contract, using the given block,
 /// chain spec, EVM.
@@ -20,11 +20,11 @@ use revm::context_interface::result::ResultAndState;
 ///
 /// [EIP-4788]: https://eips.ethereum.org/EIPS/eip-4788
 #[inline]
-pub(crate) fn transact_beacon_root_contract_call<Halt>(
+pub(crate) fn transact_beacon_root_contract_call<Halt, State: Into<EvmState>>(
     spec: impl EthereumHardforks,
     parent_beacon_block_root: Option<B256>,
-    evm: &mut impl Evm<HaltReason = Halt>,
-) -> Result<Option<ResultAndState<Halt>>, BlockExecutionError> {
+    evm: &mut impl Evm<HaltReason = Halt, State = State>,
+) -> Result<Option<ResultAndState<Halt, State>>, BlockExecutionError> {
     if !spec.is_cancun_active_at_timestamp(evm.block().timestamp.saturating_to()) {
         return Ok(None);
     }

@@ -132,7 +132,10 @@ where
             return Ok(None);
         }
 
-        self.system_caller.on_state(StateChangeSource::Transaction(self.receipts.len()), &state);
+        let evm_state = state.into();
+
+        self.system_caller
+            .on_state(StateChangeSource::Transaction(self.receipts.len()), &evm_state);
 
         let gas_used = result.gas_used();
 
@@ -144,12 +147,12 @@ where
             tx: tx.tx(),
             evm: &self.evm,
             result,
-            state: &state,
+            state: &evm_state,
             cumulative_gas_used: self.gas_used,
         }));
 
         // Commit the state changes.
-        self.evm.db_mut().commit(state);
+        self.evm.db_mut().commit(evm_state);
 
         Ok(Some(gas_used))
     }

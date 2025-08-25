@@ -158,10 +158,11 @@ where
             return None;
         };
         let mut was_fused = false;
+        let evm_state = state.into();
         let output = (self.hook)(TracingCtx {
             tx,
             result,
-            state: &state,
+            state: &evm_state,
             inspector,
             db,
             fused_inspector: &*fused_inspector,
@@ -171,7 +172,7 @@ where
         // Only commit next transaction if `skip_last_commit` is disabled or there is a next
         // transaction.
         if !self.skip_last_commit || self.txs.peek().is_some() {
-            db.commit(state);
+            db.commit(evm_state);
         }
 
         if self.fuse && !was_fused {
