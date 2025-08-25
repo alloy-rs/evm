@@ -311,9 +311,9 @@ impl PrecompilesMap {
     pub fn get(&self, address: &Address) -> Option<impl Precompile + '_> {
         // First check static precompiles
         let static_result = match &self.precompiles {
-            PrecompilesKind::Builtin(precompiles) => precompiles
-                .get(address)
-                .map(|pc| Either::Left(DynPrecompile::from(*pc.precompile()))),
+            PrecompilesKind::Builtin(precompiles) => precompiles.get(address).map(|pc| {
+                Either::Left(|input: PrecompileInput<'_>| pc.precompile()(input.data, input.gas))
+            }),
             PrecompilesKind::Dynamic(dyn_precompiles) => {
                 dyn_precompiles.inner.get(address).map(Either::Right)
             }
