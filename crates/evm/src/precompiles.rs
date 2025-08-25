@@ -273,21 +273,19 @@ impl PrecompilesMap {
     /// Returns a mutable reference to the dynamic precompiles.
     pub fn ensure_dynamic_precompiles(&mut self) -> &mut DynPrecompiles {
         if let PrecompilesKind::Builtin(ref precompiles_cow) = self.precompiles {
+            let mut dynamic = DynPrecompiles::default();
+
             let static_precompiles = match precompiles_cow {
                 Cow::Borrowed(static_ref) => static_ref,
                 Cow::Owned(owned) => owned,
             };
 
-            let cap = static_precompiles.len();
-            let mut inner = HashMap::with_capacity_and_hasher(cap, Default::default());
-            let mut addresses = HashSet::with_capacity_and_hasher(cap, Default::default());
-
             for (&addr, pc) in static_precompiles.inner().iter() {
-                inner.insert(addr, DynPrecompile::from(*pc.precompile()));
-                addresses.insert(addr);
+                dynamic.inner.insert(addr, DynPrecompile::from(*pc.precompile()));
+                dynamic.addresses.insert(addr);
             }
 
-            self.precompiles = PrecompilesKind::Dynamic(DynPrecompiles { inner, addresses });
+            self.precompiles = PrecompilesKind::Dynamic(dynamic);
         }
 
         match &mut self.precompiles {
@@ -313,11 +311,8 @@ impl PrecompilesMap {
     pub fn get(&self, address: &Address) -> Option<impl Precompile + '_> {
         // First check static precompiles
         let static_result = match &self.precompiles {
-            PrecompilesKind::Builtin(precompiles) => precompiles.get(address).map(|precompile| {
-                Either::Left(|input: PrecompileInput<'_>| {
-                    let precompile_fn: PrecompileFn = *precompile.precompile();
-                    precompile_fn(input.data, input.gas)
-                })
+            PrecompilesKind::Builtin(precompiles) => precompiles.get(address).map(|pc| {
+                Either::Left(|input: PrecompileInput<'_>| pc.precompile()(input.data, input.gas))
             }),
             PrecompilesKind::Dynamic(dyn_precompiles) => {
                 dyn_precompiles.inner.get(address).map(Either::Right)
