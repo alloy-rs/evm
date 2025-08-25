@@ -162,7 +162,7 @@ pub struct EvmInternals<'a> {
 
 impl<'a> EvmInternals<'a> {
     /// Creates a new [`EvmInternals`] instance.
-    pub(crate) fn new<T>(journal: &'a mut T, block_env: &'a dyn Block) -> Self
+    pub fn new<T>(journal: &'a mut T, block_env: &'a dyn Block) -> Self
     where
         T: JournalTr<Database: Database> + Debug,
     {
