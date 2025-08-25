@@ -50,7 +50,7 @@ alloy-rpc-types-eth = { version = "1.0.0", default-features = false }
 
 # op-alloy
 alloy-op-hardforks = { version = "0.2" }
-op-alloy-consensus = { version = "0.18", default-features = false }
+op-alloy-consensus = { version = "0.19", default-features = false }
 
 # revm
 revm = { version = "29.0.0", default-features = false }
