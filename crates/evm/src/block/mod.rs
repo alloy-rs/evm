@@ -203,7 +203,8 @@ pub trait BlockExecutor {
     /// commit the resulting state changes. The output can be inspected and potentially
     /// committed later using [`commit_transaction`](Self::commit_transaction).
     ///
-    /// Returns a [`revm::context_interface::result::ResultAndState`] containing the execution result and state changes.
+    /// Returns a [`revm::context_interface::result::ResultAndState`] containing the execution
+    /// result and state changes.
     ///
     /// # Use Cases
     /// - Transaction simulation without affecting state
