@@ -202,7 +202,25 @@ where
                     state.get_mut(tx.signer()).unwrap().info.clear_state_changes();
                 }
             }
+
+            // Store access list changes in bal.
+            if let Some(access_list) = tx.tx().access_list() {
+                for item in &access_list.0 {
+                    let addr = item.address;
+                    if state.get(&addr).is_some() {
+                        if let Some(bal) = self.block_access_list.as_mut() {
+                            bal.push(from_account_with_tx_index(
+                                addr,
+                                self.receipts.len() as u64,
+                                &state.get(&addr).unwrap().info,
+                            ));
+                            state.get_mut(&addr).unwrap().info.clear_state_changes();
+                        }
+                    }
+                }
+            }
         }
+
         // Commit the state changes.
         self.evm.db_mut().commit(state.clone());
         Ok(Some(gas_used))
@@ -762,6 +780,7 @@ mod tests {
         let tx_with_encoded2 = WithEncoded::new(tx2.encoded_2718().into(), tx2);
 
         let _result = executor.execute_block([&tx_with_encoded1, &tx_with_encoded2]).unwrap();
+        println!("{:#?}", _result.block_access_list);
 
         //  [
         //     AccountChanges {
