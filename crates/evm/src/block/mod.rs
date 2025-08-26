@@ -20,13 +20,6 @@ pub mod state_changes;
 
 pub mod calc;
 
-/// Output from executing a transaction without committing state changes.
-///
-/// Contains the execution result and state changes that can be committed later.
-///
-/// This is just an alias for the REVM ResultAndState to avoid exposing internals directly.
-pub type TransactionOutput<HR> = revm::context_interface::result::ResultAndState<HR>;
-
 /// The result of executing a block.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct BlockExecutionResult<T> {
@@ -151,7 +144,7 @@ pub trait BlockExecutor {
     /// Returns the gas used by the transaction.
     fn execute_transaction(
         &mut self,
-        tx: impl ExecutableTx<Self> + Copy,
+        tx: impl ExecutableTx<Self>,
     ) -> Result<u64, BlockExecutionError> {
         self.execute_transaction_with_result_closure(tx, |_| ())
     }
@@ -168,7 +161,7 @@ pub trait BlockExecutor {
     /// The transaction is always committed after the closure is invoked.
     fn execute_transaction_with_result_closure(
         &mut self,
-        tx: impl ExecutableTx<Self> + Copy,
+        tx: impl ExecutableTx<Self>,
         f: impl FnOnce(&ExecutionResult<<Self::Evm as Evm>::HaltReason>),
     ) -> Result<u64, BlockExecutionError> {
         self.execute_transaction_with_commit_condition(tx, |res| {
@@ -200,18 +193,9 @@ pub trait BlockExecutor {
     /// [`CommitChanges::No`], otherwise returns the gas used by the transaction.
     fn execute_transaction_with_commit_condition(
         &mut self,
-        tx: impl ExecutableTx<Self> + Copy,
+        tx: impl ExecutableTx<Self>,
         f: impl FnOnce(&ExecutionResult<<Self::Evm as Evm>::HaltReason>) -> CommitChanges,
-    ) -> Result<Option<u64>, BlockExecutionError> {
-        let output = self.execute_transaction_without_commit(tx)?;
-
-        if !f(&output.result).should_commit() {
-            return Ok(None);
-        }
-
-        let gas_used = self.commit_transaction(output, tx)?;
-        Ok(Some(gas_used))
-    }
+    ) -> Result<Option<u64>, BlockExecutionError>;
 
     /// Executes a single transaction without committing state changes.
     ///
@@ -219,7 +203,7 @@ pub trait BlockExecutor {
     /// commit the resulting state changes. The output can be inspected and potentially
     /// committed later using [`commit_transaction`](Self::commit_transaction).
     ///
-    /// Returns a [`TransactionOutput`] containing the execution result and state changes.
+    /// Returns a [`ResultAndState`] containing the execution result and state changes.
     ///
     /// # Use Cases
     /// - Transaction simulation without affecting state
@@ -227,8 +211,11 @@ pub trait BlockExecutor {
     /// - Building custom commit logic
     fn execute_transaction_without_commit(
         &mut self,
-        tx: impl ExecutableTx<Self> + Copy,
-    ) -> Result<TransactionOutput<<Self::Evm as Evm>::HaltReason>, BlockExecutionError>;
+        tx: &impl ExecutableTx<Self>,
+    ) -> Result<
+        revm::context_interface::result::ResultAndState<<Self::Evm as Evm>::HaltReason>,
+        BlockExecutionError,
+    >;
 
     /// Commits a previously executed transaction's state changes.
     ///
@@ -243,8 +230,8 @@ pub trait BlockExecutor {
     /// - `tx`: The original transaction (needed for receipt generation)
     fn commit_transaction(
         &mut self,
-        output: TransactionOutput<<Self::Evm as Evm>::HaltReason>,
-        tx: impl ExecutableTx<Self> + Copy,
+        output: revm::context_interface::result::ResultAndState<<Self::Evm as Evm>::HaltReason>,
+        tx: &impl ExecutableTx<Self>,
     ) -> Result<u64, BlockExecutionError>;
 
     /// Applies any necessary changes after executing the block's transactions, completes execution
@@ -305,7 +292,7 @@ pub trait BlockExecutor {
     /// ```
     fn execute_block(
         mut self,
-        transactions: impl IntoIterator<Item = impl ExecutableTx<Self> + Copy>,
+        transactions: impl IntoIterator<Item = impl ExecutableTx<Self>>,
     ) -> Result<BlockExecutionResult<Self::Receipt>, BlockExecutionError>
     where
         Self: Sized,

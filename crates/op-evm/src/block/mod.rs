@@ -8,7 +8,7 @@ use alloy_evm::{
     block::{
         state_changes::{balance_increment_state, post_block_balance_increments},
         BlockExecutionError, BlockExecutionResult, BlockExecutor, BlockExecutorFactory,
-        BlockExecutorFor, BlockValidationError, ExecutableTx, OnStateHook,
+        BlockExecutorFor, BlockValidationError, CommitChanges, ExecutableTx, OnStateHook,
         StateChangePostBlockSource, StateChangeSource, SystemCaller,
     },
     eth::receipt_builder::ReceiptBuilderCtx,
@@ -21,7 +21,11 @@ use op_alloy_consensus::OpDepositReceipt;
 use op_revm::transaction::deposit::DEPOSIT_TRANSACTION_TYPE;
 pub use receipt_builder::OpAlloyReceiptBuilder;
 use receipt_builder::OpReceiptBuilder;
-use revm::{context::result::ResultAndState, database::State, DatabaseCommit, Inspector};
+use revm::{
+    context::result::{ExecutionResult, ResultAndState},
+    database::State,
+    DatabaseCommit, Inspector,
+};
 
 mod canyon;
 pub mod receipt_builder;
@@ -119,17 +123,105 @@ where
         Ok(())
     }
 
-    fn execute_transaction_without_commit(
+    fn execute_transaction_with_commit_condition(
         &mut self,
-        tx: impl ExecutableTx<Self> + Copy,
-    ) -> Result<
-        alloy_evm::block::TransactionOutput<<Self::Evm as Evm>::HaltReason>,
-        BlockExecutionError,
-    > {
+        tx: impl ExecutableTx<Self>,
+        f: impl FnOnce(&ExecutionResult<<Self::Evm as Evm>::HaltReason>) -> CommitChanges,
+    ) -> Result<Option<u64>, BlockExecutionError> {
         let is_deposit = tx.tx().ty() == DEPOSIT_TRANSACTION_TYPE;
 
         // The sum of the transaction’s gas limit, Tg, and the gas utilized in this block prior,
         // must be no greater than the block’s gasLimit.
+        let block_available_gas = self.evm.block().gas_limit - self.gas_used;
+        if tx.tx().gas_limit() > block_available_gas && (self.is_regolith || !is_deposit) {
+            return Err(BlockValidationError::TransactionGasLimitMoreThanAvailableBlockGas {
+                transaction_gas_limit: tx.tx().gas_limit(),
+                block_available_gas,
+            }
+            .into());
+        }
+
+        // Cache the depositor account prior to the state transition for the deposit nonce.
+        //
+        // Note that this *only* needs to be done post-regolith hardfork, as deposit nonces
+        // were not introduced in Bedrock. In addition, regular transactions don't have deposit
+        // nonces, so we don't need to touch the DB for those.
+        let depositor = (self.is_regolith && is_deposit)
+            .then(|| {
+                self.evm
+                    .db_mut()
+                    .load_cache_account(*tx.signer())
+                    .map(|acc| acc.account_info().unwrap_or_default())
+            })
+            .transpose()
+            .map_err(BlockExecutionError::other)?;
+
+        let hash = tx.tx().trie_hash();
+
+        // Execute transaction.
+        let ResultAndState { result, state } =
+            self.evm.transact(&tx).map_err(move |err| BlockExecutionError::evm(err, hash))?;
+
+        if !f(&result).should_commit() {
+            return Ok(None);
+        }
+
+        self.system_caller.on_state(StateChangeSource::Transaction(self.receipts.len()), &state);
+
+        let gas_used = result.gas_used();
+
+        // append gas used
+        self.gas_used += gas_used;
+
+        self.receipts.push(
+            match self.receipt_builder.build_receipt(ReceiptBuilderCtx {
+                tx: tx.tx(),
+                result,
+                cumulative_gas_used: self.gas_used,
+                evm: &self.evm,
+                state: &state,
+            }) {
+                Ok(receipt) => receipt,
+                Err(ctx) => {
+                    let receipt = alloy_consensus::Receipt {
+                        // Success flag was added in `EIP-658: Embedding transaction status code
+                        // in receipts`.
+                        status: Eip658Value::Eip658(ctx.result.is_success()),
+                        cumulative_gas_used: self.gas_used,
+                        logs: ctx.result.into_logs(),
+                    };
+
+                    self.receipt_builder.build_deposit_receipt(OpDepositReceipt {
+                        inner: receipt,
+                        deposit_nonce: depositor.map(|account| account.nonce),
+                        // The deposit receipt version was introduced in Canyon to indicate an
+                        // update to how receipt hashes should be computed
+                        // when set. The state transition process ensures
+                        // this is only set for post-Canyon deposit
+                        // transactions.
+                        deposit_receipt_version: (is_deposit
+                            && self.spec.is_canyon_active_at_timestamp(
+                                self.evm.block().timestamp.saturating_to(),
+                            ))
+                        .then_some(1),
+                    })
+                }
+            },
+        );
+
+        self.evm.db_mut().commit(state);
+
+        Ok(Some(gas_used))
+    }
+
+    fn execute_transaction_without_commit(
+        &mut self,
+        tx: &impl ExecutableTx<Self>,
+    ) -> Result<ResultAndState<<Self::Evm as Evm>::HaltReason>, BlockExecutionError> {
+        let is_deposit = tx.tx().ty() == DEPOSIT_TRANSACTION_TYPE;
+
+        // The sum of the transaction's gas limit, Tg, and the gas utilized in this block prior,
+        // must be no greater than the block's gasLimit.
         let block_available_gas = self.evm.block().gas_limit - self.gas_used;
         if tx.tx().gas_limit() > block_available_gas && (self.is_regolith || !is_deposit) {
             return Err(BlockValidationError::TransactionGasLimitMoreThanAvailableBlockGas {
@@ -147,8 +239,8 @@ where
 
     fn commit_transaction(
         &mut self,
-        output: alloy_evm::block::TransactionOutput<<Self::Evm as Evm>::HaltReason>,
-        tx: impl ExecutableTx<Self> + Copy,
+        output: ResultAndState<<Self::Evm as Evm>::HaltReason>,
+        tx: &impl ExecutableTx<Self>,
     ) -> Result<u64, BlockExecutionError> {
         let ResultAndState { result, state } = output;
         let is_deposit = tx.tx().ty() == DEPOSIT_TRANSACTION_TYPE;

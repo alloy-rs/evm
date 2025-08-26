@@ -10,7 +10,7 @@ use crate::{
     block::{
         state_changes::{balance_increment_state, post_block_balance_increments},
         BlockExecutionError, BlockExecutionResult, BlockExecutor, BlockExecutorFactory,
-        BlockExecutorFor, BlockValidationError, ExecutableTx, OnStateHook,
+        BlockExecutorFor, BlockValidationError, CommitChanges, ExecutableTx, OnStateHook,
         StateChangePostBlockSource, StateChangeSource, SystemCaller,
     },
     Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded,
@@ -20,7 +20,10 @@ use alloy_consensus::{Header, Transaction, TxReceipt};
 use alloy_eips::{eip4895::Withdrawals, eip7685::Requests, Encodable2718};
 use alloy_hardforks::EthereumHardfork;
 use alloy_primitives::{Log, B256};
-use revm::{context_interface::result::ResultAndState, database::State, DatabaseCommit, Inspector};
+use revm::{
+    context::result::ExecutionResult, context_interface::result::ResultAndState, database::State,
+    DatabaseCommit, Inspector,
+};
 
 /// Context for Ethereum block execution.
 #[derive(Debug, Clone)]
@@ -102,11 +105,59 @@ where
         Ok(())
     }
 
+    fn execute_transaction_with_commit_condition(
+        &mut self,
+        tx: impl ExecutableTx<Self>,
+        f: impl FnOnce(&ExecutionResult<<Self::Evm as Evm>::HaltReason>) -> CommitChanges,
+    ) -> Result<Option<u64>, BlockExecutionError> {
+        // The sum of the transaction's gas limit, Tg, and the gas utilized in this block prior,
+        // must be no greater than the block's gasLimit.
+        let block_available_gas = self.evm.block().gas_limit - self.gas_used;
+
+        if tx.tx().gas_limit() > block_available_gas {
+            return Err(BlockValidationError::TransactionGasLimitMoreThanAvailableBlockGas {
+                transaction_gas_limit: tx.tx().gas_limit(),
+                block_available_gas,
+            }
+            .into());
+        }
+
+        // Execute transaction.
+        let ResultAndState { result, state } = self
+            .evm
+            .transact(&tx)
+            .map_err(|err| BlockExecutionError::evm(err, tx.tx().trie_hash()))?;
+
+        if !f(&result).should_commit() {
+            return Ok(None);
+        }
+
+        self.system_caller.on_state(StateChangeSource::Transaction(self.receipts.len()), &state);
+
+        let gas_used = result.gas_used();
+
+        // append gas used
+        self.gas_used += gas_used;
+
+        // Push transaction changeset and calculate header bloom filter for receipt.
+        self.receipts.push(self.receipt_builder.build_receipt(ReceiptBuilderCtx {
+            tx: tx.tx(),
+            evm: &self.evm,
+            result,
+            state: &state,
+            cumulative_gas_used: self.gas_used,
+        }));
+
+        // Commit the state changes.
+        self.evm.db_mut().commit(state);
+
+        Ok(Some(gas_used))
+    }
+
     fn execute_transaction_without_commit(
         &mut self,
-        tx: impl ExecutableTx<Self> + Copy,
-    ) -> Result<crate::block::TransactionOutput<<Self::Evm as Evm>::HaltReason>, BlockExecutionError>
-    {
+        tx: &impl ExecutableTx<Self>,
+    ) -> Result<ResultAndState<<Self::Evm as Evm>::HaltReason>, BlockExecutionError> {
         // The sum of the transaction's gas limit, Tg, and the gas utilized in this block prior,
         // must be no greater than the block's gasLimit.
         let block_available_gas = self.evm.block().gas_limit - self.gas_used;
@@ -125,8 +176,8 @@ where
 
     fn commit_transaction(
         &mut self,
-        output: crate::block::TransactionOutput<<Self::Evm as Evm>::HaltReason>,
-        tx: impl ExecutableTx<Self> + Copy,
+        output: ResultAndState<<Self::Evm as Evm>::HaltReason>,
+        tx: &impl ExecutableTx<Self>,
     ) -> Result<u64, BlockExecutionError> {
         let ResultAndState { result, state } = output;
 
