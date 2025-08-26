@@ -21,11 +21,7 @@ use op_alloy_consensus::OpDepositReceipt;
 use op_revm::transaction::deposit::DEPOSIT_TRANSACTION_TYPE;
 pub use receipt_builder::OpAlloyReceiptBuilder;
 use receipt_builder::OpReceiptBuilder;
-use revm::{
-    context::result::ResultAndState,
-    database::State,
-    DatabaseCommit, Inspector,
-};
+use revm::{context::result::ResultAndState, database::State, DatabaseCommit, Inspector};
 
 mod canyon;
 pub mod receipt_builder;
@@ -146,7 +142,7 @@ where
         let hash = tx.tx().trie_hash();
 
         // Execute transaction and return the result
-        self.evm.transact(&tx).map_err(move |err| BlockExecutionError::evm(err, hash))
+        self.evm.transact(tx).map_err(move |err| BlockExecutionError::evm(err, hash))
     }
 
     fn commit_transaction(
