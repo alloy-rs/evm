@@ -280,11 +280,7 @@ impl PrecompilesMap {
     pub fn get(&self, address: &Address) -> Option<impl Precompile + '_> {
         // First check static precompiles
         let static_result = match &self.precompiles {
-            PrecompilesKind::Builtin(precompiles) => precompiles.get(address).map(|p| {
-                Either::Left((p.id(), |input: PrecompileInput<'_>| {
-                    p.precompile()(input.data, input.gas)
-                }))
-            }),
+            PrecompilesKind::Builtin(precompiles) => precompiles.get(address).map(Either::Left),
             PrecompilesKind::Dynamic(dyn_precompiles) => {
                 dyn_precompiles.inner.get(address).map(Either::Right)
             }
@@ -488,7 +484,7 @@ pub struct PrecompileInput<'a> {
 }
 
 /// Trait for implementing precompiled contracts.
-#[auto_impl::auto_impl(Arc)]
+#[auto_impl::auto_impl(&, Arc)]
 pub trait Precompile {
     /// Returns precompile ID.
     fn precompile_id(&self) -> &PrecompileId;
@@ -553,6 +549,16 @@ where
     }
 }
 
+impl Precompile for revm::precompile::Precompile {
+    fn precompile_id(&self) -> &PrecompileId {
+        self.id()
+    }
+
+    fn call(&self, input: PrecompileInput<'_>) -> PrecompileResult {
+        self.precompile()(input.data, input.gas)
+    }
+}
+
 impl<F> From<F> for DynPrecompile
 where
     F: Fn(PrecompileInput<'_>) -> PrecompileResult + Send + Sync + 'static,
@@ -586,20 +592,6 @@ impl From<(PrecompileId, PrecompileFn)> for DynPrecompile {
 }
 
 impl Precompile for DynPrecompile {
-    fn precompile_id(&self) -> &PrecompileId {
-        self.0.precompile_id()
-    }
-
-    fn call(&self, input: PrecompileInput<'_>) -> PrecompileResult {
-        self.0.call(input)
-    }
-
-    fn is_pure(&self) -> bool {
-        self.0.is_pure()
-    }
-}
-
-impl Precompile for &DynPrecompile {
     fn precompile_id(&self) -> &PrecompileId {
         self.0.precompile_id()
     }
