@@ -545,7 +545,7 @@ where
     F: Fn(PrecompileInput<'_>) -> PrecompileResult + Send + Sync,
 {
     fn precompile_id(&self) -> &PrecompileId {
-        &self.0
+        self.0
     }
 
     fn call(&self, input: PrecompileInput<'_>) -> PrecompileResult {
@@ -706,10 +706,16 @@ mod tests {
         // define a function to modify the precompile to always return a constant value
         spec_precompiles.map_precompile(&identity_address, move |_original_dyn| {
             // create a new DynPrecompile that always returns our constant
-            |_input: PrecompileInput<'_>| -> PrecompileResult {
-                Ok(PrecompileOutput { gas_used: 10, bytes: Bytes::from_static(b"constant value") })
-            }
-            .into()
+            (
+                PrecompileId::Custom("constant".into()),
+                |_input: PrecompileInput<'_>| -> PrecompileResult {
+                    Ok(PrecompileOutput {
+                        gas_used: 10,
+                        bytes: Bytes::from_static(b"constant value"),
+                    })
+                },
+            )
+                .into()
         });
 
         // get the modified precompile and check it
@@ -751,7 +757,8 @@ mod tests {
             Ok(PrecompileOutput { gas_used: 15, bytes: Bytes::from(output) })
         };
 
-        let dyn_precompile: DynPrecompile = closure_precompile.into();
+        let dyn_precompile: DynPrecompile =
+            DynPrecompile::new(PrecompileId::Custom("closure".into()), closure_precompile);
 
         let result = dyn_precompile
             .call(PrecompileInput {
@@ -773,11 +780,13 @@ mod tests {
             Ok(PrecompileOutput { gas_used: 10, bytes: Bytes::from_static(b"output") })
         };
 
-        let dyn_precompile: DynPrecompile = closure_precompile.into();
+        let dyn_precompile: DynPrecompile =
+            DynPrecompile::new(PrecompileId::Custom("closure".into()), closure_precompile);
         assert!(dyn_precompile.is_pure(), "should be pure by default");
 
         // Test custom precompile with overridden is_pure
-        let stateful_precompile = DynPrecompile::new_stateful(closure_precompile);
+        let stateful_precompile =
+            DynPrecompile::new_stateful(PrecompileId::Custom("closure".into()), closure_precompile);
         assert!(!stateful_precompile.is_pure(), "PurePrecompile should return true for is_pure");
 
         let either_left = Either::<DynPrecompile, DynPrecompile>::Left(stateful_precompile);
@@ -800,7 +809,7 @@ mod tests {
         // Set up the lookup function
         spec_precompiles.set_precompile_lookup(move |address: &Address| {
             if address.as_slice().starts_with(&dynamic_prefix) {
-                Some(DynPrecompile::new(|_input| {
+                Some(DynPrecompile::new(PrecompileId::Custom("dynamic".into()), |_input| {
                     Ok(PrecompileOutput {
                         gas_used: 100,
                         bytes: Bytes::from("dynamic precompile response"),

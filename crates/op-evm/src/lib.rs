@@ -179,7 +179,9 @@ impl EvmFactory for OpEvmFactory {
                 .with_block(input.block_env)
                 .with_cfg(input.cfg_env)
                 .build_op_with_inspector(NoOpInspector {})
-                .with_precompiles(self.create_precompiles(spec_id)),
+                .with_precompiles(PrecompilesMap::from_static(
+                    OpPrecompiles::new_with_spec(spec_id).precompiles(),
+                )),
             inspect: false,
         }
     }
@@ -197,12 +199,10 @@ impl EvmFactory for OpEvmFactory {
                 .with_block(input.block_env)
                 .with_cfg(input.cfg_env)
                 .build_op_with_inspector(inspector)
-                .with_precompiles(self.create_precompiles(spec_id)),
+                .with_precompiles(PrecompilesMap::from_static(
+                    OpPrecompiles::new_with_spec(spec_id).precompiles(),
+                )),
             inspect: true,
         }
-    }
-
-    fn create_precompiles(&self, spec_id: Self::Spec) -> PrecompilesMap {
-        PrecompilesMap::from_static(OpPrecompiles::new_with_spec(spec_id).precompiles())
     }
 }

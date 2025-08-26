@@ -190,7 +190,9 @@ impl EvmFactory for EthEvmFactory {
                 .with_cfg(input.cfg_env)
                 .with_db(db)
                 .build_mainnet_with_inspector(NoOpInspector {})
-                .with_precompiles(self.create_precompiles(spec_id)),
+                .with_precompiles(PrecompilesMap::from_static(Precompiles::new(
+                    PrecompileSpecId::from_spec_id(spec_id),
+                ))),
             inspect: false,
         }
     }
@@ -208,13 +210,11 @@ impl EvmFactory for EthEvmFactory {
                 .with_cfg(input.cfg_env)
                 .with_db(db)
                 .build_mainnet_with_inspector(inspector)
-                .with_precompiles(self.create_precompiles(spec_id)),
+                .with_precompiles(PrecompilesMap::from_static(Precompiles::new(
+                    PrecompileSpecId::from_spec_id(spec_id),
+                ))),
             inspect: true,
         }
-    }
-
-    fn create_precompiles(&self, spec_id: Self::Spec) -> PrecompilesMap {
-        PrecompilesMap::from_static(Precompiles::new(PrecompileSpecId::from_spec_id(spec_id)))
     }
 }
 
