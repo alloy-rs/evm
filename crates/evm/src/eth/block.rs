@@ -180,7 +180,6 @@ where
 
         // Commit the state changes.
         self.evm.db_mut().commit(state.clone());
-
         if let Some(recipient) = tx.tx().to() {
             if let Some(acc) = state.get(&recipient) {
                 if let Some(bal) = self.block_access_list.as_mut() {
@@ -200,7 +199,7 @@ where
                         self.receipts.len() as u64,
                         &acc.info,
                     ));
-                    state.get_mut(&recipient).unwrap().info.clear_state_changes();
+                    state.get_mut(tx.signer()).unwrap().info.clear_state_changes();
                 }
             }
         }
