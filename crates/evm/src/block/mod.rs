@@ -20,6 +20,13 @@ pub mod state_changes;
 
 pub mod calc;
 
+/// Output from executing a transaction without committing state changes.
+///
+/// Contains the execution result and state changes that can be committed later.
+///
+/// This is just an alias for the REVM ResultAndState to avoid exposing internals directly.
+pub type TransactionOutput<HR> = revm::context_interface::result::ResultAndState<HR>;
+
 /// The result of executing a block.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct BlockExecutionResult<T> {
@@ -144,7 +151,7 @@ pub trait BlockExecutor {
     /// Returns the gas used by the transaction.
     fn execute_transaction(
         &mut self,
-        tx: impl ExecutableTx<Self>,
+        tx: impl ExecutableTx<Self> + Copy,
     ) -> Result<u64, BlockExecutionError> {
         self.execute_transaction_with_result_closure(tx, |_| ())
     }
@@ -161,7 +168,7 @@ pub trait BlockExecutor {
     /// The transaction is always committed after the closure is invoked.
     fn execute_transaction_with_result_closure(
         &mut self,
-        tx: impl ExecutableTx<Self>,
+        tx: impl ExecutableTx<Self> + Copy,
         f: impl FnOnce(&ExecutionResult<<Self::Evm as Evm>::HaltReason>),
     ) -> Result<u64, BlockExecutionError> {
         self.execute_transaction_with_commit_condition(tx, |res| {
@@ -193,9 +200,52 @@ pub trait BlockExecutor {
     /// [`CommitChanges::No`], otherwise returns the gas used by the transaction.
     fn execute_transaction_with_commit_condition(
         &mut self,
-        tx: impl ExecutableTx<Self>,
+        tx: impl ExecutableTx<Self> + Copy,
         f: impl FnOnce(&ExecutionResult<<Self::Evm as Evm>::HaltReason>) -> CommitChanges,
-    ) -> Result<Option<u64>, BlockExecutionError>;
+    ) -> Result<Option<u64>, BlockExecutionError> {
+        let output = self.execute_transaction_without_commit(tx)?;
+
+        if !f(&output.result).should_commit() {
+            return Ok(None);
+        }
+
+        let gas_used = self.commit_transaction(output, tx)?;
+        Ok(Some(gas_used))
+    }
+
+    /// Executes a single transaction without committing state changes.
+    ///
+    /// This method performs the transaction execution through the EVM but does not
+    /// commit the resulting state changes. The output can be inspected and potentially
+    /// committed later using [`commit_transaction`](Self::commit_transaction).
+    ///
+    /// Returns a [`TransactionOutput`] containing the execution result and state changes.
+    ///
+    /// # Use Cases
+    /// - Transaction simulation without affecting state
+    /// - Inspecting transaction effects before committing
+    /// - Building custom commit logic
+    fn execute_transaction_without_commit(
+        &mut self,
+        tx: impl ExecutableTx<Self> + Copy,
+    ) -> Result<TransactionOutput<<Self::Evm as Evm>::HaltReason>, BlockExecutionError>;
+
+    /// Commits a previously executed transaction's state changes.
+    ///
+    /// Takes the output from
+    /// [`execute_transaction_without_commit`](Self::execute_transaction_without_commit)
+    /// and applies the state changes, updates gas accounting, and generates a receipt.
+    ///
+    /// Returns the gas used by the transaction.
+    ///
+    /// # Parameters
+    /// - `output`: The transaction output containing execution result and state changes
+    /// - `tx`: The original transaction (needed for receipt generation)
+    fn commit_transaction(
+        &mut self,
+        output: TransactionOutput<<Self::Evm as Evm>::HaltReason>,
+        tx: impl ExecutableTx<Self> + Copy,
+    ) -> Result<u64, BlockExecutionError>;
 
     /// Applies any necessary changes after executing the block's transactions, completes execution
     /// and returns the underlying EVM along with execution result.
@@ -255,7 +305,7 @@ pub trait BlockExecutor {
     /// ```
     fn execute_block(
         mut self,
-        transactions: impl IntoIterator<Item = impl ExecutableTx<Self>>,
+        transactions: impl IntoIterator<Item = impl ExecutableTx<Self> + Copy>,
     ) -> Result<BlockExecutionResult<Self::Receipt>, BlockExecutionError>
     where
         Self: Sized,
