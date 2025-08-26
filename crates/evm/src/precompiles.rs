@@ -553,6 +553,22 @@ where
     }
 }
 
+impl<F> From<F> for DynPrecompile
+where
+    F: Fn(PrecompileInput<'_>) -> PrecompileResult + Send + Sync + 'static,
+{
+    fn from(f: F) -> Self {
+        Self::new(PrecompileId::Custom("closure".into()), f)
+    }
+}
+
+impl From<PrecompileFn> for DynPrecompile {
+    fn from(f: PrecompileFn) -> Self {
+        let p = move |input: PrecompileInput<'_>| f(input.data, input.gas);
+        p.into()
+    }
+}
+
 impl<F> From<(PrecompileId, F)> for DynPrecompile
 where
     F: Fn(PrecompileInput<'_>) -> PrecompileResult + Send + Sync + 'static,
@@ -706,16 +722,10 @@ mod tests {
         // define a function to modify the precompile to always return a constant value
         spec_precompiles.map_precompile(&identity_address, move |_original_dyn| {
             // create a new DynPrecompile that always returns our constant
-            (
-                PrecompileId::Custom("constant".into()),
-                |_input: PrecompileInput<'_>| -> PrecompileResult {
-                    Ok(PrecompileOutput {
-                        gas_used: 10,
-                        bytes: Bytes::from_static(b"constant value"),
-                    })
-                },
-            )
-                .into()
+            |_input: PrecompileInput<'_>| -> PrecompileResult {
+                Ok(PrecompileOutput { gas_used: 10, bytes: Bytes::from_static(b"constant value") })
+            }
+            .into()
         });
 
         // get the modified precompile and check it
@@ -757,8 +767,7 @@ mod tests {
             Ok(PrecompileOutput { gas_used: 15, bytes: Bytes::from(output) })
         };
 
-        let dyn_precompile: DynPrecompile =
-            DynPrecompile::new(PrecompileId::Custom("closure".into()), closure_precompile);
+        let dyn_precompile: DynPrecompile = closure_precompile.into();
 
         let result = dyn_precompile
             .call(PrecompileInput {
@@ -780,8 +789,7 @@ mod tests {
             Ok(PrecompileOutput { gas_used: 10, bytes: Bytes::from_static(b"output") })
         };
 
-        let dyn_precompile: DynPrecompile =
-            DynPrecompile::new(PrecompileId::Custom("closure".into()), closure_precompile);
+        let dyn_precompile: DynPrecompile = closure_precompile.into();
         assert!(dyn_precompile.is_pure(), "should be pure by default");
 
         // Test custom precompile with overridden is_pure
