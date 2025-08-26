@@ -207,7 +207,7 @@ where
             if let Some(access_list) = tx.tx().access_list() {
                 for item in &access_list.0 {
                     let addr = item.address;
-                    if state.get(&addr).is_some() {
+                    if state.contains_key(&addr) {
                         if let Some(bal) = self.block_access_list.as_mut() {
                             bal.push(from_account_with_tx_index(
                                 addr,
@@ -780,7 +780,6 @@ mod tests {
         let tx_with_encoded2 = WithEncoded::new(tx2.encoded_2718().into(), tx2);
 
         let _result = executor.execute_block([&tx_with_encoded1, &tx_with_encoded2]).unwrap();
-        println!("{:#?}", _result.block_access_list);
 
         //  [
         //     AccountChanges {
