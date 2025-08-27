@@ -8,7 +8,7 @@ use alloy_evm::{
     block::{
         state_changes::{balance_increment_state, post_block_balance_increments},
         BlockExecutionError, BlockExecutionResult, BlockExecutor, BlockExecutorFactory,
-        BlockExecutorFor, BlockValidationError, CommitChanges, ExecutableTx, OnStateHook,
+        BlockExecutorFor, BlockValidationError, ExecutableTx, OnStateHook,
         StateChangePostBlockSource, StateChangeSource, SystemCaller,
     },
     eth::receipt_builder::ReceiptBuilderCtx,
@@ -21,11 +21,7 @@ use op_alloy_consensus::OpDepositReceipt;
 use op_revm::transaction::deposit::DEPOSIT_TRANSACTION_TYPE;
 pub use receipt_builder::OpAlloyReceiptBuilder;
 use receipt_builder::OpReceiptBuilder;
-use revm::{
-    context::result::ResultAndState,
-    database::State,
-    DatabaseCommit, Inspector,
-};
+use revm::{context::result::ResultAndState, database::State, DatabaseCommit, Inspector};
 
 mod canyon;
 pub mod receipt_builder;
@@ -122,7 +118,6 @@ where
 
         Ok(())
     }
-
 
     fn execute_transaction_without_commit(
         &mut self,

@@ -10,7 +10,7 @@ use crate::{
     block::{
         state_changes::{balance_increment_state, post_block_balance_increments},
         BlockExecutionError, BlockExecutionResult, BlockExecutor, BlockExecutorFactory,
-        BlockExecutorFor, BlockValidationError, CommitChanges, ExecutableTx, OnStateHook,
+        BlockExecutorFor, BlockValidationError, ExecutableTx, OnStateHook,
         StateChangePostBlockSource, StateChangeSource, SystemCaller,
     },
     Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded,
@@ -20,10 +20,7 @@ use alloy_consensus::{Header, Transaction, TxReceipt};
 use alloy_eips::{eip4895::Withdrawals, eip7685::Requests, Encodable2718};
 use alloy_hardforks::EthereumHardfork;
 use alloy_primitives::{Log, B256};
-use revm::{
-    context::result::ExecutionResult, context_interface::result::ResultAndState, database::State,
-    DatabaseCommit, Inspector,
-};
+use revm::{context_interface::result::ResultAndState, database::State, DatabaseCommit, Inspector};
 
 /// Context for Ethereum block execution.
 #[derive(Debug, Clone)]
@@ -78,7 +75,6 @@ where
     }
 }
 
-
 impl<'db, DB, E, Spec, R> BlockExecutor for EthBlockExecutor<'_, E, Spec, R>
 where
     DB: Database + 'db,
@@ -105,7 +101,6 @@ where
 
         Ok(())
     }
-
 
     fn execute_transaction_without_commit(
         &mut self,
