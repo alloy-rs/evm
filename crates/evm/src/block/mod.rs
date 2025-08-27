@@ -4,7 +4,10 @@ use crate::{Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, Recov
 use alloc::{boxed::Box, vec::Vec};
 use alloy_eips::eip7685::Requests;
 use revm::{
-    context::result::ExecutionResult, database::State, inspector::NoOpInspector, Inspector,
+    context::result::{ExecutionResult, ResultAndState},
+    database::State,
+    inspector::NoOpInspector,
+    Inspector,
 };
 
 mod error;
@@ -223,10 +226,7 @@ pub trait BlockExecutor {
     fn execute_transaction_without_commit(
         &mut self,
         tx: &impl ExecutableTx<Self>,
-    ) -> Result<
-        revm::context_interface::result::ResultAndState<<Self::Evm as Evm>::HaltReason>,
-        BlockExecutionError,
-    >;
+    ) -> Result<ResultAndState<<Self::Evm as Evm>::HaltReason>, BlockExecutionError>;
 
     /// Commits a previously executed transaction's state changes.
     ///
@@ -241,7 +241,7 @@ pub trait BlockExecutor {
     /// - `tx`: The original transaction (needed for receipt generation)
     fn commit_transaction(
         &mut self,
-        output: revm::context_interface::result::ResultAndState<<Self::Evm as Evm>::HaltReason>,
+        output: ResultAndState<<Self::Evm as Evm>::HaltReason>,
         tx: &impl ExecutableTx<Self>,
     ) -> Result<u64, BlockExecutionError>;
 
