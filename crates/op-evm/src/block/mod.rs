@@ -159,11 +159,12 @@ where
             .transpose()
             .map_err(BlockExecutionError::other)?;
 
-        let hash = tx.tx().trie_hash();
-
         // Execute transaction.
-        let ResultAndState { result, state } =
-            self.evm.transact(&tx).map_err(move |err| BlockExecutionError::evm(err, hash))?;
+        // Only calculate hash on error to avoid expensive copy (400 times per block)
+        let ResultAndState { result, state } = self.evm.transact(&tx).map_err(|err| {
+            let hash = tx.tx().trie_hash();
+            BlockExecutionError::evm(err, hash)
+        })?;
 
         if !f(&result).should_commit() {
             return Ok(None);
@@ -234,10 +235,12 @@ where
             .into());
         }
 
-        let hash = tx.tx().trie_hash();
-
         // Execute transaction and return the result
-        self.evm.transact(tx).map_err(move |err| BlockExecutionError::evm(err, hash))
+        // Only calculate hash on error to avoid expensive copy (400 times per block)
+        self.evm.transact(tx).map_err(|err| {
+            let hash = tx.tx().trie_hash();
+            BlockExecutionError::evm(err, hash)
+        })
     }
 
     fn commit_transaction(
