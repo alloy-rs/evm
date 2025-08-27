@@ -150,10 +150,10 @@ where
         let ResultAndState { result, state } = output;
         let is_deposit = tx.tx().ty() == DEPOSIT_TRANSACTION_TYPE;
 
-        // TODO: Verify this fetches the correct depositor nonce.
-        // For deposit transactions, we need the nonce from BEFORE execution,
-        // but this is fetching from the database which may have uncommitted changes.
-        // This might need to be cached in execute_transaction_without_commit instead.
+        // Cache the depositor account prior to the state transition for the deposit nonce.
+        // Note that this *only* needs to be done post-regolith hardfork, as deposit nonces
+        // were not introduced in Bedrock. In addition, regular transactions don't have deposit
+        // nonces, so we don't need to touch the DB for those.
         let depositor = (self.is_regolith && is_deposit)
             .then(|| {
                 self.evm
