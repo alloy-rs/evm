@@ -242,14 +242,72 @@ where
 
     fn commit_transaction(
         &mut self,
-        _output: ResultAndState<<Self::Evm as Evm>::HaltReason>,
-        _tx: &impl ExecutableTx<Self>,
+        output: ResultAndState<<Self::Evm as Evm>::HaltReason>,
+        tx: &impl ExecutableTx<Self>,
     ) -> Result<u64, BlockExecutionError> {
-        // This method is not used by OpBlockExecutor. We override
-        // execute_transaction_with_commit_condition to handle deposit nonces correctly.
-        // Deposit nonces must be captured BEFORE execution but used AFTER, which the
-        // decomposed API doesn't support cleanly without introducing stateful coupling.
-        unreachable!("OpBlockExecutor should use execute_transaction_with_commit_condition")
+        let ResultAndState { result, state } = output;
+        let is_deposit = tx.tx().ty() == DEPOSIT_TRANSACTION_TYPE;
+
+        // Cache the depositor account prior to the state transition for the deposit nonce.
+        // Note that this *only* needs to be done post-regolith hardfork, as deposit nonces
+        // were not introduced in Bedrock. In addition, regular transactions don't have deposit
+        // nonces, so we don't need to touch the DB for those.
+        let depositor = (self.is_regolith && is_deposit)
+            .then(|| {
+                self.evm
+                    .db_mut()
+                    .load_cache_account(*tx.signer())
+                    .map(|acc| acc.account_info().unwrap_or_default())
+            })
+            .transpose()
+            .map_err(BlockExecutionError::other)?;
+
+        self.system_caller.on_state(StateChangeSource::Transaction(self.receipts.len()), &state);
+
+        let gas_used = result.gas_used();
+
+        // append gas used
+        self.gas_used += gas_used;
+
+        self.receipts.push(
+            match self.receipt_builder.build_receipt(ReceiptBuilderCtx {
+                tx: tx.tx(),
+                result,
+                cumulative_gas_used: self.gas_used,
+                evm: &self.evm,
+                state: &state,
+            }) {
+                Ok(receipt) => receipt,
+                Err(ctx) => {
+                    let receipt = alloy_consensus::Receipt {
+                        // Success flag was added in `EIP-658: Embedding transaction status code
+                        // in receipts`.
+                        status: Eip658Value::Eip658(ctx.result.is_success()),
+                        cumulative_gas_used: self.gas_used,
+                        logs: ctx.result.into_logs(),
+                    };
+
+                    self.receipt_builder.build_deposit_receipt(OpDepositReceipt {
+                        inner: receipt,
+                        deposit_nonce: depositor.map(|account| account.nonce),
+                        // The deposit receipt version was introduced in Canyon to indicate an
+                        // update to how receipt hashes should be computed
+                        // when set. The state transition process ensures
+                        // this is only set for post-Canyon deposit
+                        // transactions.
+                        deposit_receipt_version: (is_deposit
+                            && self.spec.is_canyon_active_at_timestamp(
+                                self.evm.block().timestamp.saturating_to(),
+                            ))
+                        .then_some(1),
+                    })
+                }
+            },
+        );
+
+        self.evm.db_mut().commit(state);
+
+        Ok(gas_used)
     }
 
     fn finish(
