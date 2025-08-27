@@ -119,10 +119,18 @@ where
         Ok(())
     }
 
-    fn execute_transaction_without_commit(
+    // OpBlockExecutor must override the default implementation to correctly handle deposit nonces.
+    // Deposit transactions require capturing the depositor's nonce BEFORE execution (as execution
+    // increments it), but using it AFTER execution in the receipt. The decomposed API doesn't
+    // provide a clean way to pass this pre-execution state between methods without introducing
+    // stateful coupling, so we keep the monolithic implementation for OP chains.
+    fn execute_transaction_with_commit_condition(
         &mut self,
-        tx: &impl ExecutableTx<Self>,
-    ) -> Result<ResultAndState<<Self::Evm as Evm>::HaltReason>, BlockExecutionError> {
+        tx: impl ExecutableTx<Self>,
+        f: impl FnOnce(
+            &revm::context::result::ExecutionResult<<Self::Evm as Evm>::HaltReason>,
+        ) -> alloy_evm::block::CommitChanges,
+    ) -> Result<Option<u64>, BlockExecutionError> {
         let is_deposit = tx.tx().ty() == DEPOSIT_TRANSACTION_TYPE;
 
         // The sum of the transaction's gas limit, Tg, and the gas utilized in this block prior,
@@ -136,21 +144,8 @@ where
             .into());
         }
 
-        let hash = tx.tx().trie_hash();
-
-        // Execute transaction and return the result
-        self.evm.transact(tx).map_err(move |err| BlockExecutionError::evm(err, hash))
-    }
-
-    fn commit_transaction(
-        &mut self,
-        output: ResultAndState<<Self::Evm as Evm>::HaltReason>,
-        tx: &impl ExecutableTx<Self>,
-    ) -> Result<u64, BlockExecutionError> {
-        let ResultAndState { result, state } = output;
-        let is_deposit = tx.tx().ty() == DEPOSIT_TRANSACTION_TYPE;
-
         // Cache the depositor account prior to the state transition for the deposit nonce.
+        //
         // Note that this *only* needs to be done post-regolith hardfork, as deposit nonces
         // were not introduced in Bedrock. In addition, regular transactions don't have deposit
         // nonces, so we don't need to touch the DB for those.
@@ -163,6 +158,16 @@ where
             })
             .transpose()
             .map_err(BlockExecutionError::other)?;
+
+        let hash = tx.tx().trie_hash();
+
+        // Execute transaction.
+        let ResultAndState { result, state } =
+            self.evm.transact(&tx).map_err(move |err| BlockExecutionError::evm(err, hash))?;
+
+        if !f(&result).should_commit() {
+            return Ok(None);
+        }
 
         self.system_caller.on_state(StateChangeSource::Transaction(self.receipts.len()), &state);
 
@@ -209,7 +214,42 @@ where
 
         self.evm.db_mut().commit(state);
 
-        Ok(gas_used)
+        Ok(Some(gas_used))
+    }
+
+    fn execute_transaction_without_commit(
+        &mut self,
+        tx: &impl ExecutableTx<Self>,
+    ) -> Result<ResultAndState<<Self::Evm as Evm>::HaltReason>, BlockExecutionError> {
+        let is_deposit = tx.tx().ty() == DEPOSIT_TRANSACTION_TYPE;
+
+        // The sum of the transaction's gas limit, Tg, and the gas utilized in this block prior,
+        // must be no greater than the block's gasLimit.
+        let block_available_gas = self.evm.block().gas_limit - self.gas_used;
+        if tx.tx().gas_limit() > block_available_gas && (self.is_regolith || !is_deposit) {
+            return Err(BlockValidationError::TransactionGasLimitMoreThanAvailableBlockGas {
+                transaction_gas_limit: tx.tx().gas_limit(),
+                block_available_gas,
+            }
+            .into());
+        }
+
+        let hash = tx.tx().trie_hash();
+
+        // Execute transaction and return the result
+        self.evm.transact(tx).map_err(move |err| BlockExecutionError::evm(err, hash))
+    }
+
+    fn commit_transaction(
+        &mut self,
+        _output: ResultAndState<<Self::Evm as Evm>::HaltReason>,
+        _tx: &impl ExecutableTx<Self>,
+    ) -> Result<u64, BlockExecutionError> {
+        // This method is not used by OpBlockExecutor. We override
+        // execute_transaction_with_commit_condition to handle deposit nonces correctly.
+        // Deposit nonces must be captured BEFORE execution but used AFTER, which the
+        // decomposed API doesn't support cleanly without introducing stateful coupling.
+        unreachable!("OpBlockExecutor should use execute_transaction_with_commit_condition")
     }
 
     fn finish(
