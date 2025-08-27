@@ -195,7 +195,19 @@ pub trait BlockExecutor {
         &mut self,
         tx: impl ExecutableTx<Self>,
         f: impl FnOnce(&ExecutionResult<<Self::Evm as Evm>::HaltReason>) -> CommitChanges,
-    ) -> Result<Option<u64>, BlockExecutionError>;
+    ) -> Result<Option<u64>, BlockExecutionError> {
+        // Execute transaction without committing
+        let output = self.execute_transaction_without_commit(&tx)?;
+        
+        // Check if we should commit
+        if !f(&output.result).should_commit() {
+            return Ok(None);
+        }
+        
+        // Commit the transaction
+        let gas_used = self.commit_transaction(output, &tx)?;
+        Ok(Some(gas_used))
+    }
 
     /// Executes a single transaction without committing state changes.
     ///

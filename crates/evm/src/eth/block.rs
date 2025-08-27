@@ -78,32 +78,6 @@ where
     }
 }
 
-impl<'a, 'db, DB, E, Spec, R> EthBlockExecutor<'a, E, Spec, R>
-where
-    DB: Database + 'db,
-    E: Evm<
-        DB = &'db mut State<DB>,
-        Tx: FromRecoveredTx<R::Transaction> + FromTxWithEncoded<R::Transaction>,
-    >,
-    Spec: EthExecutorSpec,
-    R: ReceiptBuilder<Transaction: Transaction + Encodable2718, Receipt: TxReceipt<Log = Log>>,
-{
-    /// Validates that a transaction's gas limit does not exceed available block gas.
-    fn validate_transaction_gas_limit(
-        &self,
-        tx: &impl Transaction,
-    ) -> Result<(), BlockExecutionError> {
-        let block_available_gas = self.evm.block().gas_limit - self.gas_used;
-        if tx.gas_limit() > block_available_gas {
-            return Err(BlockValidationError::TransactionGasLimitMoreThanAvailableBlockGas {
-                transaction_gas_limit: tx.gas_limit(),
-                block_available_gas,
-            }
-            .into());
-        }
-        Ok(())
-    }
-}
 
 impl<'db, DB, E, Spec, R> BlockExecutor for EthBlockExecutor<'_, E, Spec, R>
 where
@@ -132,52 +106,22 @@ where
         Ok(())
     }
 
-    fn execute_transaction_with_commit_condition(
-        &mut self,
-        tx: impl ExecutableTx<Self>,
-        f: impl FnOnce(&ExecutionResult<<Self::Evm as Evm>::HaltReason>) -> CommitChanges,
-    ) -> Result<Option<u64>, BlockExecutionError> {
-        // Validate gas limit
-        self.validate_transaction_gas_limit(tx.tx())?;
-
-        // Execute transaction.
-        let ResultAndState { result, state } = self
-            .evm
-            .transact(&tx)
-            .map_err(|err| BlockExecutionError::evm(err, tx.tx().trie_hash()))?;
-
-        if !f(&result).should_commit() {
-            return Ok(None);
-        }
-
-        self.system_caller.on_state(StateChangeSource::Transaction(self.receipts.len()), &state);
-
-        let gas_used = result.gas_used();
-
-        // append gas used
-        self.gas_used += gas_used;
-
-        // Push transaction changeset and calculate header bloom filter for receipt.
-        self.receipts.push(self.receipt_builder.build_receipt(ReceiptBuilderCtx {
-            tx: tx.tx(),
-            evm: &self.evm,
-            result,
-            state: &state,
-            cumulative_gas_used: self.gas_used,
-        }));
-
-        // Commit the state changes.
-        self.evm.db_mut().commit(state);
-
-        Ok(Some(gas_used))
-    }
 
     fn execute_transaction_without_commit(
         &mut self,
         tx: &impl ExecutableTx<Self>,
     ) -> Result<ResultAndState<<Self::Evm as Evm>::HaltReason>, BlockExecutionError> {
-        // Validate gas limit
-        self.validate_transaction_gas_limit(tx.tx())?;
+        // The sum of the transaction's gas limit, Tg, and the gas utilized in this block prior,
+        // must be no greater than the block's gasLimit.
+        let block_available_gas = self.evm.block().gas_limit - self.gas_used;
+
+        if tx.tx().gas_limit() > block_available_gas {
+            return Err(BlockValidationError::TransactionGasLimitMoreThanAvailableBlockGas {
+                transaction_gas_limit: tx.tx().gas_limit(),
+                block_available_gas,
+            }
+            .into());
+        }
 
         // Execute transaction and return the result
         self.evm.transact(tx).map_err(|err| BlockExecutionError::evm(err, tx.tx().trie_hash()))
