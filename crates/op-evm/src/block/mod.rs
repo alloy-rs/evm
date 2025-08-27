@@ -160,7 +160,7 @@ where
 
         // Execute transaction.
         let ResultAndState { result, state } =
-            self.evm.transact(tx).map_err(move |err| BlockExecutionError::evm(err, hash))?;
+            self.evm.transact(&tx).map_err(move |err| BlockExecutionError::evm(err, hash))?;
 
         if !f(&result).should_commit() {
             return Ok(None);

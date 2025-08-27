@@ -1,8 +1,6 @@
 //! Block execution abstraction.
 
-use crate::{
-    Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, IntoTxEnv, RecoveredTx,
-};
+use crate::{Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, RecoveredTx, ToTxEnv};
 use alloc::{boxed::Box, vec::Vec};
 use alloy_eips::eip7685::Requests;
 use revm::{
@@ -36,7 +34,7 @@ pub struct BlockExecutionResult<T> {
 /// Helper trait to encapsulate requirements for a type to be used as input for [`BlockExecutor`].
 ///
 /// This trait combines the requirements for a transaction to be executable by a block executor:
-/// - Must be convertible to the EVM's transaction environment via [`IntoTxEnv`]
+/// - Must be convertible to the EVM's transaction environment via [`ToTxEnv`]
 /// - Must provide access to the transaction and signer via [`RecoveredTx`]
 /// - Must be [`Copy`] for efficient handling during block execution (the expectation here is that
 ///   this always passed as & reference)
@@ -50,11 +48,11 @@ pub struct BlockExecutionResult<T> {
 /// The trait ensures that the block executor can both execute the transaction in the EVM
 /// and access the original transaction data for receipt generation.
 pub trait ExecutableTx<E: BlockExecutor + ?Sized>:
-    IntoTxEnv<<E::Evm as Evm>::Tx> + RecoveredTx<E::Transaction> + Copy
+    ToTxEnv<<E::Evm as Evm>::Tx> + RecoveredTx<E::Transaction>
 {
 }
 impl<E: BlockExecutor, T> ExecutableTx<E> for T where
-    T: IntoTxEnv<<E::Evm as Evm>::Tx> + RecoveredTx<E::Transaction> + Copy
+    T: ToTxEnv<<E::Evm as Evm>::Tx> + RecoveredTx<E::Transaction>
 {
 }
 
@@ -187,7 +185,7 @@ pub trait BlockExecutor {
     /// - Custom validation logic before committing
     ///
     /// The [`ExecutableTx`] constraint ensures that:
-    /// 1. The transaction can be converted to `TxEnv` via [`IntoTxEnv`] for EVM execution
+    /// 1. The transaction can be converted to `TxEnv` via [`ToTxEnv`] for EVM execution
     /// 2. The original transaction and signer can be accessed via [`RecoveredTx`] for receipt
     ///    generation
     ///
