@@ -119,11 +119,6 @@ where
         Ok(())
     }
 
-    // No need to override execute_transaction_with_commit_condition anymore.
-    // The default implementation will correctly use our execute_transaction_without_commit
-    // and commit_transaction methods, which properly handle deposit nonces by fetching
-    // them from the DB during the commit phase.
-
     fn execute_transaction_without_commit(
         &mut self,
         tx: &impl ExecutableTx<Self>,
