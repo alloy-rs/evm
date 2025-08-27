@@ -1,6 +1,6 @@
 //! Abstraction over EVM.
 
-use crate::{tracing::TxTracer, EvmEnv, EvmError, IntoTxEnv};
+use crate::{precompiles::PrecompilesMap, tracing::TxTracer, EvmEnv, EvmError, IntoTxEnv};
 use alloy_primitives::{Address, Bytes};
 use core::{error::Error, fmt::Debug, hash::Hash};
 use revm::{
@@ -251,6 +251,104 @@ pub trait EvmFactoryExt: EvmFactory {
     {
         TxTracer::new(self.create_evm_with_inspector(db, input, fused_inspector))
     }
+
+    /// Creates a new factory that modifies precompiles using the given function.
+    fn with_modified_precompiles<F>(self, f: F) -> EvmFactoryWith<Self, F>
+    where
+        F: Fn(&mut PrecompilesMap, Self::Spec),
+        Self: Sized,
+    {
+        EvmFactoryWith { factory: self, precompile_init: f }
+    }
 }
 
 impl<T: EvmFactory> EvmFactoryExt for T {}
+
+/// Trait for modifying precompiles based on spec ID.
+pub trait PrecompileModifies<SpecId> {
+    /// Modifies the precompiles based on the spec ID.
+    fn modify(&self, precompiles: &mut PrecompilesMap, spec_id: SpecId);
+}
+
+/// Implements [`PrecompileModifies`] for any closure with matching signature.
+impl<F, SpecId> PrecompileModifies<SpecId> for F
+where
+    F: Fn(&mut PrecompilesMap, SpecId),
+{
+    fn modify(&self, precompiles: &mut PrecompilesMap, spec_id: SpecId) {
+        self(precompiles, spec_id)
+    }
+}
+
+/// A wrapper around an [`EvmFactory`] that modifies the precompiles based on the spec ID.
+#[derive(Debug, Clone, Copy)]
+pub struct EvmFactoryWith<Evm, PrecompilesInit> {
+    factory: Evm,
+    precompile_init: PrecompilesInit,
+}
+
+impl<F, P> EvmFactory for EvmFactoryWith<F, P>
+where
+    F: EvmFactory<Precompiles = PrecompilesMap>,
+    P: PrecompileModifies<F::Spec>,
+{
+    type Evm<DB: Database, I: Inspector<Self::Context<DB>>> = F::Evm<DB, I>;
+    type Context<DB: Database> = F::Context<DB>;
+    type Tx = F::Tx;
+    type Error<DBError: core::error::Error + Send + Sync + 'static> = F::Error<DBError>;
+    type HaltReason = F::HaltReason;
+    type Spec = F::Spec;
+    type Precompiles = F::Precompiles;
+
+    fn create_evm<DB: Database>(
+        &self,
+        db: DB,
+        input: EvmEnv<Self::Spec>,
+    ) -> Self::Evm<DB, NoOpInspector> {
+        let spec_id = input.cfg_env.spec;
+        let mut evm = self.factory.create_evm(db, input);
+        self.precompile_init.modify(evm.precompiles_mut(), spec_id);
+        evm
+    }
+
+    fn create_evm_with_inspector<DB: Database, I: Inspector<Self::Context<DB>>>(
+        &self,
+        db: DB,
+        input: EvmEnv<Self::Spec>,
+        inspector: I,
+    ) -> Self::Evm<DB, I> {
+        let spec_id = input.cfg_env.spec;
+        let mut evm = self.factory.create_evm_with_inspector(db, input, inspector);
+        self.precompile_init.modify(evm.precompiles_mut(), spec_id);
+        evm
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::eth::EthEvmFactory;
+    use revm::{database_interface::EmptyDB, primitives::hardfork::SpecId};
+
+    #[test]
+    fn test_evm_factory_with_precompiles() {
+        let factory = EthEvmFactory;
+
+        // Use a simple test that doesn't require mutation
+        let custom_factory = factory.with_modified_precompiles(|_precompiles, spec_id| {
+            // Verify we receive the expected spec_id
+            assert_eq!(spec_id, SpecId::LONDON, "Should receive the correct spec_id");
+        });
+
+        let mut cfg_env = revm::context::CfgEnv::default();
+        cfg_env.spec = SpecId::LONDON;
+        cfg_env.chain_id = 1;
+
+        let env = EvmEnv { block_env: revm::context::BlockEnv::default(), cfg_env };
+
+        let evm = custom_factory.create_evm(EmptyDB::default(), env);
+
+        // Verify the EVM was created successfully
+        assert_eq!(evm.chain_id(), 1);
+    }
+}
