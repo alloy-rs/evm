@@ -1,6 +1,7 @@
 //! Abstraction over EVM.
 
 use crate::{tracing::TxTracer, EvmEnv, EvmError, IntoTxEnv};
+use alloy_consensus::transaction::TxHashRef;
 use alloy_primitives::{Address, Bytes, B256};
 use core::{error::Error, fmt::Debug, hash::Hash};
 use revm::{
@@ -191,11 +192,6 @@ pub trait Evm {
     fn components_mut(&mut self) -> (&mut Self::DB, &mut Self::Inspector, &mut Self::Precompiles);
 }
 
-// TODO: move to alloy?
-pub trait HashedTx {
-    fn tx_hash(&self) -> &B256;
-}
-
 /// An extension trait for [`Evm`] providing additional functionality.
 pub trait EvmExt: Evm {
     /// Replays all the transactions until the target transaction is found.
@@ -211,7 +207,7 @@ pub trait EvmExt: Evm {
     where
         Self::DB: DatabaseCommit,
         I: IntoIterator<Item = T>,
-        T: IntoTxEnv<Self::Tx> + HashedTx,
+        T: IntoTxEnv<Self::Tx> + TxHashRef,
     {
         let mut index = 0;
         for tx in transactions {
@@ -237,7 +233,7 @@ pub trait EvmExt: Evm {
     where
         Self::DB: DatabaseCommit,
         I: IntoIterator<Item = T>,
-        T: IntoTxEnv<Self::Tx> + HashedTx,
+        T: IntoTxEnv<Self::Tx> + TxHashRef,
     {
         for tx in transactions {
             if *tx.tx_hash() == target_tx_hash {
