@@ -104,7 +104,7 @@ where
 
     fn execute_transaction_without_commit(
         &mut self,
-        tx: &impl ExecutableTx<Self>,
+        tx: impl ExecutableTx<Self>,
     ) -> Result<ResultAndState<<Self::Evm as Evm>::HaltReason>, BlockExecutionError> {
         // The sum of the transaction's gas limit, Tg, and the gas utilized in this block prior,
         // must be no greater than the block's gasLimit.
@@ -119,7 +119,7 @@ where
         }
 
         // Execute transaction and return the result
-        self.evm.transact(tx).map_err(|err| {
+        self.evm.transact(&tx).map_err(|err| {
             let hash = tx.tx().trie_hash();
             BlockExecutionError::evm(err, hash)
         })

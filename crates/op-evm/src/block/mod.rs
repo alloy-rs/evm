@@ -121,7 +121,7 @@ where
 
     fn execute_transaction_without_commit(
         &mut self,
-        tx: &impl ExecutableTx<Self>,
+        tx: impl ExecutableTx<Self>,
     ) -> Result<ResultAndState<<Self::Evm as Evm>::HaltReason>, BlockExecutionError> {
         let is_deposit = tx.tx().ty() == DEPOSIT_TRANSACTION_TYPE;
 
@@ -137,7 +137,7 @@ where
         }
 
         // Execute transaction and return the result
-        self.evm.transact(tx).map_err(|err| {
+        self.evm.transact(&tx).map_err(|err| {
             let hash = tx.tx().trie_hash();
             BlockExecutionError::evm(err, hash)
         })

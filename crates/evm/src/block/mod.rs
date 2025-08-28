@@ -54,7 +54,7 @@ pub trait ExecutableTx<E: BlockExecutor + ?Sized>:
     ToTxEnv<<E::Evm as Evm>::Tx> + RecoveredTx<E::Transaction>
 {
 }
-impl<E: BlockExecutor, T> ExecutableTx<E> for T where
+impl<E: BlockExecutor + ?Sized, T> ExecutableTx<E> for T where
     T: ToTxEnv<<E::Evm as Evm>::Tx> + RecoveredTx<E::Transaction>
 {
 }
@@ -225,7 +225,7 @@ pub trait BlockExecutor {
     /// - Building custom commit logic
     fn execute_transaction_without_commit(
         &mut self,
-        tx: &impl ExecutableTx<Self>,
+        tx: impl ExecutableTx<Self>,
     ) -> Result<ResultAndState<<Self::Evm as Evm>::HaltReason>, BlockExecutionError>;
 
     /// Commits a previously executed transaction's state changes.
