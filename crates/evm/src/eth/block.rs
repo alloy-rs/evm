@@ -128,7 +128,7 @@ where
     fn commit_transaction(
         &mut self,
         output: ResultAndState<<Self::Evm as Evm>::HaltReason>,
-        tx: &impl ExecutableTx<Self>,
+        tx: impl ExecutableTx<Self>,
     ) -> Result<u64, BlockExecutionError> {
         let ResultAndState { result, state } = output;
 
@@ -141,7 +141,7 @@ where
 
         // Push transaction changeset and calculate header bloom filter for receipt.
         self.receipts.push(self.receipt_builder.build_receipt(ReceiptBuilderCtx {
-            tx: tx.tx(),
+            tx: (&tx).tx(),
             evm: &self.evm,
             result,
             state: &state,

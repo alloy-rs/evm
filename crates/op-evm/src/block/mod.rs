@@ -146,10 +146,10 @@ where
     fn commit_transaction(
         &mut self,
         output: ResultAndState<<Self::Evm as Evm>::HaltReason>,
-        tx: &impl ExecutableTx<Self>,
+        tx: impl ExecutableTx<Self>,
     ) -> Result<u64, BlockExecutionError> {
         let ResultAndState { result, state } = output;
-        let is_deposit = tx.tx().ty() == DEPOSIT_TRANSACTION_TYPE;
+        let is_deposit = (&tx).tx().ty() == DEPOSIT_TRANSACTION_TYPE;
 
         // Fetch the depositor account from the database for the deposit nonce.
         // Note that this *only* needs to be done post-regolith hardfork, as deposit nonces
@@ -159,7 +159,7 @@ where
             .then(|| {
                 self.evm
                     .db_mut()
-                    .load_cache_account(*tx.signer())
+                    .load_cache_account(*(&tx).signer())
                     .map(|acc| acc.account_info().unwrap_or_default())
             })
             .transpose()
@@ -174,7 +174,7 @@ where
 
         self.receipts.push(
             match self.receipt_builder.build_receipt(ReceiptBuilderCtx {
-                tx: tx.tx(),
+                tx: (&tx).tx(),
                 result,
                 cumulative_gas_used: self.gas_used,
                 evm: &self.evm,

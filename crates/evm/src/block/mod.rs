@@ -206,7 +206,7 @@ pub trait BlockExecutor {
             return Ok(None);
         }
 
-        let gas_used = self.commit_transaction(output, &tx)?;
+        let gas_used = self.commit_transaction(output, tx)?;
         Ok(Some(gas_used))
     }
 
@@ -242,7 +242,7 @@ pub trait BlockExecutor {
     fn commit_transaction(
         &mut self,
         output: ResultAndState<<Self::Evm as Evm>::HaltReason>,
-        tx: &impl ExecutableTx<Self>,
+        tx: impl ExecutableTx<Self>,
     ) -> Result<u64, BlockExecutionError>;
 
     /// Applies any necessary changes after executing the block's transactions, completes execution
