@@ -93,13 +93,14 @@ where
             eip2935::transact_blockhashes_contract_call(&self.spec, parent_block_hash, evm)?;
 
         if let Some(res) = result_and_state {
+            let evm_state = res.state.into();
             if let Some(hook) = &mut self.hook {
                 hook.on_state(
                     StateChangeSource::PreBlock(StateChangePreBlockSource::BlockHashesContract),
-                    &res.state,
+                    &evm_state,
                 );
             }
-            evm.db_mut().commit(res.state);
+            evm.db_mut().commit(evm_state);
         }
 
         Ok(())
@@ -115,13 +116,14 @@ where
             eip4788::transact_beacon_root_contract_call(&self.spec, parent_beacon_block_root, evm)?;
 
         if let Some(res) = result_and_state {
+            let evm_state = res.state.into();
             if let Some(hook) = &mut self.hook {
                 hook.on_state(
                     StateChangeSource::PreBlock(StateChangePreBlockSource::BeaconRootContract),
-                    &res.state,
+                    &evm_state,
                 );
             }
-            evm.db_mut().commit(res.state);
+            evm.db_mut().commit(evm_state);
         }
 
         Ok(())
@@ -134,15 +136,16 @@ where
     ) -> Result<Bytes, BlockExecutionError> {
         let result_and_state = eip7002::transact_withdrawal_requests_contract_call(evm)?;
 
+        let evm_state = result_and_state.state.into();
         if let Some(ref mut hook) = &mut self.hook {
             hook.on_state(
                 StateChangeSource::PostBlock(
                     StateChangePostBlockSource::WithdrawalRequestsContract,
                 ),
-                &result_and_state.state,
+                &evm_state,
             );
         }
-        evm.db_mut().commit(result_and_state.state);
+        evm.db_mut().commit(evm_state);
 
         eip7002::post_commit(result_and_state.result)
     }
@@ -154,15 +157,16 @@ where
     ) -> Result<Bytes, BlockExecutionError> {
         let result_and_state = eip7251::transact_consolidation_requests_contract_call(evm)?;
 
+        let evm_state = result_and_state.state.into();
         if let Some(ref mut hook) = &mut self.hook {
             hook.on_state(
                 StateChangeSource::PostBlock(
                     StateChangePostBlockSource::ConsolidationRequestsContract,
                 ),
-                &result_and_state.state,
+                &evm_state,
             );
         }
-        evm.db_mut().commit(result_and_state.state);
+        evm.db_mut().commit(evm_state);
 
         eip7251::post_commit(result_and_state.result)
     }

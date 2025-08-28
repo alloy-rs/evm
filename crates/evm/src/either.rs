@@ -13,6 +13,7 @@ where
         Spec = L::Spec,
         Precompiles = L::Precompiles,
         Inspector = L::Inspector,
+        State = L::State,
     >,
 {
     type DB = L::DB;
@@ -22,6 +23,7 @@ where
     type Spec = L::Spec;
     type Precompiles = L::Precompiles;
     type Inspector = L::Inspector;
+    type State = L::State;
 
     fn block(&self) -> &BlockEnv {
         either::for_both!(self, evm => evm.block())
@@ -34,14 +36,16 @@ where
     fn transact_raw(
         &mut self,
         tx: Self::Tx,
-    ) -> Result<revm::context::result::ResultAndState<Self::HaltReason>, Self::Error> {
+    ) -> Result<revm::context::result::ResultAndState<Self::HaltReason, Self::State>, Self::Error>
+    {
         either::for_both!(self, evm => evm.transact_raw(tx))
     }
 
     fn transact(
         &mut self,
         tx: impl crate::IntoTxEnv<Self::Tx>,
-    ) -> Result<revm::context::result::ResultAndState<Self::HaltReason>, Self::Error> {
+    ) -> Result<revm::context::result::ResultAndState<Self::HaltReason, Self::State>, Self::Error>
+    {
         either::for_both!(self, evm => evm.transact(tx))
     }
 
@@ -50,7 +54,8 @@ where
         caller: Address,
         contract: Address,
         data: Bytes,
-    ) -> Result<revm::context::result::ResultAndState<Self::HaltReason>, Self::Error> {
+    ) -> Result<revm::context::result::ResultAndState<Self::HaltReason, Self::State>, Self::Error>
+    {
         either::for_both!(self, evm => evm.transact_system_call(caller, contract, data))
     }
 

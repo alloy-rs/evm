@@ -14,6 +14,7 @@ use revm::{
     interpreter::{interpreter::EthInterpreter, InterpreterResult},
     precompile::{PrecompileSpecId, Precompiles},
     primitives::hardfork::SpecId,
+    state::EvmState,
     Context, ExecuteEvm, InspectEvm, Inspector, MainBuilder, MainContext, SystemCallEvm,
 };
 
@@ -200,6 +201,7 @@ where
     type Spec = SpecId;
     type Precompiles = PRECOMPILE;
     type Inspector = I;
+    type State = EvmState;
 
     fn block(&self) -> &BlockEnv {
         &self.block

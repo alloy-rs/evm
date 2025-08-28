@@ -25,6 +25,7 @@ use revm::{
     handler::{instructions::EthInstructions, PrecompileProvider},
     inspector::NoOpInspector,
     interpreter::{interpreter::EthInterpreter, InterpreterResult},
+    state::EvmState,
     Context, ExecuteEvm, InspectEvm, Inspector, SystemCallEvm,
 };
 
@@ -96,6 +97,7 @@ where
     type Spec = OpSpecId;
     type Precompiles = P;
     type Inspector = I;
+    type State = EvmState;
 
     fn block(&self) -> &BlockEnv {
         &self.block

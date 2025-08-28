@@ -11,6 +11,7 @@ use revm::{
         ContextTr,
     },
     inspector::{JournalExt, NoOpInspector},
+    state::EvmState,
     DatabaseCommit, Inspector,
 };
 
@@ -58,6 +59,8 @@ pub trait Evm {
     type Precompiles;
     /// Evm inspector.
     type Inspector;
+    /// State of the EVM.
+    type State: Into<EvmState>;
 
     /// Reference to [`BlockEnv`].
     fn block(&self) -> &BlockEnv;
@@ -69,7 +72,7 @@ pub trait Evm {
     fn transact_raw(
         &mut self,
         tx: Self::Tx,
-    ) -> Result<ResultAndState<Self::HaltReason>, Self::Error>;
+    ) -> Result<ResultAndState<Self::HaltReason, Self::State>, Self::Error>;
 
     /// Same as [`Evm::transact_raw`], but takes any type implementing [`IntoTxEnv`].
     ///
@@ -85,7 +88,7 @@ pub trait Evm {
     fn transact(
         &mut self,
         tx: impl IntoTxEnv<Self::Tx>,
-    ) -> Result<ResultAndState<Self::HaltReason>, Self::Error> {
+    ) -> Result<ResultAndState<Self::HaltReason, Self::State>, Self::Error> {
         self.transact_raw(tx.into_tx_env())
     }
 
@@ -99,7 +102,7 @@ pub trait Evm {
         caller: Address,
         contract: Address,
         data: Bytes,
-    ) -> Result<ResultAndState<Self::HaltReason>, Self::Error>;
+    ) -> Result<ResultAndState<Self::HaltReason, Self::State>, Self::Error>;
 
     /// Returns an immutable reference to the underlying database.
     fn db(&self) -> &Self::DB {
@@ -120,7 +123,7 @@ pub trait Evm {
         Self::DB: DatabaseCommit,
     {
         let ResultAndState { result, state } = self.transact(tx)?;
-        self.db_mut().commit(state);
+        self.db_mut().commit(state.into());
 
         Ok(result)
     }
