@@ -141,7 +141,7 @@ where
 
         // Push transaction changeset and calculate header bloom filter for receipt.
         self.receipts.push(self.receipt_builder.build_receipt(ReceiptBuilderCtx {
-            tx: (&tx).tx(),
+            tx: tx.tx(),
             evm: &self.evm,
             result,
             state: &state,
