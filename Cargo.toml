@@ -45,13 +45,13 @@ alloy-eips = { version = "1.0", default-features = false }
 alloy-consensus = { version = "1.0.23", default-features = false }
 alloy-primitives = { version = "1.0.0", default-features = false }
 alloy-sol-types = { version = "1.0.0", default-features = false }
-alloy-hardforks = { version = "0.2" }
+alloy-hardforks = { version = "0.3.0" }
 alloy-rpc-types-eth = { version = "1.0.23", default-features = false }
 alloy-block-access-list = { version = "1.0.23", default-features = false }
 alloy-rlp = {  version = "0.3.12", default-features = false }
 
 # op-alloy
-alloy-op-hardforks = { version = "0.2" }
+alloy-op-hardforks = { version = "0.3.0" }
 op-alloy-consensus = { version = "0.18", default-features = false }
 
 # revm
