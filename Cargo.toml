@@ -55,7 +55,6 @@ op-alloy-consensus = { version = "0.18", default-features = false }
 # revm
 revm = { version = "27.0.2", default-features = false }
 op-revm = { version = "8.0.2", default-features = false }
-
 # misc
 auto_impl = "1"
 derive_more = { version = "2", default-features = false, features = ["full"] }
@@ -63,6 +62,6 @@ serde = { version = "1", default-features = false, features = ["derive"] }
 thiserror = { version = "2.0.0", default-features = false }
 serde_json = "1"
 
-#[patch.crates-io]
-#revm = { git = "https://github.com/bluealloy/revm", rev = "11b16259" }
-#op-revm = { git = "https://github.com/bluealloy/revm", rev = "11b16259" }
+[patch.crates-io]
+revm = { git = "https://github.com/0glabs/revm", rev = "d9f5cb87347f094d73b76d3583ec23484d4a3267" }
+op-revm = { git = "https://github.com/0glabs/revm", rev = "d9f5cb87347f094d73b76d3583ec23484d4a3267", package = "op-revm" }
