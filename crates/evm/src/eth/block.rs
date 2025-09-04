@@ -202,7 +202,25 @@ where
                     state.get_mut(tx.signer()).unwrap().info.clear_state_changes();
                 }
             }
+
+            // Store access list changes in bal.
+            if let Some(access_list) = tx.tx().access_list() {
+                for item in &access_list.0 {
+                    let addr = item.address;
+                    if state.contains_key(&addr) {
+                        if let Some(bal) = self.block_access_list.as_mut() {
+                            bal.push(from_account_with_tx_index(
+                                addr,
+                                self.receipts.len() as u64,
+                                &state.get(&addr).unwrap().info,
+                            ));
+                            state.get_mut(&addr).unwrap().info.clear_state_changes();
+                        }
+                    }
+                }
+            }
         }
+
         // Commit the state changes.
         self.evm.db_mut().commit(state.clone());
         Ok(Some(gas_used))
