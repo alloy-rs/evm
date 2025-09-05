@@ -825,7 +825,7 @@ mod tests {
         let tx_with_encoded2 = WithEncoded::new(tx2.encoded_2718().into(), tx2);
 
         let _result = executor.execute_block([&tx_with_encoded1, &tx_with_encoded2]).unwrap();
-        println!("{:#?}", _result.block_access_list);
+        // println!("{:#?}", _result.block_access_list);
 
         //  [
         //     AccountChanges {
