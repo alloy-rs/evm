@@ -536,7 +536,7 @@ pub fn build_post_execution_system_contract_account_change(
             let change = StorageChange { block_access_index: tx_index, new_value: post_val };
             account_changes
                 .storage_changes
-                .push(SlotChanges::default().with_slot(slot.into()).with_change(change));
+                .push(SlotChanges::default().with_slot(slot).with_change(change));
         } else {
             account_changes.storage_reads.push(slot.into());
         }
@@ -569,7 +569,7 @@ pub fn from_account_with_tx_index(
 
     // Convert slot_map into SlotChanges and push into account_changes
     for (slot, changes) in slot_map {
-        account_changes.storage_changes.push(SlotChanges { slot: slot.into(), changes });
+        account_changes.storage_changes.push(SlotChanges { slot: slot, changes });
     }
 
     // False if zero value transfer
