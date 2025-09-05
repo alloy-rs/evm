@@ -210,7 +210,7 @@ where
                             &acc.info,
                         ));
                         tracing::debug!(
-                            "BlockAccessList: Tx Call arm {:#x}, tx_index={}, storage: {:#?}",
+                            "BlockAccessList: Tx call arm {:#x}, tx_index={}, storage: {:#?}",
                             address,
                             self.receipts.len(),
                             acc.info.storage_access,
