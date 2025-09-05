@@ -173,53 +173,97 @@ where
         self.receipts.push(self.receipt_builder.build_receipt(ReceiptBuilderCtx {
             tx: tx.tx(),
             evm: &self.evm,
-            result,
+            result: result.clone(),
             state: &state,
             cumulative_gas_used: self.gas_used,
         }));
 
         // Commit the state changes.
         self.evm.db_mut().commit(state.clone());
-        if let Some(recipient) = tx.tx().to() {
-            if let Some(acc) = state.get(&recipient) {
-                if let Some(bal) = self.block_access_list.as_mut() {
-                    bal.push(from_account_with_tx_index(
-                        recipient,
-                        self.receipts.len() as u64,
-                        &acc.info,
-                    ));
-                    state.get_mut(&recipient).unwrap().info.clear_state_changes();
+        match tx.tx().kind() {
+            alloy_primitives::TxKind::Create => {
+                let created_address = result.created_address().unwrap();
+                if let Some(acc) = state.get(&created_address) {
+                    if let Some(bal) = self.block_access_list.as_mut() {
+                        bal.push(from_account_with_tx_index(
+                            created_address,
+                            self.receipts.len() as u64,
+                            &acc.info,
+                        ));
+                        state.get_mut(&created_address).unwrap().info.clear_state_changes();
+                    }
                 }
             }
-
-            if let Some(acc) = state.get(tx.signer()) {
-                if let Some(bal) = self.block_access_list.as_mut() {
-                    bal.push(from_account_with_tx_index(
-                        *tx.signer(),
-                        self.receipts.len() as u64,
-                        &acc.info,
-                    ));
-                    state.get_mut(tx.signer()).unwrap().info.clear_state_changes();
-                }
-            }
-
-            // Store access list changes in bal.
-            if let Some(access_list) = tx.tx().access_list() {
-                for item in &access_list.0 {
-                    let addr = item.address;
-                    if state.contains_key(&addr) {
-                        if let Some(bal) = self.block_access_list.as_mut() {
-                            bal.push(from_account_with_tx_index(
-                                addr,
-                                self.receipts.len() as u64,
-                                &state.get(&addr).unwrap().info,
-                            ));
-                            state.get_mut(&addr).unwrap().info.clear_state_changes();
-                        }
+            alloy_primitives::TxKind::Call(address) => {
+                if let Some(acc) = state.get(&address) {
+                    if let Some(bal) = self.block_access_list.as_mut() {
+                        bal.push(from_account_with_tx_index(
+                            address,
+                            self.receipts.len() as u64,
+                            &acc.info,
+                        ));
+                        state.get_mut(&address).unwrap().info.clear_state_changes();
                     }
                 }
             }
         }
+        if let Some(acc) = state.get(tx.signer()) {
+            if let Some(bal) = self.block_access_list.as_mut() {
+                bal.push(from_account_with_tx_index(
+                    *tx.signer(),
+                    self.receipts.len() as u64,
+                    &acc.info,
+                ));
+                state.get_mut(tx.signer()).unwrap().info.clear_state_changes();
+            }
+        }
+
+        // Store access list changes in bal.
+        if let Some(access_list) = tx.tx().access_list() {
+            for item in &access_list.0 {
+                let addr = item.address;
+                if state.contains_key(&addr) {
+                    if let Some(bal) = self.block_access_list.as_mut() {
+                        bal.push(from_account_with_tx_index(
+                            addr,
+                            self.receipts.len() as u64,
+                            &state.get(&addr).unwrap().info,
+                        ));
+                        state.get_mut(&addr).unwrap().info.clear_state_changes();
+                    }
+                }
+            }
+        }
+
+        // if let Some(bal) = self.block_access_list.as_mut() {
+        //     // collect addresses of all accounts we care about
+        //     let addrs: Vec<_> = state
+        //         .iter()
+        //         .filter_map(|(addr, acc)| {
+        //             let info = &acc.info;
+        //             if !info.storage_access.reads.is_empty()
+        //                 || !info.storage_access.writes.is_empty()
+        //                 || !info.code_change.is_empty()
+        //             {
+        //                 Some(*addr)
+        //             } else {
+        //                 None
+        //             }
+        //         })
+        //         .collect();
+
+        //     // now safe to mutate
+        //     for addr in addrs {
+        //         if let Some(acc) = state.get(&addr) {
+        //             bal.push(from_account_with_tx_index(
+        //                 addr,
+        //                 self.receipts.len() as u64,
+        //                 &acc.info,
+        //             ));
+        //         }
+        //         state.get_mut(&addr).unwrap().info.clear_state_changes();
+        //     }
+        // }
 
         // Commit the state changes.
         self.evm.db_mut().commit(state.clone());
@@ -380,7 +424,8 @@ where
 
         // Add post execution system contract account changes
         self.block_access_list.as_mut().unwrap().extend(post_system_acc_changes);
-
+        self.block_access_list =
+            Some(sort_and_remove_duplicates_in_bal(self.block_access_list.unwrap()));
         Ok((
             self.evm,
             BlockExecutionResult {
@@ -780,6 +825,7 @@ mod tests {
         let tx_with_encoded2 = WithEncoded::new(tx2.encoded_2718().into(), tx2);
 
         let _result = executor.execute_block([&tx_with_encoded1, &tx_with_encoded2]).unwrap();
+        println!("{:#?}", _result.block_access_list);
 
         //  [
         //     AccountChanges {
