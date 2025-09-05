@@ -50,7 +50,7 @@ std = [
 	"op-alloy-consensus?/std",
 	"alloy-rpc-types-eth?/std",
 	"alloy-rlp/std",
-
+	"tracing/std",
 	"alloy-block-access-list/std",
 ]
 op = ["op-revm", "op-alloy-consensus"]
