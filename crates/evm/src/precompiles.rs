@@ -12,7 +12,10 @@ use revm::{
     context::LocalContextTr,
     handler::{EthPrecompiles, PrecompileProvider},
     interpreter::{CallInput, Gas, InputsImpl, InstructionResult, InterpreterResult},
-    precompile::{PrecompileError, PrecompileFn, PrecompileResult, Precompiles},
+    precompile::{
+        stateful_precompiles::run_stateful_precompile, PrecompileError, PrecompileFn,
+        PrecompileResult, Precompiles,
+    },
     Context, Journal,
 };
 
@@ -46,13 +49,13 @@ impl PrecompilesMap {
     {
         let dyn_precompiles = self.ensure_dynamic_precompiles();
 
-        // get the current precompile at the address
-        if let Some(dyn_precompile) = dyn_precompiles.inner.remove(address) {
+        // get the current stateless precompile at the address
+        if let Some(dyn_precompile) = dyn_precompiles.stateless.remove(address) {
             // apply the transformation function
             let transformed = f(dyn_precompile);
 
             // update the precompile at the address
-            dyn_precompiles.inner.insert(*address, transformed);
+            dyn_precompiles.stateless.insert(*address, transformed);
         }
     }
 
@@ -63,8 +66,8 @@ impl PrecompilesMap {
     {
         let dyn_precompiles = self.ensure_dynamic_precompiles();
 
-        // apply the transformation to each precompile
-        let entries = dyn_precompiles.inner.drain();
+        // apply the transformation to each stateless precompile
+        let entries = dyn_precompiles.stateless.drain();
         let mut new_map =
             HashMap::with_capacity_and_hasher(entries.size_hint().0, Default::default());
         for (addr, precompile) in entries {
@@ -72,7 +75,7 @@ impl PrecompilesMap {
             new_map.insert(addr, transformed);
         }
 
-        dyn_precompiles.inner = new_map;
+        dyn_precompiles.stateless = new_map;
     }
 
     /// Applies a transformation to the precompile at the given address.
@@ -118,7 +121,7 @@ impl PrecompilesMap {
         F: FnOnce(Option<DynPrecompile>) -> Option<DynPrecompile>,
     {
         let dyn_precompiles = self.ensure_dynamic_precompiles();
-        let current = dyn_precompiles.inner.get(address).cloned();
+        let current = dyn_precompiles.stateless.get(address).cloned();
 
         // apply the transformation function
         let result = f(current);
@@ -126,12 +129,12 @@ impl PrecompilesMap {
         match result {
             Some(transformed) => {
                 // insert the transformed precompile
-                dyn_precompiles.inner.insert(*address, transformed);
+                dyn_precompiles.stateless.insert(*address, transformed);
                 dyn_precompiles.addresses.insert(*address);
             }
             None => {
                 // remove the precompile if the transformation returned None
-                dyn_precompiles.inner.remove(address);
+                dyn_precompiles.stateless.remove(address);
                 dyn_precompiles.addresses.remove(address);
             }
         }
@@ -187,11 +190,16 @@ impl PrecompilesMap {
             };
 
             for (addr, precompile_fn) in
-                static_precompiles.inner().iter().map(|(addr, f)| (addr, *f))
+                static_precompiles.stateless().iter().map(|(addr, f)| (addr, *f))
             {
                 let precompile =
                     move |input: PrecompileInput<'_>| precompile_fn(input.data, input.gas);
-                dynamic.inner.insert(*addr, precompile.into());
+                dynamic.stateless.insert(*addr, precompile.into());
+                dynamic.addresses.insert(*addr);
+            }
+
+            for addr in static_precompiles.stateful().iter() {
+                dynamic.stateful.insert(*addr);
                 dynamic.addresses.insert(*addr);
             }
 
@@ -213,12 +221,22 @@ impl PrecompilesMap {
     }
 
     /// Gets a reference to the precompile at the given address.
-    pub fn get(&self, address: &Address) -> Option<impl Precompile + '_> {
+    pub fn get_stateless(&self, address: &Address) -> Option<impl Precompile + '_> {
         match self {
             Self::Builtin(precompiles) => precompiles
-                .get(address)
+                .get_stateless(address)
                 .map(|f| Either::Left(|input: PrecompileInput<'_>| f(input.data, input.gas))),
-            Self::Dynamic(dyn_precompiles) => dyn_precompiles.inner.get(address).map(Either::Right),
+            Self::Dynamic(dyn_precompiles) => {
+                dyn_precompiles.stateless.get(address).map(Either::Right)
+            }
+        }
+    }
+
+    /// Check if the given address is stateful precompile.
+    pub fn is_stateful(&self, address: &Address) -> bool {
+        match self {
+            Self::Builtin(precompiles) => precompiles.is_stateful(address),
+            Self::Dynamic(dyn_precompiles) => dyn_precompiles.stateful.contains(address),
         }
     }
 }
@@ -260,13 +278,14 @@ where
         context: &mut Context<BlockEnv, TxEnv, CfgEnv, DB, Journal<DB>, Chain>,
         address: &Address,
         inputs: &InputsImpl,
-        _is_static: bool,
+        is_static: bool,
         gas_limit: u64,
     ) -> Result<Option<InterpreterResult>, String> {
         // Get the precompile at the address
-        let Some(precompile) = self.get(address) else {
+        let maybe_stateless = self.get_stateless(address);
+        if maybe_stateless.is_none() && !self.is_stateful(address) {
             return Ok(None);
-        };
+        }
 
         let mut result = InterpreterResult {
             result: InstructionResult::Return,
@@ -274,33 +293,39 @@ where
             output: Bytes::new(),
         };
 
-        let (local, journal) = (&context.local, &mut context.journaled_state);
-
         // Execute the precompile
-        let r;
         let input_bytes = match &inputs.input {
             CallInput::SharedBuffer(range) => {
                 // `map_or` does not work here as we use `r` to extend lifetime of the slice
                 // and return it.
                 #[allow(clippy::option_if_let_else)]
-                if let Some(slice) = local.shared_memory_buffer_slice(range.clone()) {
-                    r = slice;
-                    &*r
+                if let Some(slice) = context.local.shared_memory_buffer_slice(range.clone()) {
+                    slice.to_vec()
                 } else {
-                    &[]
+                    vec![]
                 }
             }
-            CallInput::Bytes(bytes) => bytes.as_ref(),
+            CallInput::Bytes(bytes) => bytes.0.to_vec(),
         };
 
-        let precompile_result = precompile.call(PrecompileInput {
-            data: input_bytes,
-            gas: gas_limit,
-            caller: inputs.caller_address,
-            value: inputs.call_value,
-            internals: EvmInternals::new(journal, &context.block),
-        });
-
+        let precompile_result = match maybe_stateless {
+            Some(precompile) => precompile.call(PrecompileInput {
+                data: &input_bytes,
+                gas: gas_limit,
+                caller: inputs.caller_address,
+                value: inputs.call_value,
+                internals: EvmInternals::new(&mut context.journaled_state, &context.block),
+            }),
+            None => run_stateful_precompile(
+                *address,
+                &input_bytes,
+                gas_limit,
+                inputs.caller_address,
+                inputs.call_value,
+                is_static,
+                context,
+            ),
+        };
         match precompile_result {
             Ok(output) => {
                 let underflow = result.gas.record_cost(output.gas_used);
@@ -326,7 +351,7 @@ where
     }
 
     fn contains(&self, address: &Address) -> bool {
-        self.get(address).is_some()
+        self.get_stateless(address).is_some() || self.is_stateful(address)
     }
 }
 
@@ -356,8 +381,10 @@ impl core::fmt::Debug for DynPrecompile {
 /// unlike the static `Precompiles` struct from revm.
 #[derive(Clone, Default)]
 pub struct DynPrecompiles {
-    /// Precompiles
-    inner: HashMap<Address, DynPrecompile>,
+    /// Stateless Precompiles
+    stateless: HashMap<Address, DynPrecompile>,
+    /// Stateful Precompiles
+    stateful: HashSet<Address>,
     /// Addresses of precompile
     addresses: HashSet<Address>,
 }
@@ -460,7 +487,7 @@ mod tests {
         // using the dynamic precompiles interface
         let dyn_precompile = match &spec_precompiles {
             PrecompilesMap::Dynamic(dyn_precompiles) => {
-                dyn_precompiles.inner.get(&identity_address).unwrap()
+                dyn_precompiles.stateless.get(&identity_address).unwrap()
             }
             _ => panic!("Expected dynamic precompiles"),
         };
@@ -492,7 +519,7 @@ mod tests {
         // get the modified precompile and check it
         let dyn_precompile = match &spec_precompiles {
             PrecompilesMap::Dynamic(dyn_precompiles) => {
-                dyn_precompiles.inner.get(&identity_address).unwrap()
+                dyn_precompiles.stateless.get(&identity_address).unwrap()
             }
             _ => panic!("Expected dynamic precompiles"),
         };
@@ -554,7 +581,7 @@ mod tests {
         let test_input = Bytes::from_static(b"test data");
         let gas_limit = 1000;
 
-        let precompile = spec_precompiles.get(&identity_address);
+        let precompile = spec_precompiles.get_stateless(&identity_address);
         assert!(precompile.is_some(), "Identity precompile should exist");
 
         let result = precompile
@@ -571,14 +598,14 @@ mod tests {
 
         let nonexistent_address = address!("0x0000000000000000000000000000000000000099");
         assert!(
-            spec_precompiles.get(&nonexistent_address).is_none(),
+            spec_precompiles.get_stateless(&nonexistent_address).is_none(),
             "Non-existent precompile should not be found"
         );
 
         let mut dynamic_precompiles = spec_precompiles;
         dynamic_precompiles.ensure_dynamic_precompiles();
 
-        let dyn_precompile = dynamic_precompiles.get(&identity_address);
+        let dyn_precompile = dynamic_precompiles.get_stateless(&identity_address);
         assert!(
             dyn_precompile.is_some(),
             "Identity precompile should exist after conversion to dynamic"
