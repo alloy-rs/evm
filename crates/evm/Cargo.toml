@@ -30,7 +30,7 @@ op-alloy-consensus = { workspace = true, optional = true }
 auto_impl.workspace = true
 derive_more.workspace = true
 thiserror.workspace = true
-
+tracing.workspace = true
 [dev-dependencies]
 alloy-primitives = { workspace = true, features = ["serde"] }
 serde_json.workspace = true
@@ -51,7 +51,7 @@ std = [
 	"alloy-rpc-types-eth?/std",
 	"alloy-rlp/std",
 
-	"alloy-block-access-list/std"
+	"alloy-block-access-list/std",
 ]
 op = ["op-revm", "op-alloy-consensus"]
 overrides = ["dep:alloy-rpc-types-eth"]

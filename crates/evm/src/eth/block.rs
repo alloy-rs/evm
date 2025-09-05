@@ -190,6 +190,12 @@ where
                                 self.receipts.len() as u64,
                                 &acc.info,
                             ));
+                            tracing::debug!(
+                                "BlockAccessList: new contract created at {:#x}, tx_index={}, storage: {:#?}",
+                                created_address,
+                                self.receipts.len(),
+                                acc.info.storage_access,
+                            );
                             state.get_mut(&created_address).unwrap().info.clear_state_changes();
                         }
                     }
@@ -203,6 +209,12 @@ where
                             self.receipts.len() as u64,
                             &acc.info,
                         ));
+                        tracing::debug!(
+                            "BlockAccessList: Tx Call arm {:#x}, tx_index={}, storage: {:#?}",
+                            address,
+                            self.receipts.len(),
+                            acc.info.storage_access,
+                        );
                         state.get_mut(&address).unwrap().info.clear_state_changes();
                     }
                 }
@@ -215,6 +227,11 @@ where
                     self.receipts.len() as u64,
                     &acc.info,
                 ));
+                tracing::debug!(
+                    "BlockAccessList: Tx signer arm tx_index={}, storage: {:#?}",
+                    self.receipts.len(),
+                    acc.info.storage_access,
+                );
                 state.get_mut(tx.signer()).unwrap().info.clear_state_changes();
             }
         }
@@ -569,7 +586,7 @@ pub fn from_account_with_tx_index(
 
     // Convert slot_map into SlotChanges and push into account_changes
     for (slot, changes) in slot_map {
-        account_changes.storage_changes.push(SlotChanges { slot: slot, changes });
+        account_changes.storage_changes.push(SlotChanges { slot, changes });
     }
 
     // False if zero value transfer
