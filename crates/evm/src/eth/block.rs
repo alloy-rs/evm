@@ -579,7 +579,7 @@ pub fn validate_block_access_list_against_execution(block_access_list: &BlockAcc
     // 1. Validate structural constraints
     for account in block_access_list {
         let changed_slots: alloy_primitives::map::HashSet<_> =
-            account.storage_changes.iter().map(|sc| sc.slot).collect();
+            account.storage_changes.iter().map(|sc| B256::from(sc.slot)).collect();
         let read_slots: alloy_primitives::map::HashSet<_> =
             account.storage_reads.iter().cloned().collect();
 
