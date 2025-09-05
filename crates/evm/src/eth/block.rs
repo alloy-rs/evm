@@ -182,15 +182,16 @@ where
         self.evm.db_mut().commit(state.clone());
         match tx.tx().kind() {
             alloy_primitives::TxKind::Create => {
-                let created_address = result.created_address().unwrap();
-                if let Some(acc) = state.get(&created_address) {
-                    if let Some(bal) = self.block_access_list.as_mut() {
-                        bal.push(from_account_with_tx_index(
-                            created_address,
-                            self.receipts.len() as u64,
-                            &acc.info,
-                        ));
-                        state.get_mut(&created_address).unwrap().info.clear_state_changes();
+                if let Some(created_address) = result.created_address() {
+                    if let Some(acc) = state.get(&created_address) {
+                        if let Some(bal) = self.block_access_list.as_mut() {
+                            bal.push(from_account_with_tx_index(
+                                created_address,
+                                self.receipts.len() as u64,
+                                &acc.info,
+                            ));
+                            state.get_mut(&created_address).unwrap().info.clear_state_changes();
+                        }
                     }
                 }
             }
@@ -424,8 +425,8 @@ where
 
         // Add post execution system contract account changes
         self.block_access_list.as_mut().unwrap().extend(post_system_acc_changes);
-        self.block_access_list =
-            Some(sort_and_remove_duplicates_in_bal(self.block_access_list.unwrap()));
+        // self.block_access_list =
+        //     Some(sort_and_remove_duplicates_in_bal(self.block_access_list.unwrap()));
         Ok((
             self.evm,
             BlockExecutionResult {
