@@ -571,6 +571,7 @@ pub fn from_account_with_tx_index(
     let mut account_changes = AccountChanges::default();
 
     for key in &account.storage_access.reads {
+        tracing::trace!("Storage read at {:#x}: {:#x} ", address, key);
         account_changes.storage_reads.push((*key).into());
     }
 
@@ -578,6 +579,7 @@ pub fn from_account_with_tx_index(
     let mut slot_map: BTreeMap<StorageKey, Vec<StorageChange>> = BTreeMap::new();
 
     for (slot, (_pre, post)) in &account.storage_access.writes {
+        tracing::trace!("Storage write at {:#x}: {:#x} -> {:#x}", address, slot, post);
         slot_map
             .entry(*slot)
             .or_default()
