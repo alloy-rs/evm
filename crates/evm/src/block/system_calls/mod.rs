@@ -98,8 +98,7 @@ where
         parent_block_hash: B256,
         block_num: BlockNumber,
         evm: &mut impl Evm<DB: DatabaseCommit>,
-    ) -> Result<AccountChanges, BlockExecutionError> {
-        let mut slot_change = SlotChanges::default();
+    ) -> Result<Option<AccountChanges>, BlockExecutionError> {
         let result_and_state =
             eip2935::transact_blockhashes_contract_call(&self.spec, parent_block_hash, evm)?;
 
@@ -112,18 +111,19 @@ where
             }
             evm.db_mut().commit(res.state);
 
-            slot_change = SlotChanges::default()
+            let slot_change = SlotChanges::default()
                 .with_change(StorageChange {
                     block_access_index: 0,
                     new_value: parent_block_hash.into(),
                 })
                 .with_slot(U256::from((block_num - 1) % HISTORY_SERVE_WINDOW as u64).into());
+            let acc_changes = AccountChanges::default()
+                .with_storage_change(slot_change)
+                .with_address(HISTORY_STORAGE_ADDRESS);
+            return Ok(Some(acc_changes));
         }
-        let acc_changes = AccountChanges::default()
-            .with_storage_change(slot_change)
-            .with_address(HISTORY_STORAGE_ADDRESS);
 
-        Ok(acc_changes)
+        Ok(None)
     }
 
     /// Applies the pre-block call to the EIP-4788 beacon root contract.
@@ -132,12 +132,12 @@ where
         timestamp: u64,
         parent_beacon_block_root: Option<B256>,
         evm: &mut impl Evm<DB: DatabaseCommit>,
-    ) -> Result<AccountChanges, BlockExecutionError> {
-        let mut slot_changes: Vec<SlotChanges> = Vec::new();
+    ) -> Result<Option<AccountChanges>, BlockExecutionError> {
         let result_and_state =
             eip4788::transact_beacon_root_contract_call(&self.spec, parent_beacon_block_root, evm)?;
 
         if let Some(res) = result_and_state {
+            let mut slot_changes: Vec<SlotChanges> = Vec::new();
             if let Some(hook) = &mut self.hook {
                 hook.on_state(
                     StateChangeSource::PreBlock(StateChangePreBlockSource::BeaconRootContract),
@@ -161,12 +161,13 @@ where
                     })
                     .with_slot(U256::from(timestamp % 8192).into()),
             );
-        }
-        let account_changes = AccountChanges::default()
-            .with_address(BEACON_ROOTS_ADDRESS)
-            .extend_storage_changes(slot_changes);
+            let account_changes = AccountChanges::default()
+                .with_address(BEACON_ROOTS_ADDRESS)
+                .extend_storage_changes(slot_changes);
 
-        Ok(account_changes)
+            return Ok(Some(account_changes));
+        }
+        Ok(None)
     }
 
     /// Applies the post-block call to the EIP-7002 withdrawal request contract.

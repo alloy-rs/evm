@@ -124,13 +124,18 @@ where
             &mut self.evm,
         )?;
 
-        self.block_access_list.clone().unwrap().push(contract_acc_change);
+        if contract_acc_change.is_some() {
+            self.block_access_list.as_mut().unwrap().push(contract_acc_change.unwrap());
+        }
 
-        self.system_caller.apply_beacon_root_contract_call(
+        let beacon_contract_acc_change = self.system_caller.apply_beacon_root_contract_call(
             self.evm.block().timestamp.saturating_to(),
             self.ctx.parent_beacon_block_root,
             &mut self.evm,
         )?;
+        if beacon_contract_acc_change.is_some() {
+            self.block_access_list.as_mut().unwrap().push(beacon_contract_acc_change.unwrap());
+        }
 
         Ok(())
     }
