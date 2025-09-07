@@ -550,10 +550,10 @@ pub fn build_post_execution_system_contract_account_change(
         let slot = StorageKey::from(i as u64);
 
         if pre_val != post_val {
-            let change = StorageChange { block_access_index: tx_index, new_value: post_val };
+            let change = StorageChange { block_access_index: tx_index, new_value: post_val.into() };
             account_changes
                 .storage_changes
-                .push(SlotChanges::default().with_slot(slot).with_change(change));
+                .push(SlotChanges::default().with_slot(slot.into()).with_change(change));
         } else {
             account_changes.storage_reads.push(slot.into());
         }
@@ -583,12 +583,12 @@ pub fn from_account_with_tx_index(
         slot_map
             .entry(*slot)
             .or_default()
-            .push(StorageChange { block_access_index, new_value: *post });
+            .push(StorageChange { block_access_index, new_value: (*post).into() });
     }
 
     // Convert slot_map into SlotChanges and push into account_changes
     for (slot, changes) in slot_map {
-        account_changes.storage_changes.push(SlotChanges { slot, changes });
+        account_changes.storage_changes.push(SlotChanges { slot: slot.into(), changes });
     }
 
     // False if zero value transfer

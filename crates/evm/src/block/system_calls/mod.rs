@@ -117,7 +117,7 @@ where
                     block_access_index: 0,
                     new_value: parent_block_hash.into(),
                 })
-                .with_slot(U256::from((block_num - 1) % HISTORY_SERVE_WINDOW as u64));
+                .with_slot(U256::from((block_num - 1) % HISTORY_SERVE_WINDOW as u64).into());
         }
         let acc_changes = AccountChanges::default()
             .with_storage_change(slot_change)
@@ -149,9 +149,9 @@ where
                 SlotChanges::default()
                     .with_change(StorageChange {
                         block_access_index: 0,
-                        new_value: U256::from(timestamp),
+                        new_value: U256::from(timestamp).into(),
                     })
-                    .with_slot(U256::from((timestamp % 8192) + 8192)),
+                    .with_slot(U256::from((timestamp % 8192) + 8192).into()),
             );
             slot_changes.push(
                 SlotChanges::default()
@@ -159,7 +159,7 @@ where
                         block_access_index: 0,
                         new_value: parent_beacon_block_root.unwrap().into(),
                     })
-                    .with_slot(U256::from(timestamp % 8192)),
+                    .with_slot(U256::from(timestamp % 8192).into()),
             );
         }
         let account_changes = AccountChanges::default()
