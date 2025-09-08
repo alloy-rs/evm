@@ -145,30 +145,19 @@ where
                 );
             }
             evm.db_mut().commit(res.state);
+            let storage_read = B256::from(U256::from(timestamp % HISTORY_SERVE_WINDOW as u64));
             slot_changes.push(
                 SlotChanges::default()
                     .with_change(StorageChange {
                         block_access_index: 0,
                         new_value: U256::from(timestamp).into(),
                     })
-                    .with_slot(
-                        U256::from(
-                            (timestamp % HISTORY_SERVE_WINDOW as u64) + HISTORY_SERVE_WINDOW as u64,
-                        )
-                        .into(),
-                    ),
-            );
-            slot_changes.push(
-                SlotChanges::default()
-                    .with_change(StorageChange {
-                        block_access_index: 0,
-                        new_value: parent_beacon_block_root.unwrap().into(),
-                    })
                     .with_slot(U256::from(timestamp % HISTORY_SERVE_WINDOW as u64).into()),
             );
             let account_changes = AccountChanges::default()
                 .with_address(BEACON_ROOTS_ADDRESS)
-                .extend_storage_changes(slot_changes);
+                .extend_storage_changes(slot_changes)
+                .with_storage_read(storage_read);
 
             return Ok(Some(account_changes));
         }
