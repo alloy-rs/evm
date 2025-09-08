@@ -145,7 +145,10 @@ where
                 );
             }
             evm.db_mut().commit(res.state);
-            let storage_read = B256::from(U256::from(timestamp % HISTORY_SERVE_WINDOW as u64));
+            let storage_read = B256::from(U256::from(
+                (timestamp % HISTORY_SERVE_WINDOW as u64) + HISTORY_SERVE_WINDOW as u64,
+            ))
+            .into();
             slot_changes.push(
                 SlotChanges::default()
                     .with_change(StorageChange {
