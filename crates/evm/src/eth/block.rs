@@ -641,7 +641,7 @@ pub fn sort_and_remove_duplicates_in_bal(mut bal: BlockAccessList) -> BlockAcces
         }
         merged.push(account);
     }
-    tracing::debug!("Bal before sort: {:#?}", merged);
+    tracing::debug!("Bal after sort: {:#?}", merged);
     merged
 }
 
