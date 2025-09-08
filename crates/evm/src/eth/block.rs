@@ -123,9 +123,11 @@ where
             self.evm.block().number.saturating_to(),
             &mut self.evm,
         )?;
-
+        tracing::debug!("Applied blockhashes contract call, bal {:?}", contract_acc_change);
         if contract_acc_change.is_some() {
-            self.block_access_list.as_mut().unwrap().push(contract_acc_change.unwrap());
+            self.block_access_list.as_mut().unwrap().push(contract_acc_change.clone().unwrap());
+
+            tracing::debug!("Pushed blockhashes contract call, bal {:?}", contract_acc_change);
         }
 
         let beacon_contract_acc_change = self.system_caller.apply_beacon_root_contract_call(
@@ -133,8 +135,16 @@ where
             self.ctx.parent_beacon_block_root,
             &mut self.evm,
         )?;
+        tracing::debug!("Applied beacon root contract call, bal {:?}", beacon_contract_acc_change);
         if beacon_contract_acc_change.is_some() {
-            self.block_access_list.as_mut().unwrap().push(beacon_contract_acc_change.unwrap());
+            self.block_access_list
+                .as_mut()
+                .unwrap()
+                .push(beacon_contract_acc_change.clone().unwrap());
+            tracing::debug!(
+                "Pushed beacon root contract call, bal {:?}",
+                beacon_contract_acc_change
+            );
         }
 
         Ok(())
