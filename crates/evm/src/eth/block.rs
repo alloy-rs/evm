@@ -164,7 +164,7 @@ where
             let mut account_changes = AccountChanges::default().with_address(BEACON_ROOTS_ADDRESS);
 
             // slot 0: timestamp % HISTORY_SERVE_WINDOW
-            if let Some(change) = beacon_contract_acc_changes.get(0) {
+            if let Some(change) = beacon_contract_acc_changes.first() {
                 let new_val = change.changes[0].new_value.into();
                 if Some(new_val) == pre_beacon {
                     account_changes
