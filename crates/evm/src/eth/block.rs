@@ -165,7 +165,7 @@ where
 
             // slot 0: timestamp % HISTORY_SERVE_WINDOW
             if let Some(change) = beacon_contract_acc_changes.get(0) {
-                let new_val = change.changes[0].new_value;
+                let new_val = change.changes[0].new_value.into();
                 if Some(new_val) == pre_beacon {
                     account_changes
                         .storage_reads
@@ -178,7 +178,7 @@ where
                             )
                             .with_change(StorageChange {
                                 block_access_index: 0,
-                                new_value: new_val,
+                                new_value: new_val.into(),
                             }),
                     );
                 }
@@ -186,7 +186,7 @@ where
 
             // slot 1: timestamp % HISTORY_SERVE_WINDOW + HISTORY_SERVE_WINDOW
             if let Some(change) = beacon_contract_acc_changes.get(1) {
-                let new_val = change.changes[0].new_value;
+                let new_val = change.changes[0].new_value.into();
                 if Some(new_val) == pre_beacon_root {
                     account_changes.storage_reads.push(
                         StorageKey::from(
@@ -206,7 +206,7 @@ where
                             )
                             .with_change(StorageChange {
                                 block_access_index: 0,
-                                new_value: new_val,
+                                new_value: new_val.into(),
                             }),
                     );
                 }
