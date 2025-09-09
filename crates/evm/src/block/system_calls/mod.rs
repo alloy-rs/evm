@@ -111,10 +111,7 @@ where
             evm.db_mut().commit(res.state);
 
             let slot_change = SlotChanges::default()
-                .with_change(StorageChange {
-                    block_access_index: 0,
-                    new_value: parent_block_hash,
-                })
+                .with_change(StorageChange { block_access_index: 0, new_value: parent_block_hash })
                 .with_slot(U256::from((block_num - 1) % HISTORY_SERVE_WINDOW as u64).into());
             let acc_changes = AccountChanges::default()
                 .with_storage_change(slot_change)
