@@ -25,7 +25,8 @@ use alloy_block_access_list::{
 };
 use alloy_consensus::{Header, Transaction, TxReceipt};
 use alloy_eips::{
-    eip4895::Withdrawals, eip7002::WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS,
+    eip2935::HISTORY_SERVE_WINDOW, eip4788::BEACON_ROOTS_ADDRESS, eip4895::Withdrawals,
+    eip7002::WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS,
     eip7251::CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS, eip7685::Requests, Encodable2718,
 };
 use alloy_hardforks::EthereumHardfork;
@@ -130,21 +131,88 @@ where
             tracing::debug!("Pushed blockhashes contract call, bal {:?}", contract_acc_change);
         }
 
+        let timestamp: u64 = self.evm.block().timestamp.saturating_to();
+        let pre_beacon = self
+            .evm
+            .db_mut()
+            .database
+            .storage(
+                BEACON_ROOTS_ADDRESS,
+                StorageKey::from(timestamp % HISTORY_SERVE_WINDOW as u64),
+            )
+            .ok();
+
+        let pre_beacon_root = self
+            .evm
+            .db_mut()
+            .database
+            .storage(
+                BEACON_ROOTS_ADDRESS,
+                StorageKey::from(
+                    (timestamp % HISTORY_SERVE_WINDOW as u64) + HISTORY_SERVE_WINDOW as u64,
+                ),
+            )
+            .ok();
+
         let beacon_contract_acc_change = self.system_caller.apply_beacon_root_contract_call(
-            self.evm.block().timestamp.saturating_to(),
+            timestamp,
             self.ctx.parent_beacon_block_root,
             &mut self.evm,
         )?;
         tracing::debug!("Applied beacon root contract call, bal {:?}", beacon_contract_acc_change);
-        if beacon_contract_acc_change.is_some() {
-            self.block_access_list
-                .as_mut()
-                .unwrap()
-                .push(beacon_contract_acc_change.clone().unwrap());
-            tracing::debug!(
-                "Pushed beacon root contract call, bal {:?}",
-                beacon_contract_acc_change
-            );
+        if let Some(beacon_contract_acc_changes) = beacon_contract_acc_change {
+            let mut account_changes = AccountChanges::default().with_address(BEACON_ROOTS_ADDRESS);
+
+            // slot 0: timestamp % HISTORY_SERVE_WINDOW
+            if let Some(change) = beacon_contract_acc_changes.first() {
+                let new_val = change.changes[0].new_value.into();
+                if Some(new_val) == pre_beacon {
+                    account_changes
+                        .storage_reads
+                        .push(StorageKey::from(timestamp % HISTORY_SERVE_WINDOW as u64).into());
+                } else {
+                    account_changes.storage_changes.push(
+                        SlotChanges::default()
+                            .with_slot(
+                                StorageKey::from(timestamp % HISTORY_SERVE_WINDOW as u64).into(),
+                            )
+                            .with_change(StorageChange {
+                                block_access_index: 0,
+                                new_value: new_val.into(),
+                            }),
+                    );
+                }
+            }
+
+            // slot 1: timestamp % HISTORY_SERVE_WINDOW + HISTORY_SERVE_WINDOW
+            if let Some(change) = beacon_contract_acc_changes.get(1) {
+                let new_val = change.changes[0].new_value.into();
+                if Some(new_val) == pre_beacon_root {
+                    account_changes.storage_reads.push(
+                        StorageKey::from(
+                            (timestamp % HISTORY_SERVE_WINDOW as u64) + HISTORY_SERVE_WINDOW as u64,
+                        )
+                        .into(),
+                    );
+                } else {
+                    account_changes.storage_changes.push(
+                        SlotChanges::default()
+                            .with_slot(
+                                StorageKey::from(
+                                    (timestamp % HISTORY_SERVE_WINDOW as u64)
+                                        + HISTORY_SERVE_WINDOW as u64,
+                                )
+                                .into(),
+                            )
+                            .with_change(StorageChange {
+                                block_access_index: 0,
+                                new_value: new_val.into(),
+                            }),
+                    );
+                }
+            }
+
+            self.block_access_list.as_mut().unwrap().push(account_changes);
         }
 
         Ok(())
