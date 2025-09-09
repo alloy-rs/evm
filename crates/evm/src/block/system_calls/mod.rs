@@ -9,7 +9,6 @@ use alloy_block_access_list::{AccountChanges, SlotChanges, StorageChange};
 use alloy_consensus::BlockHeader;
 use alloy_eips::{
     eip2935::{HISTORY_SERVE_WINDOW, HISTORY_STORAGE_ADDRESS},
-    eip4788::BEACON_ROOTS_ADDRESS,
     eip7002::WITHDRAWAL_REQUEST_TYPE,
     eip7251::CONSOLIDATION_REQUEST_TYPE,
     eip7685::Requests,
@@ -132,7 +131,7 @@ where
         timestamp: u64,
         parent_beacon_block_root: Option<B256>,
         evm: &mut impl Evm<DB: DatabaseCommit>,
-    ) -> Result<Option<AccountChanges>, BlockExecutionError> {
+    ) -> Result<Option<Vec<SlotChanges>>, BlockExecutionError> {
         let result_and_state =
             eip4788::transact_beacon_root_contract_call(&self.spec, parent_beacon_block_root, evm)?;
 
@@ -145,10 +144,10 @@ where
                 );
             }
             evm.db_mut().commit(res.state);
-            let storage_read = B256::from(U256::from(
-                (timestamp % HISTORY_SERVE_WINDOW as u64) + HISTORY_SERVE_WINDOW as u64,
-            ))
-            .into();
+            // let storage_read = B256::from(U256::from(
+            //     (timestamp % HISTORY_SERVE_WINDOW as u64) + HISTORY_SERVE_WINDOW as u64,
+            // ))
+            // .into();
             slot_changes.push(
                 SlotChanges::default()
                     .with_change(StorageChange {
@@ -157,12 +156,25 @@ where
                     })
                     .with_slot(U256::from(timestamp % HISTORY_SERVE_WINDOW as u64).into()),
             );
-            let account_changes = AccountChanges::default()
-                .with_address(BEACON_ROOTS_ADDRESS)
-                .extend_storage_changes(slot_changes)
-                .with_storage_read(storage_read);
+            slot_changes.push(
+                SlotChanges::default()
+                    .with_change(StorageChange {
+                        block_access_index: 0,
+                        new_value: parent_beacon_block_root.unwrap().into(),
+                    })
+                    .with_slot(
+                        U256::from(
+                            (timestamp % HISTORY_SERVE_WINDOW as u64) + HISTORY_SERVE_WINDOW as u64,
+                        )
+                        .into(),
+                    ),
+            );
+            // let account_changes = AccountChanges::default()
+            //     .with_address(BEACON_ROOTS_ADDRESS)
+            //     .extend_storage_changes(slot_changes)
+            //     .with_storage_read(storage_read);
 
-            return Ok(Some(account_changes));
+            return Ok(Some(slot_changes));
         }
         Ok(None)
     }
