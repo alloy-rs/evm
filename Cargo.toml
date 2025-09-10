@@ -51,8 +51,8 @@ alloy-block-access-list = { version = "1.0.30", default-features = false }
 alloy-rlp = {  version = "0.3.12", default-features = false }
 
 # op-alloy
-alloy-op-hardforks = { version = "0.3.0" }
-op-alloy-consensus = { version = "0.18", default-features = false }
+alloy-op-hardforks = { version = "0.3.1" }
+op-alloy-consensus = { version = "0.19.1", default-features = false }
 
 # revm
 revm = { version = "29.0.0", default-features = false }
