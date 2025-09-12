@@ -401,7 +401,7 @@ where
                         .db_mut()
                         .database
                         .storage(CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS, StorageKey::from(i))
-                        .unwrap();
+                        .unwrap_or_default();
                     pre_consolidation.push(value);
                 }
             }
@@ -417,7 +417,7 @@ where
                         .db_mut()
                         .database
                         .storage(WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS, StorageKey::from(i))
-                        .unwrap();
+                        .unwrap_or_default();
                     post_withdrawal.push(value);
                 }
 
