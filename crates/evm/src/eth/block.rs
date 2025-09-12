@@ -365,6 +365,8 @@ where
     ) -> Result<(Self::Evm, BlockExecutionResult<R::Receipt>), BlockExecutionError> {
         let post_system_tx = self.receipts.len() + 1;
         let mut post_system_acc_changes: Vec<AccountChanges> = Vec::new();
+        let mut pre_withdrawal = Vec::new();
+        let mut pre_consolidation = Vec::new();
 
         let requests = if self
             .spec
@@ -379,66 +381,70 @@ where
             if !deposit_requests.is_empty() {
                 requests.push_request_with_type(eip6110::DEPOSIT_REQUEST_TYPE, deposit_requests);
             }
+            if self
+                .spec
+                .is_amsterdam_active_at_timestamp(self.evm.block().timestamp.saturating_to())
+            {
+                for i in 0..=3 {
+                    let value = self
+                        .evm
+                        .db_mut()
+                        .database
+                        .storage(WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS, StorageKey::from(i))
+                        .unwrap();
+                    pre_withdrawal.push(value);
+                }
 
-            let mut pre_withdrawal = Vec::new();
-            for i in 0..=3 {
-                let value = self
-                    .evm
-                    .db_mut()
-                    .database
-                    .storage(WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS, StorageKey::from(i))
-                    .unwrap();
-                pre_withdrawal.push(value);
+                for i in 0..=3 {
+                    let value = self
+                        .evm
+                        .db_mut()
+                        .database
+                        .storage(CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS, StorageKey::from(i))
+                        .unwrap();
+                    pre_consolidation.push(value);
+                }
             }
-
-            let mut pre_consolidation = Vec::new();
-            for i in 0..=3 {
-                let value = self
-                    .evm
-                    .db_mut()
-                    .database
-                    .storage(CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS, StorageKey::from(i))
-                    .unwrap();
-                pre_consolidation.push(value);
-            }
-
             requests.extend(self.system_caller.apply_post_execution_changes(&mut self.evm)?);
+            if self
+                .spec
+                .is_amsterdam_active_at_timestamp(self.evm.block().timestamp.saturating_to())
+            {
+                let mut post_withdrawal = Vec::new();
+                for i in 0..=3 {
+                    let value = self
+                        .evm
+                        .db_mut()
+                        .database
+                        .storage(WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS, StorageKey::from(i))
+                        .unwrap();
+                    post_withdrawal.push(value);
+                }
 
-            let mut post_withdrawal = Vec::new();
-            for i in 0..=3 {
-                let value = self
-                    .evm
-                    .db_mut()
-                    .database
-                    .storage(WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS, StorageKey::from(i))
-                    .unwrap();
-                post_withdrawal.push(value);
+                let mut post_consolidation = Vec::new();
+                for i in 0..=3 {
+                    let value = self
+                        .evm
+                        .db_mut()
+                        .database
+                        .storage(CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS, StorageKey::from(i))
+                        .unwrap();
+                    post_consolidation.push(value);
+                }
+
+                post_system_acc_changes.push(build_post_execution_system_contract_account_change(
+                    WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS,
+                    pre_withdrawal,
+                    post_withdrawal,
+                    post_system_tx as BlockAccessIndex,
+                ));
+                post_system_acc_changes.push(build_post_execution_system_contract_account_change(
+                    CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS,
+                    pre_consolidation,
+                    post_consolidation,
+                    post_system_tx as BlockAccessIndex,
+                ));
             }
-
-            let mut post_consolidation = Vec::new();
-            for i in 0..=3 {
-                let value = self
-                    .evm
-                    .db_mut()
-                    .database
-                    .storage(CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS, StorageKey::from(i))
-                    .unwrap();
-                post_consolidation.push(value);
-            }
-
-            post_system_acc_changes.push(build_post_execution_system_contract_account_change(
-                WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS,
-                pre_withdrawal,
-                post_withdrawal,
-                post_system_tx as BlockAccessIndex,
-            ));
-            post_system_acc_changes.push(build_post_execution_system_contract_account_change(
-                CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS,
-                pre_consolidation,
-                post_consolidation,
-                post_system_tx as BlockAccessIndex,
-            ));
-
             requests
         } else {
             Requests::default()
@@ -486,34 +492,36 @@ where
             })
         })?;
 
-        // Build Block-level Access List here
-        // 1. Build for all pre execution (Done in `apply_pre_execution_changes`)
-        // 2. Build for all the touched addresses.
-        // 3. Build for all post execution
-        // 4. Sort
-        // for address in self.touched_addresses.iter() {
-        //     if let Ok(Some(account)) = self.evm.db_mut().database.basic(*address) {
-        //         let acc_change = from_account(*address, &account);
-        //         self.block_access_list.as_mut().unwrap().account_changes.push(acc_change);
-        //     }
-        // }
+        if self.spec.is_amsterdam_active_at_timestamp(self.evm.block().timestamp.saturating_to()) {
+            // Build Block-level Access List here
+            // 1. Build for all pre execution (Done in `apply_pre_execution_changes`)
+            // 2. Build for all the touched addresses.
+            // 3. Build for all post execution
+            // 4. Sort
+            // for address in self.touched_addresses.iter() {
+            //     if let Ok(Some(account)) = self.evm.db_mut().database.basic(*address) {
+            //         let acc_change = from_account(*address, &account);
+            //         self.block_access_list.as_mut().unwrap().account_changes.push(acc_change);
+            //     }
+            // }
 
-        // All post tx balance increments
-        for (address, increment) in balance_increments {
-            if increment != 0 {
-                self.block_access_list.as_mut().unwrap().push(
-                    AccountChanges::default().with_address(address).with_balance_change(
-                        BalanceChange {
-                            block_access_index: post_system_tx as u64,
-                            post_balance: U256::from(increment),
-                        },
-                    ),
-                );
+            // All post tx balance increments
+            for (address, increment) in balance_increments {
+                if increment != 0 {
+                    self.block_access_list.as_mut().unwrap().push(
+                        AccountChanges::default().with_address(address).with_balance_change(
+                            BalanceChange {
+                                block_access_index: post_system_tx as u64,
+                                post_balance: U256::from(increment),
+                            },
+                        ),
+                    );
+                }
             }
-        }
 
-        // Add post execution system contract account changes
-        self.block_access_list.as_mut().unwrap().extend(post_system_acc_changes);
+            // Add post execution system contract account changes
+            self.block_access_list.as_mut().unwrap().extend(post_system_acc_changes);
+        }
         Ok((
             self.evm,
             BlockExecutionResult {
