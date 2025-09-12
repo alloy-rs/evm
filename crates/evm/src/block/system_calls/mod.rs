@@ -5,13 +5,13 @@ use crate::{
     Evm,
 };
 use alloc::{borrow::Cow, boxed::Box, vec::Vec};
-use alloy_block_access_list::{AccountChanges, SlotChanges, StorageChange};
 use alloy_consensus::BlockHeader;
 use alloy_eips::{
     eip2935::{HISTORY_SERVE_WINDOW, HISTORY_STORAGE_ADDRESS},
     eip7002::WITHDRAWAL_REQUEST_TYPE,
     eip7251::CONSOLIDATION_REQUEST_TYPE,
     eip7685::Requests,
+    eip7928::{AccountChanges, SlotChanges, StorageChange},
 };
 use alloy_hardforks::EthereumHardforks;
 use alloy_primitives::{BlockNumber, Bytes, B256, U256};

@@ -1,10 +1,10 @@
 //! Utility functions for Eip-7928 implementation in Amsterdam and later hardforks.
 
 use alloc::collections::BTreeMap;
-use alloy_block_access_list::{
+use alloy_eips::eip7928::{
     balance_change::BalanceChange, code_change::CodeChange, nonce_change::NonceChange,
     AccountChanges, BlockAccessIndex, BlockAccessList, SlotChanges, StorageChange, MAX_CODE_SIZE,
-    MAX_TXS,
+    MAX_TXS_PER_BLOCK,
 };
 use alloy_primitives::{Address, B256};
 use revm::{
@@ -139,7 +139,7 @@ pub fn validate_block_access_list_against_execution(block_access_list: &BlockAcc
     }
 
     // 3. Validate all data is within bounds
-    let max_block_access_index = MAX_TXS + 1; // 0 for pre-exec, 1..MAX_TXS for txs, MAX_TXS+1 for post-exec
+    let max_block_access_index = MAX_TXS_PER_BLOCK + 1; // 0 for pre-exec, 1..MAX_TXS for txs, MAX_TXS+1 for post-exec
     for account in block_access_list {
         // Validate storage slots are sorted within each account
         let storage_slots: Vec<_> = account.storage_changes.iter().map(|sc| sc.slot).collect();

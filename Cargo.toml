@@ -47,7 +47,6 @@ alloy-primitives = { version = "1.0.0", default-features = false }
 alloy-sol-types = { version = "1.0.0", default-features = false }
 alloy-hardforks = { version = "0.3.1" }
 alloy-rpc-types-eth = { version = "1.0.30", default-features = false }
-alloy-block-access-list = { version = "1.0.30", default-features = false }
 alloy-rlp = {  version = "0.3.12", default-features = false }
 
 # op-alloy
@@ -69,7 +68,7 @@ tracing="0.1.41"
 [patch.crates-io]
 revm = { git = "https://github.com/Soubhik-10/revm", branch = "bal" }
 op-revm = { git = "https://github.com/Soubhik-10/revm", branch = "bal"}
-alloy-block-access-list = { git = "https://github.com/Soubhik-10/alloy", branch = "bal" }
+alloy-eips = { git = "https://github.com/Soubhik-10/alloy", branch = "bal" }
 # alloy-consensus = { git = "https://github.com/Soubhik-10/alloy", branch = "bal" }
 # alloy-hardforks = { git = "https://github.com/Rimeeeeee/hardforks", branch = "amsterdam" }
 # alloy-rpc-types-eth = { git = "https://github.com/Soubhik-10/alloy", branch = "bal" }

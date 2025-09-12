@@ -16,15 +16,19 @@ use crate::{
     Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded,
 };
 use alloc::{borrow::Cow, boxed::Box, vec::Vec};
-use alloy_block_access_list::{
-    balance_change::BalanceChange, AccountChanges, BlockAccessIndex, BlockAccessList, SlotChanges,
-    StorageChange,
-};
 use alloy_consensus::{Header, Transaction, TxReceipt};
 use alloy_eips::{
-    eip2935::HISTORY_SERVE_WINDOW, eip4788::BEACON_ROOTS_ADDRESS, eip4895::Withdrawals,
+    eip2935::HISTORY_SERVE_WINDOW,
+    eip4788::BEACON_ROOTS_ADDRESS,
+    eip4895::Withdrawals,
     eip7002::WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS,
-    eip7251::CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS, eip7685::Requests, Encodable2718,
+    eip7251::CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS,
+    eip7685::Requests,
+    eip7928::{
+        balance_change::BalanceChange, AccountChanges, BlockAccessIndex, BlockAccessList,
+        SlotChanges, StorageChange,
+    },
+    Encodable2718,
 };
 use alloy_hardforks::EthereumHardfork;
 use alloy_primitives::{Address, Log, B256, U256};
@@ -164,7 +168,7 @@ where
                 // slot 0: timestamp % HISTORY_SERVE_WINDOW
                 if let Some(change) = beacon_contract_acc_changes.first() {
                     let new_val = change.changes[0].new_value.into();
-                    if Some(new_val) == pre_beacon {
+                    if pre_beacon == Some(new_val) {
                         account_changes
                             .storage_reads
                             .push(StorageKey::from(timestamp % HISTORY_SERVE_WINDOW as u64).into());
@@ -186,7 +190,7 @@ where
                 // slot 1: timestamp % HISTORY_SERVE_WINDOW + HISTORY_SERVE_WINDOW
                 if let Some(change) = beacon_contract_acc_changes.get(1) {
                     let new_val = change.changes[0].new_value.into();
-                    if Some(new_val) == pre_beacon_root {
+                    if pre_beacon_root == Some(new_val) {
                         account_changes.storage_reads.push(
                             StorageKey::from(
                                 (timestamp % HISTORY_SERVE_WINDOW as u64)

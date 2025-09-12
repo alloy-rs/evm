@@ -2,8 +2,7 @@
 
 use crate::{Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, RecoveredTx, ToTxEnv};
 use alloc::{boxed::Box, vec::Vec};
-use alloy_block_access_list::BlockAccessList;
-use alloy_eips::eip7685::Requests;
+use alloy_eips::{eip7685::Requests, eip7928::BlockAccessList};
 use revm::{
     context::result::ExecutionResult, database::State, inspector::NoOpInspector, Inspector,
 };
