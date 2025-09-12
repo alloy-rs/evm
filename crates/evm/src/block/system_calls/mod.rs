@@ -110,13 +110,18 @@ where
             }
             evm.db_mut().commit(res.state);
 
-            let slot_change = SlotChanges::default()
-                .with_change(StorageChange { block_access_index: 0, new_value: parent_block_hash })
-                .with_slot(U256::from((block_num - 1) % HISTORY_SERVE_WINDOW as u64).into());
-            let acc_changes = AccountChanges::default()
-                .with_storage_change(slot_change)
-                .with_address(HISTORY_STORAGE_ADDRESS);
-            return Ok(Some(acc_changes));
+            if self.spec.is_amsterdam_active_at_timestamp(evm.block().timestamp.saturating_to()) {
+                let slot_change = SlotChanges::default()
+                    .with_change(StorageChange {
+                        block_access_index: 0,
+                        new_value: parent_block_hash,
+                    })
+                    .with_slot(U256::from((block_num - 1) % HISTORY_SERVE_WINDOW as u64).into());
+                let acc_changes = AccountChanges::default()
+                    .with_storage_change(slot_change)
+                    .with_address(HISTORY_STORAGE_ADDRESS);
+                return Ok(Some(acc_changes));
+            }
         }
 
         Ok(None)
@@ -133,7 +138,6 @@ where
             eip4788::transact_beacon_root_contract_call(&self.spec, parent_beacon_block_root, evm)?;
 
         if let Some(res) = result_and_state {
-            let mut slot_changes: Vec<SlotChanges> = Vec::new();
             if let Some(hook) = &mut self.hook {
                 hook.on_state(
                     StateChangeSource::PreBlock(StateChangePreBlockSource::BeaconRootContract),
@@ -141,37 +145,33 @@ where
                 );
             }
             evm.db_mut().commit(res.state);
-            // let storage_read = B256::from(U256::from(
-            //     (timestamp % HISTORY_SERVE_WINDOW as u64) + HISTORY_SERVE_WINDOW as u64,
-            // ))
-            // .into();
-            slot_changes.push(
-                SlotChanges::default()
-                    .with_change(StorageChange {
-                        block_access_index: 0,
-                        new_value: U256::from(timestamp).into(),
-                    })
-                    .with_slot(U256::from(timestamp % HISTORY_SERVE_WINDOW as u64).into()),
-            );
-            slot_changes.push(
-                SlotChanges::default()
-                    .with_change(StorageChange {
-                        block_access_index: 0,
-                        new_value: parent_beacon_block_root.unwrap().into(),
-                    })
-                    .with_slot(
-                        U256::from(
-                            (timestamp % HISTORY_SERVE_WINDOW as u64) + HISTORY_SERVE_WINDOW as u64,
-                        )
-                        .into(),
-                    ),
-            );
-            // let account_changes = AccountChanges::default()
-            //     .with_address(BEACON_ROOTS_ADDRESS)
-            //     .extend_storage_changes(slot_changes)
-            //     .with_storage_read(storage_read);
+            if self.spec.is_amsterdam_active_at_timestamp(timestamp) {
+                let mut slot_changes: Vec<SlotChanges> = Vec::new();
+                slot_changes.push(
+                    SlotChanges::default()
+                        .with_change(StorageChange {
+                            block_access_index: 0,
+                            new_value: U256::from(timestamp).into(),
+                        })
+                        .with_slot(U256::from(timestamp % HISTORY_SERVE_WINDOW as u64).into()),
+                );
+                slot_changes.push(
+                    SlotChanges::default()
+                        .with_change(StorageChange {
+                            block_access_index: 0,
+                            new_value: parent_beacon_block_root.unwrap(),
+                        })
+                        .with_slot(
+                            U256::from(
+                                (timestamp % HISTORY_SERVE_WINDOW as u64)
+                                    + HISTORY_SERVE_WINDOW as u64,
+                            )
+                            .into(),
+                        ),
+                );
 
-            return Ok(Some(slot_changes));
+                return Ok(Some(slot_changes));
+            }
         }
         Ok(None)
     }

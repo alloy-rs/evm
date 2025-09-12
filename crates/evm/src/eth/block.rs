@@ -289,7 +289,7 @@ where
                             bal.push(from_account_with_tx_index(
                                 created_address,
                                 self.receipts.len() as u64,
-                                &acc,
+                                acc,
                             ));
                             tracing::debug!(
                                 "BlockAccessList: new contract created at {:#x}, tx_index={}, storage: {:#?}",
@@ -308,7 +308,7 @@ where
                         bal.push(from_account_with_tx_index(
                             address,
                             self.receipts.len() as u64,
-                            &acc,
+                            acc,
                         ));
                         tracing::debug!(
                             "BlockAccessList: Tx call arm {:#x}, tx_index={}, storage: {:#?}",
@@ -323,11 +323,7 @@ where
         }
         if let Some(acc) = state.get(tx.signer()) {
             if let Some(bal) = self.block_access_list.as_mut() {
-                bal.push(from_account_with_tx_index(
-                    *tx.signer(),
-                    self.receipts.len() as u64,
-                    &acc,
-                ));
+                bal.push(from_account_with_tx_index(*tx.signer(), self.receipts.len() as u64, acc));
                 tracing::debug!(
                     "BlockAccessList: Tx signer arm tx_index={}, storage: {:#?}",
                     self.receipts.len(),
@@ -346,7 +342,7 @@ where
                         bal.push(from_account_with_tx_index(
                             addr,
                             self.receipts.len() as u64,
-                            &state.get(&addr).unwrap(),
+                            state.get(&addr).unwrap(),
                         ));
                         state.get_mut(&addr).unwrap().clear_state_changes();
                     }
