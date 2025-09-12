@@ -20,7 +20,6 @@ alloy-sol-types.workspace = true
 alloy-eips.workspace = true
 alloy-hardforks.workspace = true
 alloy-rpc-types-eth = { workspace = true, optional = true }
-alloy-block-access-list.workspace = true
 alloy-rlp.workspace = true
 
 revm = { workspace = true, features = ["glamsterdam"] }
@@ -51,7 +50,6 @@ std = [
 	"alloy-rpc-types-eth?/std",
 	"alloy-rlp/std",
 	"tracing/std",
-	"alloy-block-access-list/std",
 ]
 op = ["op-revm", "op-alloy-consensus"]
 overrides = ["dep:alloy-rpc-types-eth"]
