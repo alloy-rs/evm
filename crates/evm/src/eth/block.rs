@@ -118,11 +118,9 @@ where
 
         let timestamp: u64 = self.evm.block().timestamp.saturating_to();
         if self.spec.is_amsterdam_active_at_timestamp(timestamp) {
-            let contract_acc_change = self.system_caller.apply_blockhashes_contract_call(
-                self.ctx.parent_hash,
-                self.evm.block().number.saturating_to(),
-                &mut self.evm,
-            )?;
+            let contract_acc_change = self
+                .system_caller
+                .apply_blockhashes_contract_call(self.ctx.parent_hash, &mut self.evm)?;
             tracing::debug!("Applied blockhashes contract call, bal {:?}", contract_acc_change);
             if contract_acc_change.is_some() {
                 self.block_access_list.as_mut().unwrap().push(contract_acc_change.clone().unwrap());
@@ -153,7 +151,6 @@ where
                 .ok();
 
             let beacon_contract_acc_change = self.system_caller.apply_beacon_root_contract_call(
-                timestamp,
                 self.ctx.parent_beacon_block_root,
                 &mut self.evm,
             )?;
@@ -219,13 +216,9 @@ where
                 self.block_access_list.as_mut().unwrap().push(account_changes);
             }
         } else {
-            self.system_caller.apply_blockhashes_contract_call(
-                self.ctx.parent_hash,
-                self.evm.block().number.saturating_to(),
-                &mut self.evm,
-            )?;
+            self.system_caller
+                .apply_blockhashes_contract_call(self.ctx.parent_hash, &mut self.evm)?;
             self.system_caller.apply_beacon_root_contract_call(
-                timestamp,
                 self.ctx.parent_beacon_block_root,
                 &mut self.evm,
             )?;

@@ -14,7 +14,7 @@ use alloy_eips::{
     eip7928::{AccountChanges, SlotChanges, StorageChange},
 };
 use alloy_hardforks::EthereumHardforks;
-use alloy_primitives::{BlockNumber, Bytes, B256, U256};
+use alloy_primitives::{Bytes, B256, U256};
 use revm::{state::EvmState, DatabaseCommit};
 
 use super::{StateChangePostBlockSource, StateChangePreBlockSource, StateChangeSource};
@@ -59,12 +59,8 @@ where
         header: impl BlockHeader,
         evm: &mut impl Evm<DB: DatabaseCommit>,
     ) -> Result<(), BlockExecutionError> {
-        self.apply_blockhashes_contract_call(header.parent_hash(), header.number(), evm)?;
-        self.apply_beacon_root_contract_call(
-            header.timestamp(),
-            header.parent_beacon_block_root(),
-            evm,
-        )?;
+        self.apply_blockhashes_contract_call(header.parent_hash(), evm)?;
+        self.apply_beacon_root_contract_call(header.parent_beacon_block_root(), evm)?;
 
         Ok(())
     }
@@ -95,7 +91,6 @@ where
     pub fn apply_blockhashes_contract_call(
         &mut self,
         parent_block_hash: B256,
-        block_num: BlockNumber,
         evm: &mut impl Evm<DB: DatabaseCommit>,
     ) -> Result<Option<AccountChanges>, BlockExecutionError> {
         let result_and_state =
@@ -111,6 +106,7 @@ where
             evm.db_mut().commit(res.state);
 
             if self.spec.is_amsterdam_active_at_timestamp(evm.block().timestamp.saturating_to()) {
+                let block_num: u64 = evm.block().number.saturating_to();
                 let slot_change = SlotChanges::default()
                     .with_change(StorageChange {
                         block_access_index: 0,
@@ -130,7 +126,6 @@ where
     /// Applies the pre-block call to the EIP-4788 beacon root contract.
     pub fn apply_beacon_root_contract_call(
         &mut self,
-        timestamp: u64,
         parent_beacon_block_root: Option<B256>,
         evm: &mut impl Evm<DB: DatabaseCommit>,
     ) -> Result<Option<Vec<SlotChanges>>, BlockExecutionError> {
@@ -145,7 +140,8 @@ where
                 );
             }
             evm.db_mut().commit(res.state);
-            if self.spec.is_amsterdam_active_at_timestamp(timestamp) {
+            if self.spec.is_amsterdam_active_at_timestamp(evm.block().timestamp.saturating_to()) {
+                let timestamp: u64 = evm.block().timestamp.saturating_to();
                 let mut slot_changes: Vec<SlotChanges> = Vec::new();
                 slot_changes.push(
                     SlotChanges::default()
