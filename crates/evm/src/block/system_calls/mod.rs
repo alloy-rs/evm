@@ -142,7 +142,7 @@ where
             evm.db_mut().commit(res.state);
             if self.spec.is_amsterdam_active_at_timestamp(evm.block().timestamp.saturating_to()) {
                 let timestamp: u64 = evm.block().timestamp.saturating_to();
-                let slot_changes: Vec<SlotChanges> = vec![
+                let slot_changes: Vec<SlotChanges> = alloc::vec![
                     SlotChanges::default()
                         .with_change(StorageChange {
                             block_access_index: 0,
