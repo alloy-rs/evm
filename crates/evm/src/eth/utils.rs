@@ -37,7 +37,7 @@ pub fn build_post_execution_system_contract_account_change(
     account_changes
 }
 
-/// An utility function to build block access list with tx_index
+/// An utility function to build block access list with tx_index.
 pub fn from_account_with_tx_index(
     address: Address,
     block_access_index: u64,
