@@ -142,16 +142,13 @@ where
             evm.db_mut().commit(res.state);
             if self.spec.is_amsterdam_active_at_timestamp(evm.block().timestamp.saturating_to()) {
                 let timestamp: u64 = evm.block().timestamp.saturating_to();
-                let mut slot_changes: Vec<SlotChanges> = Vec::new();
-                slot_changes.push(
+                let slot_changes: Vec<SlotChanges> = vec![
                     SlotChanges::default()
                         .with_change(StorageChange {
                             block_access_index: 0,
                             new_value: U256::from(timestamp).into(),
                         })
                         .with_slot(U256::from(timestamp % HISTORY_SERVE_WINDOW as u64).into()),
-                );
-                slot_changes.push(
                     SlotChanges::default()
                         .with_change(StorageChange {
                             block_access_index: 0,
@@ -164,7 +161,7 @@ where
                             )
                             .into(),
                         ),
-                );
+                ];
 
                 return Ok(Some(slot_changes));
             }
