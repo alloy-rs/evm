@@ -36,7 +36,7 @@ use revm::{
     context_interface::result::ResultAndState,
     database::State,
     primitives::{StorageKey, StorageValue},
-    state::AccountInfo,
+    state::Account,
     DatabaseCommit, Inspector,
 };
 
@@ -271,15 +271,15 @@ where
                             bal.push(from_account_with_tx_index(
                                 created_address,
                                 self.receipts.len() as u64,
-                                &acc.info,
+                                &acc,
                             ));
                             tracing::debug!(
                                 "BlockAccessList: new contract created at {:#x}, tx_index={}, storage: {:#?}",
                                 created_address,
                                 self.receipts.len(),
-                                acc.info.storage_access,
+                                acc.storage_access,
                             );
-                            state.get_mut(&created_address).unwrap().info.clear_state_changes();
+                            state.get_mut(&created_address).unwrap().clear_state_changes();
                         }
                     }
                 }
@@ -290,15 +290,15 @@ where
                         bal.push(from_account_with_tx_index(
                             address,
                             self.receipts.len() as u64,
-                            &acc.info,
+                            &acc,
                         ));
                         tracing::debug!(
                             "BlockAccessList: Tx call arm {:#x}, tx_index={}, storage: {:#?}",
                             address,
                             self.receipts.len(),
-                            acc.info.storage_access,
+                            acc.storage_access,
                         );
-                        state.get_mut(&address).unwrap().info.clear_state_changes();
+                        state.get_mut(&address).unwrap().clear_state_changes();
                     }
                 }
             }
@@ -308,14 +308,14 @@ where
                 bal.push(from_account_with_tx_index(
                     *tx.signer(),
                     self.receipts.len() as u64,
-                    &acc.info,
+                    &acc,
                 ));
                 tracing::debug!(
                     "BlockAccessList: Tx signer arm tx_index={}, storage: {:#?}",
                     self.receipts.len(),
-                    acc.info.storage_access,
+                    acc.storage_access,
                 );
-                state.get_mut(tx.signer()).unwrap().info.clear_state_changes();
+                state.get_mut(tx.signer()).unwrap().clear_state_changes();
             }
         }
         tracing::debug!("############################################################################################################################################Block No: {:?}",self.evm.block());
@@ -328,9 +328,9 @@ where
                         bal.push(from_account_with_tx_index(
                             addr,
                             self.receipts.len() as u64,
-                            &state.get(&addr).unwrap().info,
+                            &state.get(&addr).unwrap(),
                         ));
-                        state.get_mut(&addr).unwrap().info.clear_state_changes();
+                        state.get_mut(&addr).unwrap().clear_state_changes();
                     }
                 }
             }
@@ -649,7 +649,7 @@ pub fn build_post_execution_system_contract_account_change(
 pub fn from_account_with_tx_index(
     address: Address,
     block_access_index: u64,
-    account: &AccountInfo,
+    account: &Account,
 ) -> AccountChanges {
     let mut account_changes = AccountChanges::default();
 

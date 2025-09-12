@@ -157,7 +157,7 @@ where
                 SlotChanges::default()
                     .with_change(StorageChange {
                         block_access_index: 0,
-                        new_value: parent_beacon_block_root.unwrap(),
+                        new_value: parent_beacon_block_root.unwrap().into(),
                     })
                     .with_slot(
                         U256::from(
