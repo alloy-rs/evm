@@ -1,6 +1,6 @@
 //! Utility functions for Eip-7928 implementation in Amsterdam and later hardforks.
 
-use alloc::collections::BTreeMap;
+use alloc::{collections::BTreeMap, vec::Vec};
 use alloy_eips::eip7928::{
     balance_change::BalanceChange, code_change::CodeChange, nonce_change::NonceChange,
     AccountChanges, BlockAccessIndex, BlockAccessList, SlotChanges, StorageChange, MAX_CODE_SIZE,
