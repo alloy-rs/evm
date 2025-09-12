@@ -42,7 +42,7 @@ alloy-op-evm = { version = "0.20.1", path = "crates/op-evm", default-features = 
 alloy-eip2124 = { version = "0.2", default-features = false }
 alloy-chains = { version = "0.2.0", default-features = false }
 alloy-eips = { version = "1.0", default-features = false }
-alloy-consensus = { version = "1.0.23", default-features = false }
+alloy-consensus = { version = "1.0.30", default-features = false }
 alloy-primitives = { version = "1.0.0", default-features = false }
 alloy-sol-types = { version = "1.0.0", default-features = false }
 alloy-hardforks = { version = "0.3.1" }
@@ -69,6 +69,6 @@ tracing="0.1.41"
 revm = { git = "https://github.com/Soubhik-10/revm", branch = "bal" }
 op-revm = { git = "https://github.com/Soubhik-10/revm", branch = "bal"}
 alloy-eips = { git = "https://github.com/Soubhik-10/alloy", branch = "bal" }
-# alloy-consensus = { git = "https://github.com/Soubhik-10/alloy", branch = "bal" }
+alloy-consensus = { git = "https://github.com/Soubhik-10/alloy", branch = "bal" }
 # alloy-hardforks = { git = "https://github.com/Rimeeeeee/hardforks", branch = "amsterdam" }
-# alloy-rpc-types-eth = { git = "https://github.com/Soubhik-10/alloy", branch = "bal" }
+alloy-rpc-types-eth = { git = "https://github.com/Soubhik-10/alloy", branch = "bal" }
