@@ -11,7 +11,7 @@ use revm::{
 };
 
 /// Container type that holds both the configuration and block environment for EVM execution.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct EvmEnv<Spec = SpecId> {
     /// The configuration environment with handler settings
     pub cfg_env: CfgEnv<Spec>,
@@ -184,5 +184,66 @@ impl<Spec> EvmEnv<Spec> {
 impl<Spec> From<(CfgEnv<Spec>, BlockEnv)> for EvmEnv<Spec> {
     fn from((cfg_env, block_env): (CfgEnv<Spec>, BlockEnv)) -> Self {
         Self { cfg_env, block_env }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::eth::spec::EthSpec;
+    use alloy_consensus::Header;
+    use alloy_hardforks::ethereum::MAINNET_PARIS_BLOCK;
+    use alloy_primitives::B256;
+
+    impl PartialEq for EthSpec {
+        fn eq(&self, _other: &Self) -> bool {
+            // Intentionally assume equivalent spec is used in this test
+            true
+        }
+    }
+
+    #[test_case::test_case(
+        Header::default(),
+        EvmEnv {
+            cfg_env: CfgEnv::new_with_spec(EthSpec::mainnet()).with_chain_id(2),
+            block_env: BlockEnv {
+                timestamp: U256::ZERO,
+                gas_limit: 0,
+                prevrandao: None,
+                blob_excess_gas_and_price: None,
+                ..BlockEnv::default()
+            },
+        };
+        "Genesis"
+    )]
+    #[test_case::test_case(
+        Header {
+            number: MAINNET_PARIS_BLOCK,
+            mix_hash: B256::with_last_byte(2),
+            ..Header::default()
+        },
+        EvmEnv {
+            cfg_env: CfgEnv::new_with_spec(EthSpec::mainnet()).with_chain_id(2),
+            block_env: BlockEnv {
+                number: U256::from(MAINNET_PARIS_BLOCK),
+                timestamp: U256::ZERO,
+                gas_limit: 0,
+                prevrandao: Some(B256::with_last_byte(2)),
+                blob_excess_gas_and_price: None,
+                ..BlockEnv::default()
+            },
+        };
+        "Paris"
+    )]
+    fn test_evm_env_is_consistent_with_given_block(
+        header: Header,
+        expected_evm_env: EvmEnv<EthSpec>,
+    ) {
+        let chain_id = 2;
+        let spec = EthSpec::mainnet();
+        let blob_params = None;
+        let actual_evm_env = EvmEnv::for_block(&header, chain_id, spec, blob_params);
+
+        assert_eq!(actual_evm_env, expected_evm_env);
     }
 }
