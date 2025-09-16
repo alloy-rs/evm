@@ -66,7 +66,7 @@ pub fn from_account_with_tx_index(
         account_changes.storage_changes.push(SlotChanges { slot: slot.into(), changes });
     }
 
-    // False if zero value transfer
+    // Records if only post_balance != pre_balance
     let (pre_balance, post_balance) = account.balance_change;
     if pre_balance != post_balance {
         account_changes
