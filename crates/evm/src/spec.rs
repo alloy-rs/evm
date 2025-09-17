@@ -1,83 +1,75 @@
+//! Maps the latest active hardfork to a [`SpecId`].
+//!
+//! The latest active hardfork is determined based on identifying block header attributes. There are
+//! several methods to use:
+//! * [`for_header()`] to create [`SpecId`] based on a [`BlockHeader`].
+//! * [`at_timestamp()`] to create [`SpecId`] based on a [`BlockTimestamp`] if possible.
+//! * [`at_height()`] to create [`SpecId`] based on a [`BlockNumber`] if possible.
+//! * [`at()`] to create [`SpecId`] based on all possible block identifiers used for hardfork
+//!   activation.
+
 use alloy_consensus::BlockHeader;
 use alloy_hardforks::EthereumHardforks;
 use alloy_primitives::{BlockNumber, BlockTimestamp};
 use revm::primitives::hardfork::SpecId;
 
-/// Map the latest active hardfork to a [`SpecId`].
-///
-/// The latest active hardfork is determined based on identifying block header attributes. There are
-/// several methods to use:
-/// * [`spec_for_header()`] to create [`SpecId`] based on a [`BlockHeader`].
-/// * [`spec_at_timestamp()`] to create [`SpecId`] based on a [`BlockTimestamp`] if possible.
-/// * [`spec_at_height()`] to create [`SpecId`] based on a [`BlockNumber`] if possible.
-/// * [`spec_at()`] to create [`SpecId`] based on all possible block identifiers used for hardfork
-///   activation.
-///
-/// It is not intended for this trait to be implemented manually. Instead, any [`EthereumHardforks`]
-/// gets `SpecMap` implementation automatically thanks to a blanket implementation.
-///
-/// [`spec_for_header()`]: Self::spec_for_header
-/// [`spec_at_timestamp()`]: Self::spec_at_timestamp
-/// [`spec_at_height()`]: Self::spec_at_height
-/// [`spec_at()`]: Self::spec_at
-pub trait SpecMap {
-    /// Map the latest active hardfork for `header` to a [`SpecId`].
-    fn spec_for_header(&self, header: &impl BlockHeader) -> SpecId {
-        self.spec_at(header.timestamp(), header.number())
-    }
-
-    /// Map the latest active hardfork at `timestamp` to a [`SpecId`].
-    fn spec_at_timestamp(&self, timestamp: BlockTimestamp) -> Option<SpecId>;
-
-    /// Map the latest active hardfork at `height` to a [`SpecId`].
-    fn spec_at_height(&self, height: BlockNumber) -> Option<SpecId>;
-
-    /// Map the latest active hardfork at `timestamp` or `height` to a [`SpecId`].
-    fn spec_at(&self, timestamp: BlockTimestamp, height: BlockNumber) -> SpecId {
-        self.spec_at_timestamp(timestamp)
-            .or_else(|| self.spec_at_height(height))
-            .unwrap_or(SpecId::FRONTIER)
-    }
+/// Map the latest active hardfork for `header` to a [`SpecId`].
+pub fn for_header(chain_spec: &impl EthereumHardforks, header: &impl BlockHeader) -> SpecId {
+    at(chain_spec, header.timestamp(), header.number())
 }
 
-impl<C: EthereumHardforks> SpecMap for C {
-    fn spec_at_timestamp(&self, timestamp: BlockTimestamp) -> Option<SpecId> {
-        Some(if self.is_osaka_active_at_timestamp(timestamp) {
-            SpecId::OSAKA
-        } else if self.is_prague_active_at_timestamp(timestamp) {
-            SpecId::PRAGUE
-        } else if self.is_cancun_active_at_timestamp(timestamp) {
-            SpecId::CANCUN
-        } else if self.is_shanghai_active_at_timestamp(timestamp) {
-            SpecId::SHANGHAI
-        } else {
-            return None;
-        })
-    }
+/// Map the latest active hardfork at `timestamp` to a [`SpecId`].
+pub fn at_timestamp(
+    chain_spec: &impl EthereumHardforks,
+    timestamp: BlockTimestamp,
+) -> Option<SpecId> {
+    Some(if chain_spec.is_osaka_active_at_timestamp(timestamp) {
+        SpecId::OSAKA
+    } else if chain_spec.is_prague_active_at_timestamp(timestamp) {
+        SpecId::PRAGUE
+    } else if chain_spec.is_cancun_active_at_timestamp(timestamp) {
+        SpecId::CANCUN
+    } else if chain_spec.is_shanghai_active_at_timestamp(timestamp) {
+        SpecId::SHANGHAI
+    } else {
+        return None;
+    })
+}
 
-    fn spec_at_height(&self, height: BlockNumber) -> Option<SpecId> {
-        Some(if self.is_paris_active_at_block(height) {
-            SpecId::MERGE
-        } else if self.is_london_active_at_block(height) {
-            SpecId::LONDON
-        } else if self.is_berlin_active_at_block(height) {
-            SpecId::BERLIN
-        } else if self.is_istanbul_active_at_block(height) {
-            SpecId::ISTANBUL
-        } else if self.is_petersburg_active_at_block(height) {
-            SpecId::PETERSBURG
-        } else if self.is_byzantium_active_at_block(height) {
-            SpecId::BYZANTIUM
-        } else if self.is_spurious_dragon_active_at_block(height) {
-            SpecId::SPURIOUS_DRAGON
-        } else if self.is_tangerine_whistle_active_at_block(height) {
-            SpecId::TANGERINE
-        } else if self.is_homestead_active_at_block(height) {
-            SpecId::HOMESTEAD
-        } else {
-            return None;
-        })
-    }
+/// Map the latest active hardfork at `height` to a [`SpecId`].
+pub fn at_height(chain_spec: &impl EthereumHardforks, height: BlockNumber) -> Option<SpecId> {
+    Some(if chain_spec.is_paris_active_at_block(height) {
+        SpecId::MERGE
+    } else if chain_spec.is_london_active_at_block(height) {
+        SpecId::LONDON
+    } else if chain_spec.is_berlin_active_at_block(height) {
+        SpecId::BERLIN
+    } else if chain_spec.is_istanbul_active_at_block(height) {
+        SpecId::ISTANBUL
+    } else if chain_spec.is_petersburg_active_at_block(height) {
+        SpecId::PETERSBURG
+    } else if chain_spec.is_byzantium_active_at_block(height) {
+        SpecId::BYZANTIUM
+    } else if chain_spec.is_spurious_dragon_active_at_block(height) {
+        SpecId::SPURIOUS_DRAGON
+    } else if chain_spec.is_tangerine_whistle_active_at_block(height) {
+        SpecId::TANGERINE
+    } else if chain_spec.is_homestead_active_at_block(height) {
+        SpecId::HOMESTEAD
+    } else {
+        return None;
+    })
+}
+
+/// Map the latest active hardfork at `timestamp` or `height` to a [`SpecId`].
+pub fn at(
+    chain_spec: &impl EthereumHardforks,
+    timestamp: BlockTimestamp,
+    height: BlockNumber,
+) -> SpecId {
+    at_timestamp(chain_spec, timestamp)
+        .or_else(|| at_height(chain_spec, height))
+        .unwrap_or(SpecId::FRONTIER)
 }
 
 #[cfg(test)]
@@ -184,7 +176,7 @@ mod tests {
     #[test_case::test_case(FakeHardfork::frontier(), SpecId::FRONTIER; "Frontier")]
     fn test_spec_maps_hardfork_successfully(fork: impl EthereumHardforks, expected_spec: SpecId) {
         let header = Header::default();
-        let actual_spec = fork.spec_for_header(&header);
+        let actual_spec = for_header(&fork, &header);
 
         assert_eq!(actual_spec, expected_spec);
     }
@@ -209,7 +201,7 @@ mod tests {
     ) {
         let fork = EthSpec::mainnet();
         let header = Header { timestamp, number, ..Default::default() };
-        let actual_spec = fork.spec_for_header(&header);
+        let actual_spec = for_header(&fork, &header);
 
         assert_eq!(actual_spec, expected_spec);
     }
