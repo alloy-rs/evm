@@ -7,16 +7,13 @@ no_std_packages=(
 )
 
 for package in "${no_std_packages[@]}"; do
-  cmd="cargo +stable build -p $package --target riscv32imac-unknown-none-elf --no-default-features"
   if [ -n "$CI" ]; then
-    echo "::group::$cmd"
+    echo "::group::cargo +stable build -p $package --target riscv32imac-unknown-none-elf --no-default-features"
   else
-    printf "\n%s:\n  %s\n" "$package" "$cmd"
+    printf "\n%s:\n  %s\n" "$package" "cargo +stable build -p $package --target riscv32imac-unknown-none-elf --no-default-features"
   fi
 
-  $cmd
+  cargo +stable build -p "$package" --target riscv32imac-unknown-none-elf --no-default-features
 
-  if [ -n "$CI" ]; then
-    echo "::endgroup::"
-  fi
+  [ -n "$CI" ] && echo "::endgroup::"
 done
