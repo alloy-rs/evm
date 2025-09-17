@@ -28,14 +28,18 @@ op-revm.workspace = true
 
 auto_impl.workspace = true
 
+[dev-dependencies]
+alloy-hardforks.workspace = true
+test-case.workspace = true
+
 [features]
 default = ["std"]
 std = [
-	"alloy-primitives/std",
-	"revm/std",
-	"alloy-evm/std",
-	"op-revm/std",
-	"alloy-consensus/std",
-	"alloy-eips/std",
-	"op-alloy-consensus/std"
+    "alloy-primitives/std",
+    "revm/std",
+    "alloy-evm/std",
+    "op-revm/std",
+    "alloy-consensus/std",
+    "alloy-eips/std",
+    "op-alloy-consensus/std"
 ]

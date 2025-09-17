@@ -27,12 +27,13 @@ pub mod call;
 #[cfg(feature = "overrides")]
 pub mod overrides;
 pub mod precompiles;
-pub mod spec;
 pub mod tracing;
 
 mod either;
+mod spec;
 
 // re-export revm and op-revm
 #[cfg(feature = "op")]
 pub use op_revm;
 pub use revm;
+pub use spec::*;
