@@ -52,7 +52,7 @@ alloy-rlp = { version = "0.3.12", default-features = false }
 
 # op-alloy
 alloy-op-hardforks = { version = "0.3.1" }
-op-alloy-consensus = { version = "0.19.1", default-features = false }
+op-alloy-consensus = { version = "0.20.0", default-features = false }
 
 
 # revm
