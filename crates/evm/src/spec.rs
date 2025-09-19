@@ -3,7 +3,7 @@ use alloy_hardforks::EthereumHardforks;
 use alloy_primitives::{BlockNumber, BlockTimestamp};
 use revm::primitives::hardfork::SpecId;
 
-/// Map the latest active hardfork at the given header to a [`SpecId`].
+/// Maps the latest active hardfork at the given header to a [`SpecId`].
 pub fn spec<C, H>(chain_spec: &C, header: &H) -> SpecId
 where
     C: EthereumHardforks,
@@ -12,7 +12,7 @@ where
     spec_by_timestamp_and_block_number(chain_spec, header.timestamp(), header.number())
 }
 
-/// Map the latest active hardfork at the given timestamp or block number to a [`SpecId`].
+/// Maps the latest active hardfork at the given timestamp or block number to a [`SpecId`].
 pub fn spec_by_timestamp_and_block_number<C>(
     chain_spec: &C,
     timestamp: BlockTimestamp,
