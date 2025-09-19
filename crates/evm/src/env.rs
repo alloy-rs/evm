@@ -11,7 +11,7 @@ use revm::{
 };
 
 /// Container type that holds both the configuration and block environment for EVM execution.
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct EvmEnv<Spec = SpecId> {
     /// The configuration environment with handler settings
     pub cfg_env: CfgEnv<Spec>,
@@ -19,45 +19,59 @@ pub struct EvmEnv<Spec = SpecId> {
     pub block_env: BlockEnv,
 }
 
-impl<Spec> EvmEnv<Spec> {
-    /// Create a new `EvmEnv` from its components.
-    ///
-    /// # Arguments
-    ///
-    /// * `cfg_env_with_handler_cfg` - The configuration environment with handler settings
-    /// * `block` - The block environment containing block-specific data
-    pub const fn new(cfg_env: CfgEnv<Spec>, block_env: BlockEnv) -> Self {
-        Self { cfg_env, block_env }
-    }
-
+impl EvmEnv<SpecId> {
     /// Create a new `EvmEnv` from a block `header`, `chain_id`, chain `spec` and optional
     /// `blob_params`.
     ///
     /// # Arguments
     ///
     /// * `header` - The block to make the env out of.
+    /// * `chain_spec` - The chain hardfork description, must implement [`EthereumHardforks`].
     /// * `chain_id` - The chain identifier.
-    /// * `spec` - The chain hardfork description, must implement [`EthereumHardforks`].
     /// * `blob_params` - Optional parameters that sets limits on gas and count for blobs.
-    pub fn for_block(
-        header: &impl BlockHeader,
+    pub fn for_eth_block(
+        header: impl BlockHeader,
+        chain_spec: impl EthereumHardforks,
         chain_id: ChainId,
-        spec: Spec,
         blob_params: Option<BlobParams>,
+    ) -> Self {
+        Self::for_block(header, chain_spec, chain_id, blob_params, crate::spec)
+    }
+}
+
+impl<Spec> EvmEnv<Spec> {
+    /// Create a new `EvmEnv` from a block `header`, `chain_id`, chain `spec` and optional
+    /// `blob_params`.
+    ///
+    /// # Arguments
+    ///
+    /// * `header` - The block to make the env out of.
+    /// * `chain_spec` - The chain hardfork description, must implement [`EthereumHardforks`].
+    /// * `chain_id` - The chain identifier.
+    /// * `blob_params` - Optional parameters that sets limits on gas and count for blobs.
+    /// * `spec_factory` - A function that derives `Spec` from `chain_spec` and `header`.
+    pub fn for_block<H, C>(
+        header: H,
+        chain_spec: C,
+        chain_id: ChainId,
+        blob_params: Option<BlobParams>,
+        spec_factory: impl FnOnce(&C, &H) -> Spec,
     ) -> Self
     where
-        Spec: EthereumHardforks,
+        C: EthereumHardforks,
+        H: BlockHeader,
     {
         /// Maximum transaction gas limit as defined by [EIP-7825](https://eips.ethereum.org/EIPS/eip-7825) activated in `Osaka` hardfork.
         const MAX_TX_GAS_LIMIT_OSAKA: u64 = 2u64.pow(24);
 
+        let spec = spec_factory(&chain_spec, &header);
         let mut cfg_env = CfgEnv::new_with_spec(spec).with_chain_id(chain_id);
 
         if let Some(blob_params) = &blob_params {
             cfg_env.set_max_blobs_per_tx(blob_params.max_blobs_per_tx);
         }
 
-        if cfg_env.spec.is_osaka_active_at_timestamp(header.timestamp()) {
+        if chain_spec.is_osaka_active_at_timestamp(header.timestamp()) {
             cfg_env.tx_gas_limit_cap = Some(MAX_TX_GAS_LIMIT_OSAKA);
         }
 
@@ -69,7 +83,7 @@ impl<Spec> EvmEnv<Spec> {
                 BlobExcessGasAndPrice { excess_blob_gas, blob_gasprice }
             });
 
-        let is_merge_active = cfg_env.spec.is_paris_active_at_block(header.number());
+        let is_merge_active = chain_spec.is_paris_active_at_block(header.number());
 
         let block_env = BlockEnv {
             number: U256::from(header.number()),
@@ -82,6 +96,18 @@ impl<Spec> EvmEnv<Spec> {
             blob_excess_gas_and_price,
         };
 
+        Self { cfg_env, block_env }
+    }
+}
+
+impl<Spec> EvmEnv<Spec> {
+    /// Create a new `EvmEnv` from its components.
+    ///
+    /// # Arguments
+    ///
+    /// * `cfg_env_with_handler_cfg` - The configuration environment with handler settings
+    /// * `block` - The block environment containing block-specific data
+    pub const fn new(cfg_env: CfgEnv<Spec>, block_env: BlockEnv) -> Self {
         Self { cfg_env, block_env }
     }
 
@@ -195,17 +221,10 @@ mod tests {
     use alloy_hardforks::ethereum::MAINNET_PARIS_BLOCK;
     use alloy_primitives::B256;
 
-    impl PartialEq for EthSpec {
-        fn eq(&self, _other: &Self) -> bool {
-            // Intentionally assume equivalent spec is used in this test
-            true
-        }
-    }
-
     #[test_case::test_case(
         Header::default(),
         EvmEnv {
-            cfg_env: CfgEnv::new_with_spec(EthSpec::mainnet()).with_chain_id(2),
+            cfg_env: CfgEnv::new_with_spec(SpecId::FRONTIER).with_chain_id(2),
             block_env: BlockEnv {
                 timestamp: U256::ZERO,
                 gas_limit: 0,
@@ -214,7 +233,7 @@ mod tests {
                 ..BlockEnv::default()
             },
         };
-        "Genesis"
+        "Frontier"
     )]
     #[test_case::test_case(
         Header {
@@ -223,7 +242,7 @@ mod tests {
             ..Header::default()
         },
         EvmEnv {
-            cfg_env: CfgEnv::new_with_spec(EthSpec::mainnet()).with_chain_id(2),
+            cfg_env: CfgEnv::new_with_spec(SpecId::MERGE).with_chain_id(2),
             block_env: BlockEnv {
                 number: U256::from(MAINNET_PARIS_BLOCK),
                 timestamp: U256::ZERO,
@@ -237,12 +256,12 @@ mod tests {
     )]
     fn test_evm_env_is_consistent_with_given_block(
         header: Header,
-        expected_evm_env: EvmEnv<EthSpec>,
+        expected_evm_env: EvmEnv<SpecId>,
     ) {
         let chain_id = 2;
         let spec = EthSpec::mainnet();
         let blob_params = None;
-        let actual_evm_env = EvmEnv::for_block(&header, chain_id, spec, blob_params);
+        let actual_evm_env = EvmEnv::for_eth_block(header, spec, chain_id, blob_params);
 
         assert_eq!(actual_evm_env, expected_evm_env);
     }

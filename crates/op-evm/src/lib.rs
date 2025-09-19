@@ -31,7 +31,10 @@ use revm::{
 pub mod block;
 pub use block::{OpBlockExecutionCtx, OpBlockExecutor, OpBlockExecutorFactory};
 
+mod env;
 mod spec;
+
+pub use env::*;
 pub use spec::*;
 
 /// OP EVM implementation.
