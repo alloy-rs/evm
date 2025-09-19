@@ -264,11 +264,11 @@ pub struct OpBlockExecutorFactory<
     EvmFactory = OpEvmFactory,
 > {
     /// Receipt builder.
-    pub receipt_builder: R,
+    receipt_builder: R,
     /// Chain specification.
-    pub spec: Spec,
+    spec: Spec,
     /// EVM factory.
-    pub evm_factory: EvmFactory,
+    evm_factory: EvmFactory,
 }
 
 impl<R, Spec, EvmFactory> OpBlockExecutorFactory<R, Spec, EvmFactory> {
