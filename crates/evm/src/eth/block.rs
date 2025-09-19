@@ -10,7 +10,7 @@ use crate::{
     block::{
         state_changes::{balance_increment_state, post_block_balance_increments},
         BlockExecutionError, BlockExecutionResult, BlockExecutor, BlockExecutorFactory,
-        BlockExecutorFor, BlockValidationError, CommitChanges, ExecutableTx, OnStateHook,
+        BlockExecutorFor, BlockValidationError, ExecutableTx, OnStateHook,
         StateChangePostBlockSource, StateChangeSource, SystemCaller,
     },
     Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded,
@@ -33,8 +33,8 @@ use alloy_eips::{
 use alloy_hardforks::EthereumHardfork;
 use alloy_primitives::{Address, Log, B256, U256};
 use revm::{
-    context::result::ExecutionResult, context_interface::result::ResultAndState, database::State,
-    primitives::StorageKey, DatabaseCommit, Inspector,
+    context_interface::result::ResultAndState, database::State, primitives::StorageKey,
+    DatabaseCommit, Inspector,
 };
 
 /// Context for Ethereum block execution.
@@ -226,11 +226,10 @@ where
         Ok(())
     }
 
-    fn execute_transaction_with_commit_condition(
+    fn execute_transaction_without_commit(
         &mut self,
         tx: impl ExecutableTx<Self>,
-        f: impl FnOnce(&ExecutionResult<<Self::Evm as Evm>::HaltReason>) -> CommitChanges,
-    ) -> Result<Option<u64>, BlockExecutionError> {
+    ) -> Result<ResultAndState<<Self::Evm as Evm>::HaltReason>, BlockExecutionError> {
         // The sum of the transaction's gas limit, Tg, and the gas utilized in this block prior,
         // must be no greater than the block's gasLimit.
         let block_available_gas = self.evm.block().gas_limit - self.gas_used;
@@ -243,16 +242,20 @@ where
             .into());
         }
 
-        // Execute transaction.
-        let ResultAndState { result, mut state } = self
-            .evm
-            .transact(&tx)
-            .map_err(|err| BlockExecutionError::evm(err, tx.tx().trie_hash()))?;
+        // Execute transaction and return the result
+        self.evm.transact(&tx).map_err(|err| {
+            let hash = tx.tx().trie_hash();
+            BlockExecutionError::evm(err, hash)
+        })
+    }
 
-        if !f(&result).should_commit() {
-            return Ok(None);
-        }
-        // updated
+    fn commit_transaction(
+        &mut self,
+        output: ResultAndState<<Self::Evm as Evm>::HaltReason>,
+        tx: impl ExecutableTx<Self>,
+    ) -> Result<u64, BlockExecutionError> {
+        let ResultAndState { result, mut state } = output;
+
         self.system_caller.on_state(StateChangeSource::Transaction(self.receipts.len()), &state);
 
         let gas_used = result.gas_used();
@@ -347,7 +350,8 @@ where
             // Commit the state changes.
             self.evm.db_mut().commit(state.clone());
         }
-        Ok(Some(gas_used))
+
+        Ok(gas_used)
     }
 
     fn finish(

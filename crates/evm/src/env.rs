@@ -47,7 +47,7 @@ impl<Spec> EvmEnv<Spec> {
     }
 
     /// Overrides the configured block number
-    pub fn with_block_number(mut self, number: U256) -> Self {
+    pub const fn with_block_number(mut self, number: U256) -> Self {
         self.block_env.number = number;
         self
     }
@@ -56,7 +56,7 @@ impl<Spec> EvmEnv<Spec> {
     /// `Some(number)`.
     ///
     /// This is intended for block overrides.
-    pub fn with_block_number_opt(mut self, number: Option<U256>) -> Self {
+    pub const fn with_block_number_opt(mut self, number: Option<U256>) -> Self {
         if let Some(number) = number {
             self.block_env.number = number;
         }
@@ -64,7 +64,7 @@ impl<Spec> EvmEnv<Spec> {
     }
 
     /// Sets the block number if provided.
-    pub fn set_block_number_opt(&mut self, number: Option<U256>) -> &mut Self {
+    pub const fn set_block_number_opt(&mut self, number: Option<U256>) -> &mut Self {
         if let Some(number) = number {
             self.block_env.number = number;
         }
@@ -72,7 +72,7 @@ impl<Spec> EvmEnv<Spec> {
     }
 
     /// Overrides the configured block timestamp.
-    pub fn with_timestamp(mut self, timestamp: U256) -> Self {
+    pub const fn with_timestamp(mut self, timestamp: U256) -> Self {
         self.block_env.timestamp = timestamp;
         self
     }
@@ -81,7 +81,7 @@ impl<Spec> EvmEnv<Spec> {
     /// `Some(timestamp)`.
     ///
     /// This is intended for block overrides.
-    pub fn with_timestamp_opt(mut self, timestamp: Option<U256>) -> Self {
+    pub const fn with_timestamp_opt(mut self, timestamp: Option<U256>) -> Self {
         if let Some(timestamp) = timestamp {
             self.block_env.timestamp = timestamp;
         }
@@ -89,7 +89,7 @@ impl<Spec> EvmEnv<Spec> {
     }
 
     /// Sets the block timestamp if provided.
-    pub fn set_timestamp_opt(&mut self, timestamp: Option<U256>) -> &mut Self {
+    pub const fn set_timestamp_opt(&mut self, timestamp: Option<U256>) -> &mut Self {
         if let Some(timestamp) = timestamp {
             self.block_env.timestamp = timestamp;
         }
@@ -97,7 +97,7 @@ impl<Spec> EvmEnv<Spec> {
     }
 
     /// Overrides the configured block base fee.
-    pub fn with_base_fee(mut self, base_fee: u64) -> Self {
+    pub const fn with_base_fee(mut self, base_fee: u64) -> Self {
         self.block_env.basefee = base_fee;
         self
     }
@@ -106,7 +106,7 @@ impl<Spec> EvmEnv<Spec> {
     /// `Some(base_fee)`.
     ///
     /// This is intended for block overrides.
-    pub fn with_base_fee_opt(mut self, base_fee: Option<u64>) -> Self {
+    pub const fn with_base_fee_opt(mut self, base_fee: Option<u64>) -> Self {
         if let Some(base_fee) = base_fee {
             self.block_env.basefee = base_fee;
         }
@@ -114,7 +114,7 @@ impl<Spec> EvmEnv<Spec> {
     }
 
     /// Sets the block base fee if provided.
-    pub fn set_base_fee_opt(&mut self, base_fee: Option<u64>) -> &mut Self {
+    pub const fn set_base_fee_opt(&mut self, base_fee: Option<u64>) -> &mut Self {
         if let Some(base_fee) = base_fee {
             self.block_env.basefee = base_fee;
         }

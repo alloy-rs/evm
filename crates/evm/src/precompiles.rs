@@ -535,32 +535,32 @@ pub struct PrecompileInput<'a> {
 
 impl<'a> PrecompileInput<'a> {
     /// Returns the calldata of the call.
-    pub fn data(&self) -> &[u8] {
+    pub const fn data(&self) -> &[u8] {
         self.data
     }
 
     /// Returns the caller address of the call.
-    pub fn caller(&self) -> &Address {
+    pub const fn caller(&self) -> &Address {
         &self.caller
     }
 
     /// Returns the gas limit of the call.
-    pub fn gas(&self) -> u64 {
+    pub const fn gas(&self) -> u64 {
         self.gas
     }
 
     /// Returns the value of the call.
-    pub fn value(&self) -> &U256 {
+    pub const fn value(&self) -> &U256 {
         &self.value
     }
 
     /// Returns the target address of the call.
-    pub fn target_address(&self) -> &Address {
+    pub const fn target_address(&self) -> &Address {
         &self.target_address
     }
 
     /// Returns the bytecode address of the call.
-    pub fn bytecode_address(&self) -> &Address {
+    pub const fn bytecode_address(&self) -> &Address {
         &self.bytecode_address
     }
 
@@ -571,12 +571,12 @@ impl<'a> PrecompileInput<'a> {
     }
 
     /// Returns the [`EvmInternals`].
-    pub fn internals(&self) -> &EvmInternals<'_> {
+    pub const fn internals(&self) -> &EvmInternals<'_> {
         &self.internals
     }
 
     /// Returns a mutable reference to the [`EvmInternals`].
-    pub fn internals_mut(&mut self) -> &mut EvmInternals<'a> {
+    pub const fn internals_mut(&mut self) -> &mut EvmInternals<'a> {
         &mut self.internals
     }
 }

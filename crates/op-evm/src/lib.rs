@@ -31,6 +31,9 @@ use revm::{
 pub mod block;
 pub use block::{OpBlockExecutionCtx, OpBlockExecutor, OpBlockExecutorFactory};
 
+mod spec;
+pub use spec::*;
+
 /// OP EVM implementation.
 ///
 /// This is a wrapper type around the `revm` evm with optional [`Inspector`] (tracing)
@@ -49,7 +52,7 @@ impl<DB: Database, I, P> OpEvm<DB, I, P> {
     }
 
     /// Provides a mutable reference to the EVM context.
-    pub fn ctx_mut(&mut self) -> &mut OpContext<DB> {
+    pub const fn ctx_mut(&mut self) -> &mut OpContext<DB> {
         &mut self.inner.0.ctx
     }
 }

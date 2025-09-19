@@ -1,7 +1,8 @@
 //! Abstraction over EVM.
 
 use crate::{tracing::TxTracer, EvmEnv, EvmError, IntoTxEnv};
-use alloy_primitives::{Address, Bytes};
+use alloy_consensus::transaction::TxHashRef;
+use alloy_primitives::{Address, Bytes, B256};
 use core::{error::Error, fmt::Debug, hash::Hash};
 use revm::{
     context::{result::ExecutionResult, BlockEnv},
@@ -190,6 +191,64 @@ pub trait Evm {
     /// Provides mutable references to the database, inspector and precompiles.
     fn components_mut(&mut self) -> (&mut Self::DB, &mut Self::Inspector, &mut Self::Precompiles);
 }
+
+/// An extension trait for [`Evm`] providing additional functionality.
+pub trait EvmExt: Evm {
+    /// Replays all the transactions until the target transaction is found.
+    ///
+    /// This stops before transacting the target hash and commits all previous changes.
+    ///
+    /// Returns the index of the target transaction in the iterator.
+    fn replay_transactions_until<I, T>(
+        &mut self,
+        transactions: I,
+        target_tx_hash: B256,
+    ) -> Result<usize, Self::Error>
+    where
+        Self::DB: DatabaseCommit,
+        I: IntoIterator<Item = T>,
+        T: IntoTxEnv<Self::Tx> + TxHashRef,
+    {
+        let mut index = 0;
+        for tx in transactions {
+            if *tx.tx_hash() == target_tx_hash {
+                // reached the target transaction
+                break;
+            }
+            self.transact_commit(tx)?;
+            index += 1;
+        }
+        Ok(index)
+    }
+
+    /// Replays all the previous transactions and returns the [`ResultAndState`] of the target
+    /// transaction.
+    ///
+    /// Returns `None` if the target transaction was not found.
+    fn replay_transaction<I, T>(
+        &mut self,
+        transactions: I,
+        target_tx_hash: B256,
+    ) -> Result<Option<ResultAndState<Self::HaltReason>>, Self::Error>
+    where
+        Self::DB: DatabaseCommit,
+        I: IntoIterator<Item = T>,
+        T: IntoTxEnv<Self::Tx> + TxHashRef,
+    {
+        for tx in transactions {
+            if *tx.tx_hash() == target_tx_hash {
+                // reached the target transaction
+                return self.transact(tx).map(Some);
+            } else {
+                self.transact_commit(tx)?;
+            }
+        }
+        Ok(None)
+    }
+}
+
+/// Automatic implementation of [`EvmExt`] for all types that implement [`Evm`].
+impl<T: Evm> EvmExt for T {}
 
 /// A type responsible for creating instances of an ethereum virtual machine given a certain input.
 pub trait EvmFactory {

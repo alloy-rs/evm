@@ -30,8 +30,10 @@ pub mod precompiles;
 pub mod tracing;
 
 mod either;
+mod spec;
 
 // re-export revm and op-revm
 #[cfg(feature = "op")]
 pub use op_revm;
 pub use revm;
+pub use spec::*;

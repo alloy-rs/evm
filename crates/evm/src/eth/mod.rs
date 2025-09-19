@@ -42,7 +42,7 @@ pub struct EthEvmBuilder<DB: Database, I = NoOpInspector> {
 
 impl<DB: Database> EthEvmBuilder<DB, NoOpInspector> {
     /// Creates a builder from the provided `EvmEnv` and database.
-    pub fn new(db: DB, env: EvmEnv) -> Self {
+    pub const fn new(db: DB, env: EvmEnv) -> Self {
         Self {
             db,
             block_env: env.block_env,
@@ -73,13 +73,13 @@ impl<DB: Database, I> EthEvmBuilder<DB, I> {
     }
 
     /// Sets whether to invoke the inspector during transaction execution.
-    pub fn set_inspect(mut self, inspect: bool) -> Self {
+    pub const fn set_inspect(mut self, inspect: bool) -> Self {
         self.inspect = inspect;
         self
     }
 
     /// Enables invoking the inspector during transaction execution.
-    pub fn inspect(self) -> Self {
+    pub const fn inspect(self) -> Self {
         self.set_inspect(true)
     }
 
@@ -167,7 +167,7 @@ impl<DB: Database, I, PRECOMPILE> EthEvm<DB, I, PRECOMPILE> {
     }
 
     /// Provides a mutable reference to the EVM context.
-    pub fn ctx_mut(&mut self) -> &mut EthEvmContext<DB> {
+    pub const fn ctx_mut(&mut self) -> &mut EthEvmContext<DB> {
         &mut self.inner.ctx
     }
 }
