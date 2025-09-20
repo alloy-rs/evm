@@ -9,6 +9,8 @@
 
 extern crate alloc;
 
+pub use alloy_evm::op::{spec, spec_by_timestamp_after_bedrock};
+
 use alloy_evm::{precompiles::PrecompilesMap, Database, Evm, EvmEnv, EvmFactory};
 use alloy_primitives::{Address, Bytes};
 use core::{
@@ -30,9 +32,6 @@ use revm::{
 
 pub mod block;
 pub use block::{OpBlockExecutionCtx, OpBlockExecutor, OpBlockExecutorFactory};
-
-mod spec;
-pub use spec::*;
 
 /// OP EVM implementation.
 ///
