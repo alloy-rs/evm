@@ -19,27 +19,17 @@ pub struct EvmEnv<Spec = SpecId> {
     pub block_env: BlockEnv,
 }
 
-impl EvmEnv<SpecId> {
-    /// Create a new `EvmEnv` from a block `header`, `chain_id`, chain `spec` and optional
-    /// `blob_params`.
+impl<Spec> EvmEnv<Spec> {
+    /// Create a new `EvmEnv` from its components.
     ///
     /// # Arguments
     ///
-    /// * `header` - The block to make the env out of.
-    /// * `chain_spec` - The chain hardfork description, must implement [`EthereumHardforks`].
-    /// * `chain_id` - The chain identifier.
-    /// * `blob_params` - Optional parameters that sets limits on gas and count for blobs.
-    pub fn for_eth_block(
-        header: impl BlockHeader,
-        chain_spec: impl EthereumHardforks,
-        chain_id: ChainId,
-        blob_params: Option<BlobParams>,
-    ) -> Self {
-        Self::for_block(header, chain_spec, chain_id, blob_params, crate::spec)
+    /// * `cfg_env_with_handler_cfg` - The configuration environment with handler settings
+    /// * `block` - The block environment containing block-specific data
+    pub const fn new(cfg_env: CfgEnv<Spec>, block_env: BlockEnv) -> Self {
+        Self { cfg_env, block_env }
     }
-}
 
-impl<Spec> EvmEnv<Spec> {
     /// Create a new `EvmEnv` from a block `header`, `chain_id`, chain `spec` and optional
     /// `blob_params`.
     ///
@@ -50,7 +40,7 @@ impl<Spec> EvmEnv<Spec> {
     /// * `chain_id` - The chain identifier.
     /// * `blob_params` - Optional parameters that sets limits on gas and count for blobs.
     /// * `spec_factory` - A function that derives `Spec` from `chain_spec` and `header`.
-    pub fn for_block<H, C>(
+    pub(crate) fn for_block<H, C>(
         header: H,
         chain_spec: C,
         chain_id: ChainId,
@@ -96,19 +86,7 @@ impl<Spec> EvmEnv<Spec> {
             blob_excess_gas_and_price,
         };
 
-        Self { cfg_env, block_env }
-    }
-}
-
-impl<Spec> EvmEnv<Spec> {
-    /// Create a new `EvmEnv` from its components.
-    ///
-    /// # Arguments
-    ///
-    /// * `cfg_env_with_handler_cfg` - The configuration environment with handler settings
-    /// * `block` - The block environment containing block-specific data
-    pub const fn new(cfg_env: CfgEnv<Spec>, block_env: BlockEnv) -> Self {
-        Self { cfg_env, block_env }
+        Self::new(cfg_env, block_env)
     }
 
     /// Returns a reference to the block environment.

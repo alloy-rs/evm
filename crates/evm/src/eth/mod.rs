@@ -1,5 +1,7 @@
 //! Ethereum EVM implementation.
 
+pub use spec_id::{spec, spec_by_timestamp_and_block_number};
+
 use crate::{env::EvmEnv, evm::EvmFactory, precompiles::PrecompilesMap, Database, Evm};
 use alloy_primitives::{Address, Bytes};
 use core::{
@@ -24,6 +26,9 @@ pub mod dao_fork;
 pub mod eip6110;
 pub mod receipt_builder;
 pub mod spec;
+
+mod env;
+mod spec_id;
 
 /// The Ethereum EVM context type.
 pub type EthEvmContext<DB> = Context<BlockEnv, TxEnv, CfgEnv, DB>;
