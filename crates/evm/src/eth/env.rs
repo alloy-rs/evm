@@ -1,6 +1,6 @@
 use crate::EvmEnv;
 use alloy_consensus::BlockHeader;
-use alloy_eips::eip7840::BlobParams;
+use alloy_eips::{eip7825::MAX_TX_GAS_LIMIT_OSAKA, eip7840::BlobParams};
 use alloy_hardforks::EthereumHardforks;
 use alloy_primitives::{ChainId, U256};
 use revm::{
@@ -25,9 +25,6 @@ impl EvmEnv<SpecId> {
         chain_id: ChainId,
         blob_params: Option<BlobParams>,
     ) -> Self {
-        /// Maximum transaction gas limit as defined by [EIP-7825](https://eips.ethereum.org/EIPS/eip-7825) activated in `Osaka` hardfork.
-        const MAX_TX_GAS_LIMIT_OSAKA: u64 = 2u64.pow(24);
-
         let spec = crate::eth::spec(&chain_spec, &header);
         let mut cfg_env = CfgEnv::new_with_spec(spec).with_chain_id(chain_id);
 
