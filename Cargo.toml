@@ -41,7 +41,7 @@ alloy-op-evm = { version = "0.21.1", path = "crates/op-evm", default-features = 
 # alloy
 alloy-eip2124 = { version = "0.2", default-features = false }
 alloy-chains = { version = "0.2.0", default-features = false }
-alloy-eips = { version = "1.0", default-features = false }
+alloy-eips = { version = "1.0.34", default-features = false }
 alloy-consensus = { version = "1.0.27", default-features = false }
 alloy-primitives = { version = "1.0.0", default-features = false }
 alloy-sol-types = { version = "1.0.0", default-features = false }
