@@ -1,7 +1,8 @@
-use crate::EvmEnv;
+use crate::{eth::EvmEnvInput, EvmEnv};
 use alloy_consensus::BlockHeader;
 use alloy_op_hardforks::OpHardforks;
 use alloy_primitives::{ChainId, U256};
+use alloy_rpc_types_engine::ExecutionPayload;
 use op_revm::OpSpecId;
 use revm::{
     context::{BlockEnv, CfgEnv},
@@ -10,7 +11,7 @@ use revm::{
 };
 
 impl EvmEnv<OpSpecId> {
-    /// Create a new `EvmEnv` with [`OpSpecId`] from a block `header`, `chain_id`, chain `spec` and
+    /// Create a new `EvmEnv` with [`OpSpecId`] from a block `header`, `chain_id`, `chain_spec` and
     /// optional `blob_params`.
     ///
     /// # Arguments
@@ -24,7 +25,28 @@ impl EvmEnv<OpSpecId> {
         chain_spec: impl OpHardforks,
         chain_id: ChainId,
     ) -> Self {
-        let spec = crate::op::spec(&chain_spec, &header);
+        Self::for_op(EvmEnvInput::from_block_header(header), chain_spec, chain_id)
+    }
+
+    /// Create a new `EvmEnv` with [`OpSpecId`] from a `payload`, `chain_id`, `chain_spec` and
+    /// optional `blob_params`.
+    ///
+    /// # Arguments
+    ///
+    /// * `header` - The block to make the env out of.
+    /// * `chain_spec` - The chain hardfork description, must implement [`OpHardforks`].
+    /// * `chain_id` - The chain identifier.
+    /// * `blob_params` - Optional parameters that sets limits on gas and count for blobs.
+    pub fn for_op_payload(
+        payload: ExecutionPayload,
+        chain_spec: impl OpHardforks,
+        chain_id: ChainId,
+    ) -> Self {
+        Self::for_op(EvmEnvInput::from_payload(payload), chain_spec, chain_id)
+    }
+
+    fn for_op(input: EvmEnvInput, chain_spec: impl OpHardforks, chain_id: ChainId) -> Self {
+        let spec = crate::op::spec_by_timestamp_after_bedrock(&chain_spec, input.timestamp);
         let cfg_env = CfgEnv::new().with_chain_id(chain_id).with_spec(spec);
 
         let blob_excess_gas_and_price = spec
@@ -33,21 +55,17 @@ impl EvmEnv<OpSpecId> {
             .then_some(BlobExcessGasAndPrice { excess_blob_gas: 0, blob_gasprice: 1 });
 
         let block_env = BlockEnv {
-            number: U256::from(header.number()),
-            beneficiary: header.beneficiary(),
-            timestamp: U256::from(header.timestamp()),
+            number: U256::from(input.height),
+            beneficiary: input.beneficiary,
+            timestamp: U256::from(input.timestamp),
             difficulty: if spec.into_eth_spec() >= SpecId::MERGE {
                 U256::ZERO
             } else {
-                header.difficulty()
+                input.difficulty
             },
-            prevrandao: if spec.into_eth_spec() >= SpecId::MERGE {
-                header.mix_hash()
-            } else {
-                None
-            },
-            gas_limit: header.gas_limit(),
-            basefee: header.base_fee_per_gas().unwrap_or_default(),
+            prevrandao: if spec.into_eth_spec() >= SpecId::MERGE { input.mix_hash } else { None },
+            gas_limit: input.gas_limit,
+            basefee: input.base_fee_per_gas,
             // EIP-4844 excess blob gas of this block, introduced in Cancun
             blob_excess_gas_and_price,
         };

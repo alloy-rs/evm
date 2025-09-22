@@ -93,19 +93,19 @@ impl EvmEnv<SpecId> {
     }
 }
 
-struct EvmEnvInput {
-    timestamp: BlockTimestamp,
-    height: BlockNumber,
-    beneficiary: Address,
-    mix_hash: Option<B256>,
-    difficulty: U256,
-    gas_limit: u64,
-    excess_blob_gas: Option<u64>,
-    base_fee_per_gas: u64,
+pub(crate) struct EvmEnvInput {
+    pub(crate) timestamp: BlockTimestamp,
+    pub(crate) height: BlockNumber,
+    pub(crate) beneficiary: Address,
+    pub(crate) mix_hash: Option<B256>,
+    pub(crate) difficulty: U256,
+    pub(crate) gas_limit: u64,
+    pub(crate) excess_blob_gas: Option<u64>,
+    pub(crate) base_fee_per_gas: u64,
 }
 
 impl EvmEnvInput {
-    fn from_block_header(header: impl BlockHeader) -> Self {
+    pub(crate) fn from_block_header(header: impl BlockHeader) -> Self {
         Self {
             timestamp: header.timestamp(),
             height: header.number(),
@@ -118,7 +118,7 @@ impl EvmEnvInput {
         }
     }
 
-    fn from_payload(payload: ExecutionPayload) -> Self {
+    pub(crate) fn from_payload(payload: ExecutionPayload) -> Self {
         Self {
             timestamp: payload.timestamp(),
             height: payload.block_number(),

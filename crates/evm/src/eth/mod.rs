@@ -2,6 +2,8 @@
 
 pub use spec_id::{spec, spec_by_timestamp_and_block_number};
 
+pub(crate) use env::EvmEnvInput;
+
 use crate::{env::EvmEnv, evm::EvmFactory, precompiles::PrecompilesMap, Database, Evm};
 use alloy_primitives::{Address, Bytes};
 use core::{
