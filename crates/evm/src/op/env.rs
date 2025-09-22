@@ -56,10 +56,10 @@ impl EvmEnv<OpSpecId> {
     }
 }
 
-#[cfg(feature = "engine")]
+#[cfg(feature = "op-engine")]
 mod payload {
     use super::*;
-    use alloy_rpc_types_engine::ExecutionPayload;
+    use op_alloy_rpc_types_engine::OpExecutionPayload;
 
     impl EvmEnv<OpSpecId> {
         /// Create a new `EvmEnv` with [`OpSpecId`] from a `payload`, `chain_id`, `chain_spec` and
@@ -72,11 +72,26 @@ mod payload {
         /// * `chain_id` - The chain identifier.
         /// * `blob_params` - Optional parameters that sets limits on gas and count for blobs.
         pub fn for_op_payload(
-            payload: ExecutionPayload,
+            payload: OpExecutionPayload,
             chain_spec: impl OpHardforks,
             chain_id: ChainId,
         ) -> Self {
-            Self::for_op(EvmEnvInput::from_payload(payload), chain_spec, chain_id)
+            Self::for_op(EvmEnvInput::from_op_payload(payload), chain_spec, chain_id)
+        }
+    }
+
+    impl EvmEnvInput {
+        pub(crate) fn from_op_payload(payload: OpExecutionPayload) -> Self {
+            Self {
+                timestamp: payload.timestamp(),
+                height: payload.block_number(),
+                beneficiary: payload.as_v1().fee_recipient,
+                mix_hash: Some(payload.as_v1().prev_randao),
+                difficulty: payload.as_v1().prev_randao.into(),
+                gas_limit: payload.as_v1().gas_limit,
+                excess_blob_gas: payload.as_v3().map(|v| v.excess_blob_gas),
+                base_fee_per_gas: payload.as_v1().base_fee_per_gas.saturating_to(),
+            }
         }
     }
 }
