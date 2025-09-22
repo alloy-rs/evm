@@ -2,7 +2,6 @@ use crate::{eth::EvmEnvInput, EvmEnv};
 use alloy_consensus::BlockHeader;
 use alloy_op_hardforks::OpHardforks;
 use alloy_primitives::{ChainId, U256};
-use alloy_rpc_types_engine::ExecutionPayload;
 use op_revm::OpSpecId;
 use revm::{
     context::{BlockEnv, CfgEnv},
@@ -26,23 +25,6 @@ impl EvmEnv<OpSpecId> {
         chain_id: ChainId,
     ) -> Self {
         Self::for_op(EvmEnvInput::from_block_header(header), chain_spec, chain_id)
-    }
-
-    /// Create a new `EvmEnv` with [`OpSpecId`] from a `payload`, `chain_id`, `chain_spec` and
-    /// optional `blob_params`.
-    ///
-    /// # Arguments
-    ///
-    /// * `header` - The block to make the env out of.
-    /// * `chain_spec` - The chain hardfork description, must implement [`OpHardforks`].
-    /// * `chain_id` - The chain identifier.
-    /// * `blob_params` - Optional parameters that sets limits on gas and count for blobs.
-    pub fn for_op_payload(
-        payload: ExecutionPayload,
-        chain_spec: impl OpHardforks,
-        chain_id: ChainId,
-    ) -> Self {
-        Self::for_op(EvmEnvInput::from_payload(payload), chain_spec, chain_id)
     }
 
     fn for_op(input: EvmEnvInput, chain_spec: impl OpHardforks, chain_id: ChainId) -> Self {
@@ -71,5 +53,30 @@ impl EvmEnv<OpSpecId> {
         };
 
         Self::new(cfg_env, block_env)
+    }
+}
+
+#[cfg(feature = "engine")]
+mod payload {
+    use super::*;
+    use alloy_rpc_types_engine::ExecutionPayload;
+
+    impl EvmEnv<OpSpecId> {
+        /// Create a new `EvmEnv` with [`OpSpecId`] from a `payload`, `chain_id`, `chain_spec` and
+        /// optional `blob_params`.
+        ///
+        /// # Arguments
+        ///
+        /// * `header` - The block to make the env out of.
+        /// * `chain_spec` - The chain hardfork description, must implement [`OpHardforks`].
+        /// * `chain_id` - The chain identifier.
+        /// * `blob_params` - Optional parameters that sets limits on gas and count for blobs.
+        pub fn for_op_payload(
+            payload: ExecutionPayload,
+            chain_spec: impl OpHardforks,
+            chain_id: ChainId,
+        ) -> Self {
+            Self::for_op(EvmEnvInput::from_payload(payload), chain_spec, chain_id)
+        }
     }
 }

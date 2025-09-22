@@ -3,7 +3,6 @@ use alloy_consensus::BlockHeader;
 use alloy_eips::{eip7825::MAX_TX_GAS_LIMIT_OSAKA, eip7840::BlobParams};
 use alloy_hardforks::EthereumHardforks;
 use alloy_primitives::{Address, BlockNumber, BlockTimestamp, ChainId, B256, U256};
-use alloy_rpc_types_engine::ExecutionPayload;
 use revm::{
     context::{BlockEnv, CfgEnv},
     context_interface::block::BlobExcessGasAndPrice,
@@ -27,24 +26,6 @@ impl EvmEnv<SpecId> {
         blob_params: Option<BlobParams>,
     ) -> Self {
         Self::for_eth(EvmEnvInput::from_block_header(header), chain_spec, chain_id, blob_params)
-    }
-
-    /// Create a new `EvmEnv` with [`SpecId`] from a `payload`, `chain_id`, `chain_spec` and
-    /// optional `blob_params`.
-    ///
-    /// # Arguments
-    ///
-    /// * `header` - The block to make the env out of.
-    /// * `chain_spec` - The chain hardfork description, must implement [`EthereumHardforks`].
-    /// * `chain_id` - The chain identifier.
-    /// * `blob_params` - Optional parameters that sets limits on gas and count for blobs.
-    pub fn for_eth_payload(
-        payload: ExecutionPayload,
-        chain_spec: impl EthereumHardforks,
-        chain_id: ChainId,
-        blob_params: Option<BlobParams>,
-    ) -> Self {
-        Self::for_eth(EvmEnvInput::from_payload(payload), chain_spec, chain_id, blob_params)
     }
 
     fn for_eth(
@@ -117,17 +98,45 @@ impl EvmEnvInput {
             base_fee_per_gas: header.base_fee_per_gas().unwrap_or_default(),
         }
     }
+}
 
-    pub(crate) fn from_payload(payload: ExecutionPayload) -> Self {
-        Self {
-            timestamp: payload.timestamp(),
-            height: payload.block_number(),
-            beneficiary: payload.fee_recipient(),
-            mix_hash: Some(payload.as_v1().prev_randao),
-            difficulty: payload.as_v1().prev_randao.into(),
-            gas_limit: payload.gas_limit(),
-            excess_blob_gas: payload.excess_blob_gas(),
-            base_fee_per_gas: payload.saturated_base_fee_per_gas(),
+#[cfg(feature = "engine")]
+mod payload {
+    use super::*;
+    use alloy_rpc_types_engine::ExecutionPayload;
+
+    impl EvmEnv<SpecId> {
+        /// Create a new `EvmEnv` with [`SpecId`] from a `payload`, `chain_id`, `chain_spec` and
+        /// optional `blob_params`.
+        ///
+        /// # Arguments
+        ///
+        /// * `header` - The block to make the env out of.
+        /// * `chain_spec` - The chain hardfork description, must implement [`EthereumHardforks`].
+        /// * `chain_id` - The chain identifier.
+        /// * `blob_params` - Optional parameters that sets limits on gas and count for blobs.
+        pub fn for_eth_payload(
+            payload: ExecutionPayload,
+            chain_spec: impl EthereumHardforks,
+            chain_id: ChainId,
+            blob_params: Option<BlobParams>,
+        ) -> Self {
+            Self::for_eth(EvmEnvInput::from_payload(payload), chain_spec, chain_id, blob_params)
+        }
+    }
+
+    impl EvmEnvInput {
+        pub(crate) fn from_payload(payload: ExecutionPayload) -> Self {
+            Self {
+                timestamp: payload.timestamp(),
+                height: payload.block_number(),
+                beneficiary: payload.fee_recipient(),
+                mix_hash: Some(payload.as_v1().prev_randao),
+                difficulty: payload.as_v1().prev_randao.into(),
+                gas_limit: payload.gas_limit(),
+                excess_blob_gas: payload.excess_blob_gas(),
+                base_fee_per_gas: payload.saturated_base_fee_per_gas(),
+            }
         }
     }
 }

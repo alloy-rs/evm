@@ -21,7 +21,7 @@ alloy-eips.workspace = true
 alloy-hardforks.workspace = true
 alloy-op-hardforks = { workspace = true, optional = true }
 alloy-rpc-types-eth = { workspace = true, optional = true }
-alloy-rpc-types-engine.workspace = true
+alloy-rpc-types-engine = { workspace = true, optional = true }
 
 revm.workspace = true
 op-revm = { workspace = true, optional = true }
@@ -52,8 +52,10 @@ std = [
     "op-revm?/std",
     "thiserror/std",
     "op-alloy-consensus?/std",
-    "alloy-rpc-types-eth?/std"
+    "alloy-rpc-types-eth?/std",
+    "alloy-rpc-types-engine?/std"
 ]
 op = ["op-revm", "op-alloy-consensus", "alloy-op-hardforks"]
 overrides = ["dep:alloy-rpc-types-eth"]
 call-util = ["overrides"]
+engine = ["dep:alloy-rpc-types-engine"]
