@@ -1,7 +1,7 @@
 use crate::EvmEnv;
 use alloy_consensus::BlockHeader;
-use alloy_eips::{eip7825::MAX_TX_GAS_LIMIT_OSAKA, eip7840::BlobParams};
-use alloy_hardforks::EthereumHardforks;
+use alloy_eips::{eip1559::INITIAL_BASE_FEE, eip7825::MAX_TX_GAS_LIMIT_OSAKA, eip7840::BlobParams};
+use alloy_hardforks::{EthereumHardfork, EthereumHardforks};
 use alloy_primitives::{Address, BlockNumber, BlockTimestamp, ChainId, B256, U256};
 use revm::{
     context::{BlockEnv, CfgEnv},
@@ -26,6 +26,33 @@ impl EvmEnv<SpecId> {
         blob_params: Option<BlobParams>,
     ) -> Self {
         Self::for_eth(EvmEnvInput::from_block_header(header), chain_spec, chain_id, blob_params)
+    }
+
+    /// Create a new `EvmEnv` with [`SpecId`] from a block `header`, `chain_id`, `chain_spec` and
+    /// optional `blob_params`.
+    ///
+    /// # Arguments
+    ///
+    /// * `header` - The parent block to make the env out of.
+    /// * `base_fee_per_gas` - Base fee per gas for the next block.
+    /// * `elasticity_multiplier` - Elasticity multiplier at the timestamp of the next block.
+    /// * `chain_spec` - The chain hardfork description, must implement [`EthereumHardforks`].
+    /// * `chain_id` - The chain identifier.
+    /// * `blob_params` - Optional parameters that sets limits on gas and count for blobs.
+    pub fn for_eth_next_block(
+        header: impl BlockHeader,
+        base_fee_per_gas: u64,
+        elasticity_multiplier: u128,
+        chain_spec: impl EthereumHardforks,
+        chain_id: ChainId,
+        blob_params: Option<BlobParams>,
+    ) -> Self {
+        Self::for_eth_next(
+            EvmEnvInput::from_parent_header(header, base_fee_per_gas, elasticity_multiplier),
+            chain_spec,
+            chain_id,
+            blob_params,
+        )
     }
 
     fn for_eth(
@@ -72,6 +99,78 @@ impl EvmEnv<SpecId> {
 
         Self::new(cfg_env, block_env)
     }
+
+    fn for_eth_next(
+        input: EvmEnvInput,
+        chain_spec: impl EthereumHardforks,
+        chain_id: ChainId,
+        blob_params: Option<BlobParams>,
+    ) -> Self {
+        let spec = crate::eth::spec_by_timestamp_and_block_number(
+            &chain_spec,
+            input.timestamp,
+            input.height,
+        );
+        let mut cfg_env = CfgEnv::new_with_spec(spec).with_chain_id(chain_id);
+
+        if let Some(blob_params) = &blob_params {
+            cfg_env.set_max_blobs_per_tx(blob_params.max_blobs_per_tx);
+        }
+
+        if chain_spec.is_osaka_active_at_timestamp(input.timestamp) {
+            cfg_env.tx_gas_limit_cap = Some(MAX_TX_GAS_LIMIT_OSAKA);
+        }
+
+        // if the parent block did not have excess blob gas (i.e. it was pre-cancun), but it is
+        // cancun now, we need to set the excess blob gas to the default value(0)
+        let blob_excess_gas_and_price = blob_params
+            .and_then(|blob_params| {
+                Some(blob_params.next_block_excess_blob_gas_osaka(
+                    input.excess_blob_gas?,
+                    input.blob_gas_used?,
+                    input.base_fee_per_gas,
+                ))
+            })
+            .or_else(|| (spec == SpecId::CANCUN).then_some(0))
+            .map(|excess_blob_gas| {
+                let blob_gasprice =
+                    blob_params.unwrap_or_else(BlobParams::cancun).calc_blob_fee(excess_blob_gas);
+                BlobExcessGasAndPrice { excess_blob_gas, blob_gasprice }
+            });
+
+        let mut gas_limit = input.gas_limit;
+        let mut basefee = input.base_fee_per_gas;
+
+        // If we are on the London fork boundary, we need to multiply the parent's gas limit by the
+        // elasticity multiplier to get the new gas limit.
+        if chain_spec
+            .ethereum_fork_activation(EthereumHardfork::London)
+            .transitions_at_block(input.height)
+        {
+            let elasticity_multiplier = input.elasticity_multiplier.unwrap_or_default();
+
+            // multiply the gas limit by the elasticity multiplier
+            gas_limit *= elasticity_multiplier as u64;
+
+            // set the base fee to the initial base fee from the EIP-1559 spec
+            basefee = INITIAL_BASE_FEE
+        }
+
+        let block_env = BlockEnv {
+            number: U256::from(input.height),
+            beneficiary: input.beneficiary,
+            timestamp: U256::from(input.timestamp),
+            difficulty: U256::ZERO,
+            prevrandao: input.mix_hash,
+            gas_limit,
+            // calculate basefee based on parent block's gas usage
+            basefee,
+            // calculate excess gas based on parent block's blob gas usage
+            blob_excess_gas_and_price,
+        };
+
+        Self::new(cfg_env, block_env)
+    }
 }
 
 pub(crate) struct EvmEnvInput {
@@ -83,6 +182,8 @@ pub(crate) struct EvmEnvInput {
     pub(crate) gas_limit: u64,
     pub(crate) excess_blob_gas: Option<u64>,
     pub(crate) base_fee_per_gas: u64,
+    pub(crate) blob_gas_used: Option<u64>,
+    pub(crate) elasticity_multiplier: Option<u128>,
 }
 
 impl EvmEnvInput {
@@ -96,6 +197,27 @@ impl EvmEnvInput {
             gas_limit: header.gas_limit(),
             excess_blob_gas: header.excess_blob_gas(),
             base_fee_per_gas: header.base_fee_per_gas().unwrap_or_default(),
+            blob_gas_used: None,
+            elasticity_multiplier: None,
+        }
+    }
+
+    pub(crate) fn from_parent_header(
+        header: impl BlockHeader,
+        base_fee_per_gas: u64,
+        elasticity_multiplier: u128,
+    ) -> Self {
+        Self {
+            timestamp: header.timestamp(),
+            height: header.number() + 1,
+            beneficiary: header.beneficiary(),
+            mix_hash: header.mix_hash(),
+            difficulty: header.difficulty(),
+            gas_limit: header.gas_limit(),
+            excess_blob_gas: header.excess_blob_gas(),
+            base_fee_per_gas,
+            blob_gas_used: header.blob_gas_used(),
+            elasticity_multiplier: Some(elasticity_multiplier),
         }
     }
 }
@@ -136,6 +258,8 @@ mod payload {
                 gas_limit: payload.gas_limit(),
                 excess_blob_gas: payload.excess_blob_gas(),
                 base_fee_per_gas: payload.saturated_base_fee_per_gas(),
+                blob_gas_used: None,
+                elasticity_multiplier: None,
             }
         }
     }

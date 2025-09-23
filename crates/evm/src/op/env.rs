@@ -91,6 +91,8 @@ mod payload {
                 gas_limit: payload.as_v1().gas_limit,
                 excess_blob_gas: payload.as_v3().map(|v| v.excess_blob_gas),
                 base_fee_per_gas: payload.as_v1().base_fee_per_gas.saturating_to(),
+                blob_gas_used: None,
+                elasticity_multiplier: None,
             }
         }
     }
