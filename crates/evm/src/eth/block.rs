@@ -34,7 +34,7 @@ use alloy_hardforks::EthereumHardfork;
 use alloy_primitives::{Address, Log, B256, U256};
 use revm::{
     context_interface::result::ResultAndState, database::State, primitives::StorageKey,
-    DatabaseCommit, Inspector,
+    state::AccountInfo, DatabaseCommit, Inspector,
 };
 
 /// Context for Ethereum block execution.
@@ -476,7 +476,15 @@ where
                 drained_balance;
         }
         let coinbase = self.evm.block().beneficiary;
-        let account = self.evm.db_mut().database.basic(coinbase).unwrap().unwrap_or_default();
+        let account = match self.evm.db_mut().database.basic(coinbase) {
+            Ok(Some(info)) => info,
+            Ok(None) => AccountInfo::default(),
+            Err(err) => {
+                tracing::error!("DB error fetching account {:?}: {:?}", coinbase, err);
+                AccountInfo::default()
+            }
+        };
+
         let final_coinbase =
             account.balance + U256::from(*balance_increments.get(&coinbase).unwrap_or(&0u128));
 
