@@ -1,5 +1,4 @@
 //! Ethereum block executor.
-
 use super::{
     dao_fork, eip6110,
     receipt_builder::{AlloyReceiptBuilder, ReceiptBuilder, ReceiptBuilderCtx},
@@ -320,7 +319,6 @@ where
                 }
 
                 alloy_primitives::TxKind::Call(address) => {
-                    // unchanged — still captures callee + any created contract
                     if let Some(acc) = state.get(&address) {
                         if let Some(bal) = self.block_access_list.as_mut() {
                             bal.push(crate::eth::utils::from_account_with_tx_index(
@@ -338,7 +336,8 @@ where
                             state.get_mut(&address).unwrap().clear_state_changes();
                         }
                     }
-                    if let Some(created_address) = result.created_address() {
+                    let created_address = Address::create(&address, tx.tx().nonce());
+                    if created_address != Address::ZERO {
                         if let Some(acc) = state.get(&created_address) {
                             if let Some(bal) = self.block_access_list.as_mut() {
                                 bal.push(crate::eth::utils::from_account_with_tx_index(
