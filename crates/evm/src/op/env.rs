@@ -72,7 +72,7 @@ mod payload {
         /// * `chain_id` - The chain identifier.
         /// * `blob_params` - Optional parameters that sets limits on gas and count for blobs.
         pub fn for_op_payload(
-            payload: OpExecutionPayload,
+            payload: &OpExecutionPayload,
             chain_spec: impl OpHardforks,
             chain_id: ChainId,
         ) -> Self {
@@ -81,7 +81,7 @@ mod payload {
     }
 
     impl EvmEnvInput {
-        pub(crate) fn from_op_payload(payload: OpExecutionPayload) -> Self {
+        pub(crate) fn from_op_payload(payload: &OpExecutionPayload) -> Self {
             Self {
                 timestamp: payload.timestamp(),
                 height: payload.block_number(),

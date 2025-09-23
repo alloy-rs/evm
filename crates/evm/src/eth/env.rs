@@ -116,7 +116,7 @@ mod payload {
         /// * `chain_id` - The chain identifier.
         /// * `blob_params` - Optional parameters that sets limits on gas and count for blobs.
         pub fn for_eth_payload(
-            payload: ExecutionPayload,
+            payload: &ExecutionPayload,
             chain_spec: impl EthereumHardforks,
             chain_id: ChainId,
             blob_params: Option<BlobParams>,
@@ -126,7 +126,7 @@ mod payload {
     }
 
     impl EvmEnvInput {
-        pub(crate) fn from_payload(payload: ExecutionPayload) -> Self {
+        pub(crate) fn from_payload(payload: &ExecutionPayload) -> Self {
             Self {
                 timestamp: payload.timestamp(),
                 height: payload.block_number(),
