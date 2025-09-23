@@ -314,6 +314,24 @@ where
                             state.get_mut(&address).unwrap().clear_state_changes();
                         }
                     }
+                    if let Some(created_address) = result.created_address() {
+                        if let Some(acc) = state.get(&created_address) {
+                            if let Some(bal) = self.block_access_list.as_mut() {
+                                bal.push(crate::eth::utils::from_account_with_tx_index(
+                                    created_address,
+                                    self.receipts.len() as u64,
+                                    acc,
+                                ));
+                                tracing::debug!(
+                                "BlockAccessList: new contract created at {:#x}, tx_index={}, storage: {:#?}",
+                                created_address,
+                                self.receipts.len(),
+                                acc.storage_access,
+                            );
+                                state.get_mut(&created_address).unwrap().clear_state_changes();
+                            }
+                        }
+                    }
                 }
             }
             if let Some(acc) = state.get(tx.signer()) {
