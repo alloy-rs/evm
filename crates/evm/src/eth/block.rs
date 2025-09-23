@@ -505,17 +505,16 @@ where
             // }
 
             // All post tx balance increments
-            for (address, increment) in balance_increments {
-                if increment != 0 {
-                    self.block_access_list.as_mut().unwrap().push(
-                        AccountChanges::default().with_address(address).with_balance_change(
-                            BalanceChange {
-                                block_access_index: post_system_tx as u64,
-                                post_balance: U256::from(increment),
-                            },
-                        ),
-                    );
-                }
+            for address in balance_increments.keys() {
+                let bal = self.evm.db_mut().database.basic(*address).unwrap().unwrap().balance;
+                self.block_access_list.as_mut().unwrap().push(
+                    AccountChanges::default().with_address(*address).with_balance_change(
+                        BalanceChange {
+                            block_access_index: post_system_tx as u64,
+                            post_balance: U256::from(bal),
+                        },
+                    ),
+                );
             }
 
             // Add post execution system contract account changes
