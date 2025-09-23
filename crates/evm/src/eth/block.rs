@@ -278,6 +278,25 @@ where
         if self.spec.is_amsterdam_active_at_timestamp(self.evm.block().timestamp.saturating_to()) {
             match tx.tx().kind() {
                 alloy_primitives::TxKind::Create => {
+                    if let Some(addr) = tx.tx().to() {
+                        if let Some(acc) = state.get(&addr) {
+                            if let Some(bal) = self.block_access_list.as_mut() {
+                                bal.push(crate::eth::utils::from_account_with_tx_index(
+                                    addr,
+                                    self.receipts.len() as u64,
+                                    acc,
+                                ));
+                                tracing::debug!(
+                        "BlockAccessList: CREATE parent contract {:#x}, tx_index={}, storage: {:#?}",
+                        addr,
+                        self.receipts.len(),
+                        acc.storage_access,
+                    );
+                                state.get_mut(&addr).unwrap().clear_state_changes();
+                            }
+                        }
+                    }
+
                     if let Some(created_address) = result.created_address() {
                         if let Some(acc) = state.get(&created_address) {
                             if let Some(bal) = self.block_access_list.as_mut() {
@@ -287,17 +306,19 @@ where
                                     acc,
                                 ));
                                 tracing::debug!(
-                                "BlockAccessList: new contract created at {:#x}, tx_index={}, storage: {:#?}",
-                                created_address,
-                                self.receipts.len(),
-                                acc.storage_access,
-                            );
+                        "BlockAccessList: new contract created at {:#x}, tx_index={}, storage: {:#?}",
+                        created_address,
+                        self.receipts.len(),
+                        acc.storage_access,
+                    );
                                 state.get_mut(&created_address).unwrap().clear_state_changes();
                             }
                         }
                     }
                 }
+
                 alloy_primitives::TxKind::Call(address) => {
+                    // unchanged — still captures callee + any created contract
                     if let Some(acc) = state.get(&address) {
                         if let Some(bal) = self.block_access_list.as_mut() {
                             bal.push(crate::eth::utils::from_account_with_tx_index(
@@ -323,11 +344,11 @@ where
                                     acc,
                                 ));
                                 tracing::debug!(
-                                "BlockAccessList: new contract created at {:#x}, tx_index={}, storage: {:#?}",
-                                created_address,
-                                self.receipts.len(),
-                                acc.storage_access,
-                            );
+                        "BlockAccessList: new contract created at {:#x}, tx_index={}, storage: {:#?}",
+                        created_address,
+                        self.receipts.len(),
+                        acc.storage_access,
+                    );
                                 state.get_mut(&created_address).unwrap().clear_state_changes();
                             }
                         }
