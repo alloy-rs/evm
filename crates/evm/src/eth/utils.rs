@@ -44,7 +44,7 @@ pub fn from_account_with_tx_index(
     account: &Account,
 ) -> AccountChanges {
     let mut account_changes = AccountChanges::default();
-
+    tracing::debug!("#############################Building account changes for {:#x}, State: {:#?}##############################", address, account);
     for key in &account.storage_access.reads {
         tracing::debug!("Storage read at {:#x}: {:#x} ", address, key);
         account_changes.storage_reads.push((*key).into());
@@ -69,9 +69,7 @@ pub fn from_account_with_tx_index(
     // Records if only post_balance != pre_balance
     let (pre_balance, post_balance) = account.balance_change;
     if pre_balance != post_balance {
-        account_changes
-            .balance_changes
-            .push(BalanceChange { block_access_index, post_balance: account.balance_change.0 });
+        account_changes.balance_changes.push(BalanceChange { block_access_index, post_balance });
     }
 
     let (pre_nonce, post_nonce) = account.nonce_change;
