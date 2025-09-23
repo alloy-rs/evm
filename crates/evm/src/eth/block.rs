@@ -337,6 +337,7 @@ where
                         }
                     }
                     let created_address = Address::create(&address, tx.tx().nonce());
+                    tracing::debug!("Created address calculated as {:#x}", created_address);
                     if created_address != Address::ZERO {
                         if let Some(acc) = state.get(&created_address) {
                             if let Some(bal) = self.block_access_list.as_mut() {
