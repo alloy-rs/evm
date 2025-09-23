@@ -516,7 +516,17 @@ where
                     ),
                 );
             }
-
+            let addr = self.evm.block().beneficiary;
+            self.block_access_list.as_mut().unwrap().push(
+                AccountChanges::default().with_address(addr).with_balance_change(BalanceChange {
+                    block_access_index: post_system_tx as u64,
+                    post_balance: U256::from(
+                        self.evm.db_mut().database.basic(addr).unwrap().unwrap().balance,
+                    ),
+                }),
+            );
+            tracing::debug!("Pushed for coinbase : {:?}", addr);
+            tracing::debug!("Post tx balance increments: {:#?}", balance_increments);
             // Add post execution system contract account changes
             self.block_access_list.as_mut().unwrap().extend(post_system_acc_changes);
         }
