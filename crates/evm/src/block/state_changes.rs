@@ -46,6 +46,11 @@ where
         }
 
         // Full block reward
+        tracing::debug!(
+            "Adding block reward of {} to beneficiary {:?}",
+            calc::block_reward(base_block_reward, ommers.len()),
+            block_env.beneficiary
+        );
         *balance_increments.entry(block_env.beneficiary).or_default() +=
             calc::block_reward(base_block_reward, ommers.len());
     }

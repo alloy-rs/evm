@@ -475,6 +475,11 @@ where
             *balance_increments.entry(dao_fork::DAO_HARDFORK_BENEFICIARY).or_default() +=
                 drained_balance;
         }
+        let coinbase = self.evm.block().beneficiary;
+        let account = self.evm.db_mut().database.basic(coinbase).unwrap().unwrap_or_default();
+        let final_coinbase =
+            account.balance + U256::from(*balance_increments.get(&coinbase).unwrap_or(&0u128));
+
         // increment balances
         self.evm
             .db_mut()
@@ -516,16 +521,17 @@ where
                     ),
                 );
             }
-            let addr = self.evm.block().beneficiary;
+
             self.block_access_list.as_mut().unwrap().push(
-                AccountChanges::default().with_address(addr).with_balance_change(BalanceChange {
-                    block_access_index: post_system_tx as u64,
-                    post_balance: U256::from(
-                        self.evm.db_mut().database.basic(addr).unwrap().unwrap().balance,
-                    ),
-                }),
+                AccountChanges::default().with_address(coinbase).with_balance_change(
+                    BalanceChange {
+                        block_access_index: post_system_tx as u64,
+                        post_balance: final_coinbase,
+                    },
+                ),
             );
-            tracing::debug!("Pushed for coinbase : {:?}", addr);
+
+            tracing::debug!("Pushed for coinbase : {:?}", coinbase);
             tracing::debug!("Post tx balance increments: {:#?}", balance_increments);
             // Add post execution system contract account changes
             self.block_access_list.as_mut().unwrap().extend(post_system_acc_changes);
