@@ -46,12 +46,12 @@ alloy-eips = { version = "1.0.35", default-features = false }
 alloy-consensus = { version = "1.0.35", default-features = false }
 alloy-primitives = { version = "1.0.0", default-features = false }
 alloy-sol-types = { version = "1.0.0", default-features = false }
-alloy-hardforks = { version = "0.3.1" }
+alloy-hardforks = { version = "0.3.5" }
 alloy-rpc-types-eth = { version = "1.0.35", default-features = false }
 alloy-rlp = { version = "0.3.12", default-features = false }
 
 # op-alloy
-alloy-op-hardforks = { version = "0.3.1" }
+alloy-op-hardforks = { version = "0.3.5" }
 op-alloy-consensus = { version = "0.20.0", default-features = false }
 
 
