@@ -275,80 +275,79 @@ where
 
         // Commit the state changes.
         self.evm.db_mut().commit(state.clone());
-        // if self.spec.is_amsterdam_active_at_timestamp(self.evm.block().timestamp.saturating_to())
-        // {
-        match tx.tx().kind() {
-            alloy_primitives::TxKind::Create => {
-                if let Some(created_address) = result.created_address() {
-                    if let Some(acc) = state.get(&created_address) {
-                        if let Some(bal) = self.block_access_list.as_mut() {
-                            bal.push(crate::eth::utils::from_account_with_tx_index(
-                                created_address,
-                                self.receipts.len() as u64,
-                                acc,
-                            ));
-                            tracing::debug!(
+        if self.spec.is_amsterdam_active_at_timestamp(self.evm.block().timestamp.saturating_to()) {
+            match tx.tx().kind() {
+                alloy_primitives::TxKind::Create => {
+                    if let Some(created_address) = result.created_address() {
+                        if let Some(acc) = state.get(&created_address) {
+                            if let Some(bal) = self.block_access_list.as_mut() {
+                                bal.push(crate::eth::utils::from_account_with_tx_index(
+                                    created_address,
+                                    self.receipts.len() as u64,
+                                    acc,
+                                ));
+                                tracing::debug!(
                                 "BlockAccessList: new contract created at {:#x}, tx_index={}, storage: {:#?}",
                                 created_address,
                                 self.receipts.len(),
                                 acc.storage_access,
                             );
-                            state.get_mut(&created_address).unwrap().clear_state_changes();
+                                state.get_mut(&created_address).unwrap().clear_state_changes();
+                            }
+                        }
+                    }
+                }
+                alloy_primitives::TxKind::Call(address) => {
+                    if let Some(acc) = state.get(&address) {
+                        if let Some(bal) = self.block_access_list.as_mut() {
+                            bal.push(crate::eth::utils::from_account_with_tx_index(
+                                address,
+                                self.receipts.len() as u64,
+                                acc,
+                            ));
+                            tracing::debug!(
+                                "BlockAccessList: Tx call arm {:#x}, tx_index={}, storage: {:#?}",
+                                address,
+                                self.receipts.len(),
+                                acc.storage_access,
+                            );
+                            state.get_mut(&address).unwrap().clear_state_changes();
                         }
                     }
                 }
             }
-            alloy_primitives::TxKind::Call(address) => {
-                if let Some(acc) = state.get(&address) {
-                    if let Some(bal) = self.block_access_list.as_mut() {
-                        bal.push(crate::eth::utils::from_account_with_tx_index(
-                            address,
-                            self.receipts.len() as u64,
-                            acc,
-                        ));
-                        tracing::debug!(
-                            "BlockAccessList: Tx call arm {:#x}, tx_index={}, storage: {:#?}",
-                            address,
-                            self.receipts.len(),
-                            acc.storage_access,
-                        );
-                        state.get_mut(&address).unwrap().clear_state_changes();
+            if let Some(acc) = state.get(tx.signer()) {
+                if let Some(bal) = self.block_access_list.as_mut() {
+                    bal.push(crate::eth::utils::from_account_with_tx_index(
+                        *tx.signer(),
+                        self.receipts.len() as u64,
+                        acc,
+                    ));
+                    tracing::debug!(
+                        "BlockAccessList: Tx signer arm tx_index={}, storage: {:#?}",
+                        self.receipts.len(),
+                        acc.storage_access,
+                    );
+                    state.get_mut(tx.signer()).unwrap().clear_state_changes();
+                }
+            }
+            tracing::debug!("############################################################################################################################################Block No: {:?}",self.evm.block());
+            // Store access list changes in bal.
+            if let Some(access_list) = tx.tx().access_list() {
+                for item in &access_list.0 {
+                    let addr = item.address;
+                    if state.contains_key(&addr) {
+                        if let Some(bal) = self.block_access_list.as_mut() {
+                            bal.push(crate::eth::utils::from_account_with_tx_index(
+                                addr,
+                                self.receipts.len() as u64,
+                                state.get(&addr).unwrap(),
+                            ));
+                            state.get_mut(&addr).unwrap().clear_state_changes();
+                        }
                     }
                 }
             }
-        }
-        if let Some(acc) = state.get(tx.signer()) {
-            if let Some(bal) = self.block_access_list.as_mut() {
-                bal.push(crate::eth::utils::from_account_with_tx_index(
-                    *tx.signer(),
-                    self.receipts.len() as u64,
-                    acc,
-                ));
-                tracing::debug!(
-                    "BlockAccessList: Tx signer arm tx_index={}, storage: {:#?}",
-                    self.receipts.len(),
-                    acc.storage_access,
-                );
-                state.get_mut(tx.signer()).unwrap().clear_state_changes();
-            }
-        }
-        tracing::debug!("############################################################################################################################################Block No: {:?}",self.evm.block());
-        // Store access list changes in bal.
-        if let Some(access_list) = tx.tx().access_list() {
-            for item in &access_list.0 {
-                let addr = item.address;
-                if state.contains_key(&addr) {
-                    if let Some(bal) = self.block_access_list.as_mut() {
-                        bal.push(crate::eth::utils::from_account_with_tx_index(
-                            addr,
-                            self.receipts.len() as u64,
-                            state.get(&addr).unwrap(),
-                        ));
-                        state.get_mut(&addr).unwrap().clear_state_changes();
-                    }
-                }
-            }
-            // }
             // Commit the state changes.
             self.evm.db_mut().commit(state.clone());
         }
