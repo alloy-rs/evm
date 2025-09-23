@@ -338,24 +338,26 @@ where
                             state.get_mut(&address).unwrap().clear_state_changes();
                         }
                     }
-                    let created_address = Address::create(&address, nonce - 1);
-                    tracing::debug!("Created address calculated as {:#x}", created_address);
-                    if created_address != Address::ZERO {
-                        if let Some(acc) = state.get(&created_address) {
-                            if let Some(bal) = self.block_access_list.as_mut() {
-                                bal.push(crate::eth::utils::from_account_with_tx_index(
-                                    created_address,
-                                    self.receipts.len() as u64,
-                                    acc,
-                                    false,
-                                ));
-                                tracing::debug!(
+                    if let Some(nonce) = nonce.checked_sub(1) {
+                        let created_address = Address::create(&address, nonce);
+                        tracing::debug!("Created address calculated as {:#x}", created_address);
+                        if created_address != Address::ZERO {
+                            if let Some(acc) = state.get(&created_address) {
+                                if let Some(bal) = self.block_access_list.as_mut() {
+                                    bal.push(crate::eth::utils::from_account_with_tx_index(
+                                        created_address,
+                                        self.receipts.len() as u64,
+                                        acc,
+                                        false,
+                                    ));
+                                    tracing::debug!(
                         "BlockAccessList: new contract created at {:#x}, tx_index={}, storage: {:#?}",
                         created_address,
                         self.receipts.len(),
                         acc.storage_access,
                     );
-                                state.get_mut(&created_address).unwrap().clear_state_changes();
+                                    state.get_mut(&created_address).unwrap().clear_state_changes();
+                                }
                             }
                         }
                     }
