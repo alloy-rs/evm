@@ -66,6 +66,6 @@ thiserror = { version = "2.0.0", default-features = false }
 serde_json = "1"
 test-case = "3"
 
-#[patch.crates-io]
-#revm = { git = "https://github.com/bluealloy/revm", rev = "11b16259" }
-#op-revm = { git = "https://github.com/bluealloy/revm", rev = "11b16259" }
+[patch.crates-io]
+# revm = { git = "https://github.com/bluealloy/revm", rev = "11b16259" }
+# op-revm = { git = "https://github.com/bluealloy/revm", rev = "11b16259" }
