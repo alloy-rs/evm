@@ -34,7 +34,7 @@ use alloy_hardforks::EthereumHardfork;
 use alloy_primitives::{Address, Log, B256, U256};
 use revm::{
     context_interface::result::ResultAndState, database::State, primitives::StorageKey,
-    state::AccountInfo, DatabaseCommit, Inspector,
+    DatabaseCommit, Inspector,
 };
 
 /// Context for Ethereum block execution.
@@ -348,6 +348,17 @@ where
                     }
                 }
             }
+
+            if let Some(coinbase) = state.get(&self.evm.block().beneficiary) {
+                self.block_access_list.as_mut().unwrap().push(
+                    AccountChanges::default()
+                        .with_address(self.evm.block().beneficiary)
+                        .with_balance_change(BalanceChange {
+                            block_access_index: self.receipts.len() as u64,
+                            post_balance: coinbase.info.balance,
+                        }),
+                );
+            }
             // Commit the state changes.
             self.evm.db_mut().commit(state.clone());
         }
@@ -476,17 +487,17 @@ where
                 drained_balance;
         }
         let coinbase = self.evm.block().beneficiary;
-        let account = match self.evm.db_mut().database.basic(coinbase) {
-            Ok(Some(info)) => info,
-            Ok(None) => AccountInfo::default(),
-            Err(err) => {
-                tracing::error!("DB error fetching account {:?}: {:?}", coinbase, err);
-                AccountInfo::default()
-            }
-        };
+        // let account = match self.evm.db_mut().database.basic(coinbase) {
+        //     Ok(Some(info)) => info,
+        //     Ok(None) => AccountInfo::default(),
+        //     Err(err) => {
+        //         tracing::error!("DB error fetching account {:?}: {:?}", coinbase, err);
+        //         AccountInfo::default()
+        //     }
+        // };
 
-        let final_coinbase =
-            account.balance + U256::from(*balance_increments.get(&coinbase).unwrap_or(&0u128));
+        // let final_coinbase =
+        // account.balance + U256::from(*balance_increments.get(&coinbase).unwrap_or(&0u128));
 
         // increment balances
         self.evm
@@ -530,14 +541,14 @@ where
                 );
             }
 
-            self.block_access_list.as_mut().unwrap().push(
-                AccountChanges::default().with_address(coinbase).with_balance_change(
-                    BalanceChange {
-                        block_access_index: post_system_tx as u64,
-                        post_balance: final_coinbase,
-                    },
-                ),
-            );
+            // self.block_access_list.as_mut().unwrap().push(
+            //     AccountChanges::default().with_address(coinbase).with_balance_change(
+            //         BalanceChange {
+            //             block_access_index: post_system_tx as u64,
+            //             post_balance: final_coinbase,
+            //         },
+            //     ),
+            // );
 
             tracing::debug!("Pushed for coinbase : {:?}", coinbase);
             tracing::debug!("Post tx balance increments: {:#?}", balance_increments);
