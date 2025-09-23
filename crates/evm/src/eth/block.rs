@@ -319,6 +319,7 @@ where
                 }
 
                 alloy_primitives::TxKind::Call(address) => {
+                    let mut nonce = 0;
                     if let Some(acc) = state.get(&address) {
                         if let Some(bal) = self.block_access_list.as_mut() {
                             bal.push(crate::eth::utils::from_account_with_tx_index(
@@ -333,10 +334,11 @@ where
                                 self.receipts.len(),
                                 acc.storage_access,
                             );
+                            nonce = acc.info.nonce;
                             state.get_mut(&address).unwrap().clear_state_changes();
                         }
                     }
-                    let created_address = Address::create(&address, tx.tx().nonce() - 1);
+                    let created_address = Address::create(&address, nonce - 1);
                     tracing::debug!("Created address calculated as {:#x}", created_address);
                     if created_address != Address::ZERO {
                         if let Some(acc) = state.get(&created_address) {
@@ -718,7 +720,7 @@ mod tests {
     // fn test_address() {
     //     let addr = address!("0x1a7d50de1c4dc7d5b696f53b65594f21aa55a826");
     //     println!("Address: {:?}", addr);
-    //     let cr_addr = alloy_primitives::Address::create(&addr, 1);
+    //     let cr_addr = alloy_primitives::Address::create(&addr, 0);
     //     println!("Created Address: {:?}", cr_addr);
     // }
 
