@@ -28,8 +28,8 @@ impl EvmEnv<SpecId> {
         Self::for_eth(EvmEnvInput::from_block_header(header), chain_spec, chain_id, blob_params)
     }
 
-    /// Create a new `EvmEnv` with [`SpecId`] from a block `header`, `chain_id`, `chain_spec` and
-    /// optional `blob_params`.
+    /// Create a new `EvmEnv` with [`SpecId`] from a parent block `header`, `chain_id`, `chain_spec`
+    /// and optional `blob_params`.
     ///
     /// # Arguments
     ///
