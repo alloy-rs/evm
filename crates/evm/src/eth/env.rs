@@ -41,6 +41,7 @@ impl EvmEnv<SpecId> {
     /// * `blob_params` - Optional parameters that sets limits on gas and count for blobs.
     pub fn for_eth_next_block(
         header: impl BlockHeader,
+        attributes: NextEvmEnvAttributes,
         base_fee_per_gas: u64,
         elasticity_multiplier: u128,
         chain_spec: impl EthereumHardforks,
@@ -48,7 +49,12 @@ impl EvmEnv<SpecId> {
         blob_params: Option<BlobParams>,
     ) -> Self {
         Self::for_eth_next(
-            EvmEnvInput::from_parent_header(header, base_fee_per_gas, elasticity_multiplier),
+            EvmEnvInput::from_parent_header(
+                header,
+                attributes,
+                base_fee_per_gas,
+                elasticity_multiplier,
+            ),
             chain_spec,
             chain_id,
             blob_params,
@@ -204,22 +210,40 @@ impl EvmEnvInput {
 
     pub(crate) fn from_parent_header(
         header: impl BlockHeader,
+        attributes: NextEvmEnvAttributes,
         base_fee_per_gas: u64,
         elasticity_multiplier: u128,
     ) -> Self {
         Self {
-            timestamp: header.timestamp(),
+            timestamp: attributes.timestamp,
             height: header.number() + 1,
-            beneficiary: header.beneficiary(),
-            mix_hash: header.mix_hash(),
+            beneficiary: attributes.suggested_fee_recipient,
+            mix_hash: Some(attributes.prev_randao),
             difficulty: header.difficulty(),
-            gas_limit: header.gas_limit(),
+            gas_limit: attributes.gas_limit,
             excess_blob_gas: header.excess_blob_gas(),
             base_fee_per_gas,
             blob_gas_used: header.blob_gas_used(),
             elasticity_multiplier: Some(elasticity_multiplier),
         }
     }
+}
+
+/// Represents additional attributes required to configure the next block.
+///
+/// This struct contains all the information needed to build a new block that cannot be
+/// derived from the parent block header alone. These attributes are typically provided
+/// by the consensus layer (CL) through the Engine API during payload building.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NextEvmEnvAttributes {
+    /// The timestamp of the next block.
+    pub timestamp: u64,
+    /// The suggested fee recipient for the next block.
+    pub suggested_fee_recipient: Address,
+    /// The randomness value for the next block.
+    pub prev_randao: B256,
+    /// Block gas limit.
+    pub gas_limit: u64,
 }
 
 #[cfg(feature = "engine")]

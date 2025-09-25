@@ -1,4 +1,7 @@
-use crate::{eth::EvmEnvInput, EvmEnv};
+use crate::{
+    eth::{EvmEnvInput, NextEvmEnvAttributes},
+    EvmEnv,
+};
 use alloy_consensus::BlockHeader;
 use alloy_op_hardforks::OpHardforks;
 use alloy_primitives::{ChainId, U256};
@@ -37,12 +40,13 @@ impl EvmEnv<OpSpecId> {
     /// * `chain_id` - The chain identifier.
     pub fn for_op_next_block(
         header: impl BlockHeader,
+        attributes: NextEvmEnvAttributes,
         base_fee_per_gas: u64,
         chain_spec: impl OpHardforks,
         chain_id: ChainId,
     ) -> Self {
         Self::for_op(
-            EvmEnvInput::from_parent_header(header, base_fee_per_gas, 0),
+            EvmEnvInput::from_parent_header(header, attributes, base_fee_per_gas, 0),
             chain_spec,
             chain_id,
         )

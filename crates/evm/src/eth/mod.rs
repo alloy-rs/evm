@@ -1,5 +1,6 @@
 //! Ethereum EVM implementation.
 
+pub use env::NextEvmEnvAttributes;
 pub use spec_id::{spec, spec_by_timestamp_and_block_number};
 
 pub(crate) use env::EvmEnvInput;
