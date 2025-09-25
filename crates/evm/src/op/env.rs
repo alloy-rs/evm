@@ -46,7 +46,7 @@ impl EvmEnv<OpSpecId> {
         chain_id: ChainId,
     ) -> Self {
         Self::for_op(
-            EvmEnvInput::from_parent_header(header, attributes, base_fee_per_gas, 0),
+            EvmEnvInput::from_parent_header(header, attributes, base_fee_per_gas),
             chain_spec,
             chain_id,
         )
@@ -115,7 +115,6 @@ mod payload {
                 excess_blob_gas: payload.as_v3().map(|v| v.excess_blob_gas),
                 base_fee_per_gas: payload.as_v1().base_fee_per_gas.saturating_to(),
                 blob_gas_used: None,
-                elasticity_multiplier: None,
             }
         }
     }
