@@ -294,6 +294,18 @@ impl PrecompilesMap {
         }
     }
 
+    /// Returns an iterator over the [`PrecompileId`]s of the installed precompiles.
+    pub fn identifiers(&self) -> impl Iterator<Item = &PrecompileId> {
+        match &self.precompiles {
+            PrecompilesKind::Builtin(precompiles) => {
+                Either::Left(precompiles.inner().values().map(|p| p.precompile_id()))
+            }
+            PrecompilesKind::Dynamic(dyn_precompiles) => {
+                Either::Right(dyn_precompiles.inner.values().map(|p| p.precompile_id()))
+            }
+        }
+    }
+
     /// Returns an iterator over references to precompile addresses.
     pub fn addresses(&self) -> impl Iterator<Item = &Address> {
         match &self.precompiles {
