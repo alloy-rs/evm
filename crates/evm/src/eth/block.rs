@@ -267,7 +267,7 @@ where
         self.receipts.push(self.receipt_builder.build_receipt(ReceiptBuilderCtx {
             tx: tx.tx(),
             evm: &self.evm,
-            result: result,
+            result,
             state: &state,
             cumulative_gas_used: self.gas_used,
         }));
