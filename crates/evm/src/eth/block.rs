@@ -267,7 +267,7 @@ where
         self.receipts.push(self.receipt_builder.build_receipt(ReceiptBuilderCtx {
             tx: tx.tx(),
             evm: &self.evm,
-            result: result.clone(),
+            result: result,
             state: &state,
             cumulative_gas_used: self.gas_used,
         }));
@@ -356,7 +356,7 @@ where
             //             self.receipts.len(),
             //             acc.storage_access,
             //         );
-            //                         
+            //
             // state.get_mut(&created_address).unwrap().clear_state_changes();
             //                     }
             //                 }
