@@ -12,6 +12,7 @@ use alloy_evm::{
         StateChangePostBlockSource, StateChangeSource, SystemCaller,
     },
     eth::receipt_builder::ReceiptBuilderCtx,
+    op::OpBlockExecutionResult,
     Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded,
 };
 use alloy_op_hardforks::{OpChainHardforks, OpHardforks};
@@ -93,6 +94,7 @@ where
     type Transaction = R::Transaction;
     type Receipt = R::Receipt;
     type Evm = E;
+    type BlockExecutionResult = OpBlockExecutionResult<R::Receipt>;
 
     fn apply_pre_execution_changes(&mut self) -> Result<(), BlockExecutionError> {
         // Set state clear flag if the block is after the Spurious Dragon hardfork.
@@ -214,7 +216,7 @@ where
 
     fn finish(
         mut self,
-    ) -> Result<(Self::Evm, BlockExecutionResult<R::Receipt>), BlockExecutionError> {
+    ) -> Result<(Self::Evm, OpBlockExecutionResult<R::Receipt>), BlockExecutionError> {
         let balance_increments =
             post_block_balance_increments::<Header>(&self.spec, self.evm.block(), &[], None);
         // increment balances
@@ -235,11 +237,11 @@ where
         let gas_used = self.receipts.last().map(|r| r.cumulative_gas_used()).unwrap_or_default();
         Ok((
             self.evm,
-            BlockExecutionResult {
+            OpBlockExecutionResult::from(BlockExecutionResult {
                 receipts: self.receipts,
                 requests: Default::default(),
                 gas_used,
-            },
+            }),
         ))
     }
 

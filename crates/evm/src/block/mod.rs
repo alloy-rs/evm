@@ -127,6 +127,10 @@ pub trait BlockExecutor {
     /// This constraint ensures that the block executor can convert consensus transactions
     /// into the EVM's transaction format for execution.
     type Evm: Evm<Tx: FromRecoveredTx<Self::Transaction> + FromTxWithEncoded<Self::Transaction>>;
+    /// The result of executing a block. This is typically a [`BlockExecutionResult`]. This can be
+    /// extended to include additional information, such as a DA footprint usage tracker (see
+    /// [`crate::op::OpBlockExecutionResult`]).
+    type BlockExecutionResult;
 
     /// Applies any necessary changes before executing the block's transactions.
     fn apply_pre_execution_changes(&mut self) -> Result<(), BlockExecutionError>;
@@ -247,14 +251,10 @@ pub trait BlockExecutor {
 
     /// Applies any necessary changes after executing the block's transactions, completes execution
     /// and returns the underlying EVM along with execution result.
-    fn finish(
-        self,
-    ) -> Result<(Self::Evm, BlockExecutionResult<Self::Receipt>), BlockExecutionError>;
+    fn finish(self) -> Result<(Self::Evm, Self::BlockExecutionResult), BlockExecutionError>;
 
     /// A helper to invoke [`BlockExecutor::finish`] returning only the [`BlockExecutionResult`].
-    fn apply_post_execution_changes(
-        self,
-    ) -> Result<BlockExecutionResult<Self::Receipt>, BlockExecutionError>
+    fn apply_post_execution_changes(self) -> Result<Self::BlockExecutionResult, BlockExecutionError>
     where
         Self: Sized,
     {
@@ -304,7 +304,7 @@ pub trait BlockExecutor {
     fn execute_block(
         mut self,
         transactions: impl IntoIterator<Item = impl ExecutableTx<Self>>,
-    ) -> Result<BlockExecutionResult<Self::Receipt>, BlockExecutionError>
+    ) -> Result<Self::BlockExecutionResult, BlockExecutionError>
     where
         Self: Sized,
     {
