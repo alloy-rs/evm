@@ -18,10 +18,19 @@ use alloy_op_hardforks::{OpChainHardforks, OpHardforks};
 use alloy_primitives::{Bytes, B256};
 use canyon::ensure_create2_deployer;
 use op_alloy_consensus::OpDepositReceipt;
-use op_revm::transaction::deposit::DEPOSIT_TRANSACTION_TYPE;
+use op_revm::{
+    constants::{DA_FOOTPRINT_GAS_SCALAR_OFFSET, DA_FOOTPRINT_GAS_SCALAR_SLOT, L1_BLOCK_CONTRACT},
+    estimate_tx_compressed_size,
+    transaction::deposit::DEPOSIT_TRANSACTION_TYPE,
+    OpTransaction,
+};
 pub use receipt_builder::OpAlloyReceiptBuilder;
 use receipt_builder::OpReceiptBuilder;
-use revm::{context::result::ResultAndState, database::State, DatabaseCommit, Inspector};
+use revm::{
+    context::{result::ResultAndState, TxEnv},
+    database::State,
+    DatabaseCommit, Inspector,
+};
 
 mod canyon;
 pub mod receipt_builder;
@@ -52,6 +61,11 @@ pub struct OpBlockExecutor<Evm, R: OpReceiptBuilder, Spec> {
     pub receipts: Vec<R::Receipt>,
     /// Total gas used by executed transactions.
     pub gas_used: u64,
+    /// Da footprint.
+    ///
+    /// This is only set for blocks post-Jovian activation.
+    /// See [DA footprint block limit spec](https://github.com/ethereum-optimism/specs/blob/main/specs/protocol/jovian/exec-engine.md#da-footprint-block-limit)
+    pub da_footprint_used: u64,
     /// Whether Regolith hardfork is active.
     pub is_regolith: bool,
     /// Utility to call system smart contracts.
@@ -75,18 +89,81 @@ where
             receipt_builder,
             receipts: Vec::new(),
             gas_used: 0,
+            da_footprint_used: 0,
             ctx,
         }
+    }
+}
+
+/// Custom errors that can occur during OP block execution.
+#[derive(Debug, thiserror::Error)]
+pub enum OpBlockExecutionError {
+    /// Failed to load cache account.
+    #[error("failed to load cache account")]
+    LoadCacheAccount,
+
+    /// Failed to get Jovian da footprint gas scalar from database.
+    #[error("failed to get da footprint gas scalar from database: {_0}")]
+    GetJovianDaFootprintScalar(Box<dyn core::error::Error + Send + Sync + 'static>),
+
+    /// Transaction DA footprint exceeds available block DA footprint.
+    #[error("transaction DA footprint exceeds available block DA footprint")]
+    TransactionDaFootprintAboveGasLimit {
+        /// The DA footprint of the transaction to execute.
+        transaction_da_footprint: u64,
+        /// The available block DA footprint.
+        available_block_da_footprint: u64,
+    },
+}
+
+impl<'db, DB, E, R, Spec> OpBlockExecutor<E, R, Spec>
+where
+    DB: Database + 'db,
+    E: Evm<DB = &'db mut State<DB>, Tx = OpTransaction<TxEnv>>,
+    OpTransaction<TxEnv>: FromRecoveredTx<R::Transaction> + FromTxWithEncoded<R::Transaction>,
+    R: OpReceiptBuilder<Transaction: Transaction + Encodable2718, Receipt: TxReceipt>,
+    Spec: OpHardforks,
+{
+    fn get_jovian_da_footprint_scalar(&mut self) -> Result<u16, BlockExecutionError> {
+        let da_footprint_gas_scalar_slot = self
+            .evm
+            .db_mut()
+            .database
+            .storage(L1_BLOCK_CONTRACT, DA_FOOTPRINT_GAS_SCALAR_SLOT)
+            .map_err(|e| {
+                BlockExecutionError::other(OpBlockExecutionError::GetJovianDaFootprintScalar(
+                    Box::new(e),
+                ))
+            })?
+            .to_be_bytes::<32>();
+
+        // Extract the first 2 bytes directly as a u16 in big-endian format
+        let bytes = [
+            da_footprint_gas_scalar_slot[DA_FOOTPRINT_GAS_SCALAR_OFFSET],
+            da_footprint_gas_scalar_slot[DA_FOOTPRINT_GAS_SCALAR_OFFSET + 1],
+        ];
+        Ok(u16::from_be_bytes(bytes))
+    }
+
+    fn jovian_da_footprint_estimation(
+        &mut self,
+        tx: &impl ExecutableTx<OpBlockExecutor<E, R, Spec>>,
+    ) -> Result<u64, BlockExecutionError> {
+        // Try to use the enveloped tx if it exists, otherwise re-encode the transaction.
+        let enveloped_tx =
+            tx.to_tx_env().enveloped_tx.unwrap_or_else(|| tx.tx().encoded_2718().into());
+
+        Ok(estimate_tx_compressed_size(&enveloped_tx)
+            .saturating_div(1_000_000)
+            .saturating_mul(self.get_jovian_da_footprint_scalar()?.into()))
     }
 }
 
 impl<'db, DB, E, R, Spec> BlockExecutor for OpBlockExecutor<E, R, Spec>
 where
     DB: Database + 'db,
-    E: Evm<
-        DB = &'db mut State<DB>,
-        Tx: FromRecoveredTx<R::Transaction> + FromTxWithEncoded<R::Transaction>,
-    >,
+    E: Evm<DB = &'db mut State<DB>, Tx = OpTransaction<TxEnv>>,
+    OpTransaction<TxEnv>: FromRecoveredTx<R::Transaction> + FromTxWithEncoded<R::Transaction>,
     R: OpReceiptBuilder<Transaction: Transaction + Encodable2718, Receipt: TxReceipt>,
     Spec: OpHardforks,
 {
@@ -135,6 +212,23 @@ where
             .into());
         }
 
+        if self.spec.is_jovian_active_at_timestamp(self.evm.block().timestamp.saturating_to())
+            && !is_deposit
+        {
+            let da_footprint_available = self.evm.block().gas_limit - self.da_footprint_used;
+
+            let tx_da_footprint = self.jovian_da_footprint_estimation(&tx)?;
+
+            if tx_da_footprint > da_footprint_available {
+                return Err(BlockExecutionError::Validation(BlockValidationError::Other(
+                    Box::new(OpBlockExecutionError::TransactionDaFootprintAboveGasLimit {
+                        transaction_da_footprint: tx_da_footprint,
+                        available_block_da_footprint: da_footprint_available,
+                    }),
+                )));
+            }
+        }
+
         // Execute transaction and return the result
         self.evm.transact(&tx).map_err(|err| {
             let hash = tx.tx().trie_hash();
@@ -170,6 +264,15 @@ where
 
         // append gas used
         self.gas_used += gas_used;
+
+        // Update DA footprint if Jovian is active
+        if self.spec.is_jovian_active_at_timestamp(self.evm.block().timestamp.saturating_to())
+            && !is_deposit
+        {
+            let tx_da_footprint = self.jovian_da_footprint_estimation(&tx)?;
+            // Add to DA footprint used
+            self.da_footprint_used = self.da_footprint_used.saturating_add(tx_da_footprint);
+        }
 
         self.receipts.push(
             match self.receipt_builder.build_receipt(ReceiptBuilderCtx {
@@ -232,13 +335,16 @@ where
             })
         })?;
 
-        let gas_used = self.receipts.last().map(|r| r.cumulative_gas_used()).unwrap_or_default();
+        let legacy_gas_used =
+            self.receipts.last().map(|r| r.cumulative_gas_used()).unwrap_or_default();
+
         Ok((
             self.evm,
             BlockExecutionResult {
                 receipts: self.receipts,
                 requests: Default::default(),
-                gas_used,
+                gas_used: legacy_gas_used,
+                blob_gas_used: self.da_footprint_used,
             },
         ))
     }
@@ -298,7 +404,8 @@ impl<R, Spec, EvmF> BlockExecutorFactory for OpBlockExecutorFactory<R, Spec, Evm
 where
     R: OpReceiptBuilder<Transaction: Transaction + Encodable2718, Receipt: TxReceipt>,
     Spec: OpHardforks,
-    EvmF: EvmFactory<Tx: FromRecoveredTx<R::Transaction> + FromTxWithEncoded<R::Transaction>>,
+    EvmF: EvmFactory<Tx = OpTransaction<TxEnv>>,
+    OpTransaction<TxEnv>: FromRecoveredTx<R::Transaction> + FromTxWithEncoded<R::Transaction>,
     Self: 'static,
 {
     type EvmFactory = EvmF;
@@ -328,9 +435,26 @@ mod tests {
     use alloy_consensus::{transaction::Recovered, SignableTransaction, TxLegacy};
     use alloy_eips::eip2718::WithEncoded;
     use alloy_evm::EvmEnv;
-    use alloy_primitives::{Address, Signature};
+    use alloy_hardforks::ForkCondition;
+    use alloy_op_hardforks::OpHardfork;
+    use alloy_primitives::{uint, Address, Signature, U256};
     use op_alloy_consensus::OpTxEnvelope;
-    use revm::database::{CacheDB, EmptyDB};
+    use op_revm::{
+        constants::{
+            BASE_FEE_SCALAR_OFFSET, ECOTONE_L1_BLOB_BASE_FEE_SLOT, ECOTONE_L1_FEE_SCALARS_SLOT,
+            L1_BASE_FEE_SLOT, OPERATOR_FEE_SCALARS_SLOT,
+        },
+        DefaultOp, L1BlockInfo, OpBuilder, OpSpecId,
+    };
+    use revm::{
+        context::BlockEnv,
+        database::{CacheDB, EmptyDB, InMemoryDB},
+        inspector::NoOpInspector,
+        state::AccountInfo,
+        Context,
+    };
+
+    use crate::OpEvm;
 
     use super::*;
 
@@ -357,5 +481,251 @@ mod tests {
         // make sure we can use both `WithEncoded` and transaction itself as inputs.
         let _ = executor.execute_transaction(&tx);
         let _ = executor.execute_transaction(&tx_with_encoded);
+    }
+
+    fn prepare_jovian_db(da_footprint_gas_scalar: u16) -> State<InMemoryDB> {
+        const L1_BASE_FEE: U256 = uint!(1_U256);
+        const L1_BLOB_BASE_FEE: U256 = uint!(2_U256);
+        const L1_BASE_FEE_SCALAR: u64 = 3;
+        const L1_BLOB_BASE_FEE_SCALAR: u64 = 4;
+        const L1_FEE_SCALARS: U256 = U256::from_limbs([
+            0,
+            (L1_BASE_FEE_SCALAR << (64 - BASE_FEE_SCALAR_OFFSET * 2)) | L1_BLOB_BASE_FEE_SCALAR,
+            0,
+            0,
+        ]);
+        const OPERATOR_FEE_SCALAR: u64 = 5;
+        const OPERATOR_FEE_CONST: u64 = 6;
+        const OPERATOR_FEE: U256 =
+            U256::from_limbs([OPERATOR_FEE_CONST, OPERATOR_FEE_SCALAR, 0, 0]);
+
+        let mut da_footprint_scalar_bytes = [0; 8];
+        da_footprint_scalar_bytes[0] = (da_footprint_gas_scalar >> 8) as u8;
+        da_footprint_scalar_bytes[1] = da_footprint_gas_scalar as u8;
+
+        let da_footprint_gas_scalar_u64: u64 = u64::from_be_bytes(da_footprint_scalar_bytes);
+        let da_footprint_gas_scalar_slot_value: U256 =
+            U256::from_limbs([0, 0, 0, da_footprint_gas_scalar_u64]);
+
+        let mut db = State::builder().with_database(InMemoryDB::default()).build();
+
+        db.database.insert_account_info(L1_BLOCK_CONTRACT, AccountInfo { ..Default::default() });
+
+        db.database
+            .insert_account_storage(L1_BLOCK_CONTRACT, L1_BASE_FEE_SLOT, L1_BASE_FEE)
+            .unwrap();
+        db.database
+            .insert_account_storage(
+                L1_BLOCK_CONTRACT,
+                ECOTONE_L1_BLOB_BASE_FEE_SLOT,
+                L1_BLOB_BASE_FEE,
+            )
+            .unwrap();
+        db.database
+            .insert_account_storage(L1_BLOCK_CONTRACT, ECOTONE_L1_FEE_SCALARS_SLOT, L1_FEE_SCALARS)
+            .unwrap();
+        db.database
+            .insert_account_storage(L1_BLOCK_CONTRACT, OPERATOR_FEE_SCALARS_SLOT, OPERATOR_FEE)
+            .unwrap();
+        db.database
+            .insert_account_storage(
+                L1_BLOCK_CONTRACT,
+                DA_FOOTPRINT_GAS_SCALAR_SLOT,
+                da_footprint_gas_scalar_slot_value,
+            )
+            .unwrap();
+
+        db.database.insert_account_info(
+            Address::ZERO,
+            AccountInfo { balance: U256::from(400_000_000), ..Default::default() },
+        );
+
+        db
+    }
+
+    fn build_executor<'a>(
+        db: &'a mut State<InMemoryDB>,
+        receipt_builder: &'a OpAlloyReceiptBuilder,
+        op_chain_hardforks: &'a OpChainHardforks,
+        gas_limit: u64,
+        jovian_timestamp: u64,
+    ) -> OpBlockExecutor<
+        OpEvm<&'a mut State<InMemoryDB>, NoOpInspector>,
+        &'a OpAlloyReceiptBuilder,
+        &'a OpChainHardforks,
+    > {
+        let ctx = Context::op()
+            .with_db(db)
+            .with_chain(L1BlockInfo {
+                operator_fee_scalar: Some(U256::from(2)),
+                operator_fee_constant: Some(U256::from(50)),
+                ..Default::default()
+            })
+            .with_block(BlockEnv {
+                timestamp: U256::from(jovian_timestamp),
+                gas_limit,
+                ..Default::default()
+            })
+            .modify_cfg_chained(|cfg| cfg.spec = OpSpecId::JOVIAN);
+
+        let evm = OpEvm::new(ctx.build_op_with_inspector(NoOpInspector {}), true);
+
+        OpBlockExecutor::new(
+            evm,
+            OpBlockExecutionCtx::default(),
+            op_chain_hardforks,
+            receipt_builder,
+        )
+    }
+
+    #[test]
+    fn test_jovian_da_footprint_estimation() {
+        const DA_FOOTPRINT_GAS_SCALAR: u16 = 7;
+        const GAS_LIMIT: u64 = 100_000;
+        const JOVIAN_TIMESTAMP: u64 = 1746806402;
+
+        let mut db = prepare_jovian_db(DA_FOOTPRINT_GAS_SCALAR);
+        let op_chain_hardforks = OpChainHardforks::new(
+            OpHardfork::op_mainnet()
+                .into_iter()
+                .chain(vec![(OpHardfork::Jovian, ForkCondition::Timestamp(JOVIAN_TIMESTAMP))]),
+        );
+
+        let receipt_builder = OpAlloyReceiptBuilder::default();
+        let mut executor = build_executor(
+            &mut db,
+            &receipt_builder,
+            &op_chain_hardforks,
+            GAS_LIMIT,
+            JOVIAN_TIMESTAMP,
+        );
+
+        let tx_inner = TxLegacy { gas_limit: GAS_LIMIT, ..Default::default() };
+
+        let tx = Recovered::new_unchecked(
+            OpTxEnvelope::Legacy(tx_inner.into_signed(Signature::new(
+                Default::default(),
+                Default::default(),
+                Default::default(),
+            ))),
+            Address::ZERO,
+        );
+
+        assert!(executor.da_footprint_used == 0);
+
+        let expected_da_footprint = executor.jovian_da_footprint_estimation(&tx).unwrap();
+
+        // make sure we can use both `WithEncoded` and transaction itself as inputs.
+        let res = executor.execute_transaction(&tx);
+        assert!(res.is_ok());
+
+        assert!(executor.da_footprint_used == expected_da_footprint);
+    }
+
+    #[test]
+    fn test_jovian_da_footprint_estimation_out_of_gas() {
+        const DA_FOOTPRINT_GAS_SCALAR: u16 = 7;
+        const JOVIAN_TIMESTAMP: u64 = 1746806402;
+        const GAS_LIMIT: u64 = 100;
+
+        let mut db = prepare_jovian_db(DA_FOOTPRINT_GAS_SCALAR);
+        let op_chain_hardforks = OpChainHardforks::new(
+            OpHardfork::op_mainnet()
+                .into_iter()
+                .chain(vec![(OpHardfork::Jovian, ForkCondition::Timestamp(JOVIAN_TIMESTAMP))]),
+        );
+
+        let receipt_builder = OpAlloyReceiptBuilder::default();
+        let mut executor = build_executor(
+            &mut db,
+            &receipt_builder,
+            &op_chain_hardforks,
+            GAS_LIMIT,
+            JOVIAN_TIMESTAMP,
+        );
+
+        let tx_inner = TxLegacy { gas_limit: GAS_LIMIT, ..Default::default() };
+
+        let tx = Recovered::new_unchecked(
+            OpTxEnvelope::Legacy(tx_inner.into_signed(Signature::new(
+                Default::default(),
+                Default::default(),
+                Default::default(),
+            ))),
+            Address::ZERO,
+        );
+
+        assert!(executor.da_footprint_used == 0);
+
+        let expected_da_footprint = executor.jovian_da_footprint_estimation(&tx).unwrap();
+
+        // make sure we can use both `WithEncoded` and transaction itself as inputs.
+        let res = executor.execute_transaction(&tx);
+        assert!(res.is_err());
+        let err = res.unwrap_err();
+        match err {
+            BlockExecutionError::Validation(BlockValidationError::Other(err)) => {
+                assert_eq!(
+                    err.to_string(),
+                    OpBlockExecutionError::TransactionDaFootprintAboveGasLimit {
+                        transaction_da_footprint: expected_da_footprint,
+                        available_block_da_footprint: GAS_LIMIT,
+                    }
+                    .to_string(),
+                );
+            }
+            _ => panic!("expected TransactionDaFootprintAboveGasLimit error"),
+        }
+    }
+
+    #[test]
+    fn test_jovian_da_footprint_estimation_maxed_out_da_footprint() {
+        const DA_FOOTPRINT_GAS_SCALAR: u16 = 2000;
+        const JOVIAN_TIMESTAMP: u64 = 1746806402;
+        const GAS_LIMIT: u64 = 200_000;
+
+        let mut db = prepare_jovian_db(DA_FOOTPRINT_GAS_SCALAR);
+        let op_chain_hardforks = OpChainHardforks::new(
+            OpHardfork::op_mainnet()
+                .into_iter()
+                .chain(vec![(OpHardfork::Jovian, ForkCondition::Timestamp(JOVIAN_TIMESTAMP))]),
+        );
+
+        let receipt_builder = OpAlloyReceiptBuilder::default();
+        let mut executor = build_executor(
+            &mut db,
+            &receipt_builder,
+            &op_chain_hardforks,
+            GAS_LIMIT,
+            JOVIAN_TIMESTAMP,
+        );
+
+        let tx_inner = TxLegacy { gas_limit: GAS_LIMIT, ..Default::default() };
+
+        let tx = Recovered::new_unchecked(
+            OpTxEnvelope::Legacy(tx_inner.into_signed(Signature::new(
+                Default::default(),
+                Default::default(),
+                Default::default(),
+            ))),
+            Address::ZERO,
+        );
+
+        assert!(executor.da_footprint_used == 0);
+
+        let expected_da_footprint = executor.jovian_da_footprint_estimation(&tx).unwrap();
+
+        // make sure we can use both `WithEncoded` and transaction itself as inputs.
+        let gas_used_tx = executor.execute_transaction(&tx).expect("failed to execute transaction");
+
+        // The gas used when executing the transaction should be the legacy value...
+        assert!(gas_used_tx < expected_da_footprint);
+
+        // The gas used when finishing the executor should be the DA footprint since this is higher
+        // than the legacy gas used and jovian is active...
+        let (_, result) = executor.finish().expect("failed to finish executor");
+        assert_eq!(result.blob_gas_used, expected_da_footprint);
+        assert_eq!(result.gas_used, gas_used_tx);
+        assert!(result.blob_gas_used > result.gas_used);
     }
 }

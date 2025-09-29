@@ -32,6 +32,8 @@ pub struct BlockExecutionResult<T> {
     pub requests: Requests,
     /// The total gas used by the block.
     pub gas_used: u64,
+    /// Blob gas used by the block.
+    pub blob_gas_used: u64,
 }
 
 /// Helper trait to encapsulate requirements for a type to be used as input for [`BlockExecutor`].

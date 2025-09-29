@@ -54,6 +54,10 @@ pub struct EthBlockExecutor<'a, Evm, Spec, R: ReceiptBuilder> {
     pub receipts: Vec<R::Receipt>,
     /// Total gas used by transactions in this block.
     pub gas_used: u64,
+
+    /// Blob gas used by the block.
+    /// Before cancun activation, this is always 0.
+    pub blob_gas_used: u64,
 }
 
 impl<'a, Evm, Spec, R> EthBlockExecutor<'a, Evm, Spec, R>
@@ -68,6 +72,7 @@ where
             ctx,
             receipts: Vec::new(),
             gas_used: 0,
+            blob_gas_used: 0,
             system_caller: SystemCaller::new(spec.clone()),
             spec,
             receipt_builder,
@@ -138,6 +143,13 @@ where
 
         // append gas used
         self.gas_used += gas_used;
+
+        // only determine cancun fields when active
+        if self.spec.is_cancun_active_at_timestamp(self.evm.block().timestamp.saturating_to()) {
+            let tx_blob_gas_used = tx.tx().blob_gas_used().unwrap_or_default();
+
+            self.blob_gas_used = self.blob_gas_used.saturating_add(tx_blob_gas_used);
+        }
 
         // Push transaction changeset and calculate header bloom filter for receipt.
         self.receipts.push(self.receipt_builder.build_receipt(ReceiptBuilderCtx {
@@ -221,7 +233,12 @@ where
 
         Ok((
             self.evm,
-            BlockExecutionResult { receipts: self.receipts, requests, gas_used: self.gas_used },
+            BlockExecutionResult {
+                receipts: self.receipts,
+                requests,
+                gas_used: self.gas_used,
+                blob_gas_used: self.blob_gas_used,
+            },
         ))
     }
 

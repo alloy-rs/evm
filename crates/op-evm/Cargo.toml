@@ -26,6 +26,8 @@ op-alloy-consensus.workspace = true
 revm.workspace = true
 op-revm.workspace = true
 
+thiserror.workspace = true
+
 auto_impl.workspace = true
 
 [dev-dependencies]
