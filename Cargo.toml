@@ -55,8 +55,8 @@ op-alloy-consensus = { version = "0.20", default-features = false }
 op-alloy-rpc-types-engine = { version = "0.20", default-features = false }
 
 # revm
-revm = { path = "../revm/crates/revm", default-features = false }
-op-revm = { path = "../revm/crates/op-revm", default-features = false }
+revm = { version = "29.0.0", default-features = false }
+op-revm = { version = "10.0.0", default-features = false }
 
 # misc
 auto_impl = "1"
@@ -67,5 +67,5 @@ serde_json = "1"
 test-case = "3"
 
 [patch.crates-io]
-# revm = { git = "https://github.com/bluealloy/revm", rev = "11b16259" }
-# op-revm = { git = "https://github.com/bluealloy/revm", rev = "11b16259" }
+revm = { git = "https://github.com/bluealloy/revm", rev = "32abb54506bfaebc30777f6a49cbb3e1e04d5b1b" }
+op-revm = { git = "https://github.com/bluealloy/revm", rev = "32abb54506bfaebc30777f6a49cbb3e1e04d5b1b" }
