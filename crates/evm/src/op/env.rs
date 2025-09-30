@@ -1,26 +1,16 @@
 use crate::{
     eth::{EvmEnvInput, NextEvmEnvAttributes},
-    EvmEnv, FromRecoveredTx, FromTxWithEncoded,
+    EvmEnv,
 };
-use alloy_consensus::{BlockHeader, Transaction};
-use alloy_eips::Encodable2718;
+use alloy_consensus::BlockHeader;
 use alloy_op_hardforks::OpHardforks;
-use alloy_primitives::{Bytes, ChainId, U256};
+use alloy_primitives::{ChainId, U256};
 use op_revm::OpSpecId;
 use revm::{
     context::{BlockEnv, CfgEnv},
     context_interface::block::BlobExcessGasAndPrice,
     primitives::hardfork::SpecId,
 };
-
-/// Trait for OP transaction environments. Allows to recover the transaction encoded bytes if
-/// they're available.
-pub trait OpTxEnv<Tx: Transaction + Encodable2718>:
-    FromRecoveredTx<Tx> + FromTxWithEncoded<Tx>
-{
-    /// Returns the encoded bytes of the transaction.
-    fn encoded_bytes(&self) -> Option<&Bytes>;
-}
 
 impl EvmEnv<OpSpecId> {
     /// Create a new `EvmEnv` with [`OpSpecId`] from a block `header`, `chain_id` and `chain_spec`.

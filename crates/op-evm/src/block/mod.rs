@@ -12,8 +12,7 @@ use alloy_evm::{
         StateChangePostBlockSource, StateChangeSource, SystemCaller,
     },
     eth::receipt_builder::ReceiptBuilderCtx,
-    op::OpTxEnv,
-    Database, Evm, EvmFactory,
+    Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded,
 };
 use alloy_op_hardforks::{OpChainHardforks, OpHardforks};
 use alloy_primitives::{Bytes, B256};
@@ -23,13 +22,31 @@ use op_revm::{
     constants::{DA_FOOTPRINT_GAS_SCALAR_OFFSET, DA_FOOTPRINT_GAS_SCALAR_SLOT, L1_BLOCK_CONTRACT},
     estimate_tx_compressed_size,
     transaction::deposit::DEPOSIT_TRANSACTION_TYPE,
+    OpTransaction,
 };
 pub use receipt_builder::OpAlloyReceiptBuilder;
 use receipt_builder::OpReceiptBuilder;
-use revm::{context::result::ResultAndState, database::State, DatabaseCommit, Inspector};
+use revm::{
+    context::{result::ResultAndState, TxEnv},
+    database::State,
+    DatabaseCommit, Inspector,
+};
 
 mod canyon;
 pub mod receipt_builder;
+
+/// Trait for OP transaction environments. Allows to recover the transaction encoded bytes if
+/// they're available.
+pub trait OpTxEnv {
+    /// Returns the encoded bytes of the transaction.
+    fn encoded_bytes(&self) -> Option<&Bytes>;
+}
+
+impl OpTxEnv for OpTransaction<TxEnv> {
+    fn encoded_bytes(&self) -> Option<&Bytes> {
+        self.enveloped_tx.as_ref()
+    }
+}
 
 /// Context for OP block execution.
 #[derive(Debug, Default, Clone)]
@@ -115,7 +132,10 @@ pub enum OpBlockExecutionError {
 impl<'db, DB, E, R, Spec> OpBlockExecutor<E, R, Spec>
 where
     DB: Database + 'db,
-    E: Evm<DB = &'db mut State<DB>, Tx: OpTxEnv<R::Transaction>>,
+    E: Evm<
+        DB = &'db mut State<DB>,
+        Tx: FromRecoveredTx<R::Transaction> + FromTxWithEncoded<R::Transaction> + OpTxEnv,
+    >,
     R: OpReceiptBuilder<Transaction: Transaction + Encodable2718, Receipt: TxReceipt>,
     Spec: OpHardforks,
 {
@@ -159,7 +179,10 @@ where
 impl<'db, DB, E, R, Spec> BlockExecutor for OpBlockExecutor<E, R, Spec>
 where
     DB: Database + 'db,
-    E: Evm<DB = &'db mut State<DB>, Tx: OpTxEnv<R::Transaction>>,
+    E: Evm<
+        DB = &'db mut State<DB>,
+        Tx: FromRecoveredTx<R::Transaction> + FromTxWithEncoded<R::Transaction> + OpTxEnv,
+    >,
     R: OpReceiptBuilder<Transaction: Transaction + Encodable2718, Receipt: TxReceipt>,
     Spec: OpHardforks,
 {
@@ -400,7 +423,9 @@ impl<R, Spec, EvmF> BlockExecutorFactory for OpBlockExecutorFactory<R, Spec, Evm
 where
     R: OpReceiptBuilder<Transaction: Transaction + Encodable2718, Receipt: TxReceipt>,
     Spec: OpHardforks,
-    EvmF: EvmFactory<Tx: OpTxEnv<R::Transaction>>,
+    EvmF: EvmFactory<
+        Tx: FromRecoveredTx<R::Transaction> + FromTxWithEncoded<R::Transaction> + OpTxEnv,
+    >,
     Self: 'static,
 {
     type EvmFactory = EvmF;

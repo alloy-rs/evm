@@ -1,4 +1,4 @@
-use crate::{op::env::OpTxEnv, FromRecoveredTx, FromTxWithEncoded};
+use crate::{FromRecoveredTx, FromTxWithEncoded};
 
 use alloy_eips::{Encodable2718, Typed2718};
 use alloy_primitives::{Address, Bytes};
@@ -70,11 +70,5 @@ impl FromRecoveredTx<OpTxEnvelope> for OpTransaction<TxEnv> {
     fn from_recovered_tx(tx: &OpTxEnvelope, sender: Address) -> Self {
         let encoded = tx.encoded_2718();
         Self::from_encoded_tx(tx, sender, encoded.into())
-    }
-}
-
-impl OpTxEnv<OpTxEnvelope> for OpTransaction<TxEnv> {
-    fn encoded_bytes(&self) -> Option<&Bytes> {
-        self.enveloped_tx.as_ref()
     }
 }
