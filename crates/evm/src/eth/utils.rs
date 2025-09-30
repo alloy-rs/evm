@@ -9,7 +9,7 @@ use alloy_eips::eip7928::{
 use alloy_primitives::{Address, B256};
 use revm::{
     primitives::{StorageKey, StorageValue},
-    state::Account,
+    state::{Account, AccountStatus},
 };
 
 /// An utility function for system contract storage allocation.
@@ -87,6 +87,14 @@ pub fn from_account_with_tx_index(
     }
 
     account_changes.address = address;
+    if account.status == AccountStatus::SelfDestructed {
+        account_changes.nonce_changes.clear();
+        account_changes.code_changes.clear();
+        for slot in &account_changes.storage_changes {
+            account_changes.storage_reads.push(slot.slot);
+        }
+        account_changes.storage_changes.clear();
+    }
     account_changes
 }
 

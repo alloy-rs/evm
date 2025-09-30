@@ -275,95 +275,6 @@ where
         // Commit the state changes.
         self.evm.db_mut().commit(state.clone());
         if self.spec.is_amsterdam_active_at_timestamp(self.evm.block().timestamp.saturating_to()) {
-            // match tx.tx().kind() {
-            //     alloy_primitives::TxKind::Create => {
-            //         if let Some(addr) = tx.tx().to() {
-            //             if let Some(acc) = state.get(&addr) {
-            //                 if let Some(bal) = self.block_access_list.as_mut() {
-            //                     bal.push(crate::eth::utils::from_account_with_tx_index(
-            //                         addr,
-            //                         self.receipts.len() as u64,
-            //                         acc,
-            //                         false,
-            //                     ));
-            //                     tracing::debug!(
-            //             "BlockAccessList: CREATE parent contract {:#x}, tx_index={}, storage:
-            // {:#?}",             addr,
-            //             self.receipts.len(),
-            //             acc.storage_access,
-            //         );
-            //                     state.get_mut(&addr).unwrap().clear_state_changes();
-            //                 }
-            //             }
-            //         }
-
-            //         if let Some(created_address) = result.created_address() {
-            //             if let Some(acc) = state.get(&created_address) {
-            //                 if let Some(bal) = self.block_access_list.as_mut() {
-            //                     bal.push(crate::eth::utils::from_account_with_tx_index(
-            //                         created_address,
-            //                         self.receipts.len() as u64,
-            //                         acc,
-            //                         false,
-            //                     ));
-            //                     tracing::debug!(
-            //             "BlockAccessList: new contract created at {:#x}, tx_index={}, storage:
-            // {:#?}",             created_address,
-            //             self.receipts.len(),
-            //             acc.storage_access,
-            //         );
-            //                     state.get_mut(&created_address).unwrap().clear_state_changes();
-            //                 }
-            //             }
-            //         }
-            //     }
-
-            //     alloy_primitives::TxKind::Call(address) => {
-            //         let mut nonce = 0;
-            //         if let Some(acc) = state.get(&address) {
-            //             if let Some(bal) = self.block_access_list.as_mut() {
-            //                 bal.push(crate::eth::utils::from_account_with_tx_index(
-            //                     address,
-            //                     self.receipts.len() as u64,
-            //                     acc,
-            //                     false,
-            //                 ));
-            //                 tracing::debug!(
-            //                     "BlockAccessList: Tx call arm {:#x}, tx_index={}, storage:
-            // {:#?}",                     address,
-            //                     self.receipts.len(),
-            //                     acc.storage_access,
-            //                 );
-            //                 nonce = acc.info.nonce;
-            //                 state.get_mut(&address).unwrap().clear_state_changes();
-            //             }
-            //         }
-            //         if let Some(nonce) = nonce.checked_sub(1) {
-            //             let created_address = Address::create(&address, nonce);
-            //             tracing::debug!("Created address calculated as {:#x}", created_address);
-            //             if created_address != Address::ZERO {
-            //                 if let Some(acc) = state.get(&created_address) {
-            //                     if let Some(bal) = self.block_access_list.as_mut() {
-            //                         bal.push(crate::eth::utils::from_account_with_tx_index(
-            //                             created_address,
-            //                             self.receipts.len() as u64,
-            //                             acc,
-            //                             false,
-            //                         ));
-            //                         tracing::debug!(
-            //             "BlockAccessList: new contract created at {:#x}, tx_index={}, storage:
-            // {:#?}",             created_address,
-            //             self.receipts.len(),
-            //             acc.storage_access,
-            //         );
-            //
-            // state.get_mut(&created_address).unwrap().clear_state_changes();
-            //                     }
-            //                 }
-            //             }
-            //         }
-            //     }
-            // }
             if let Some(addr) = tx.tx().to() {
                 if let Some(acc) = state.get(&addr) {
                     if let Some(bal) = self.block_access_list.as_mut() {
@@ -438,17 +349,6 @@ where
                     }
                 }
             }
-
-            // if let Some(coinbase) = state.get(&self.evm.block().beneficiary) {
-            //     self.block_access_list.as_mut().unwrap().push(
-            //         AccountChanges::default()
-            //             .with_address(self.evm.block().beneficiary)
-            //             .with_balance_change(BalanceChange {
-            //                 block_access_index: self.receipts.len() as u64,
-            //                 post_balance: coinbase.info.balance,
-            //             }),
-            //     );
-            // }
             // Commit the state changes.
             self.evm.db_mut().commit(state.clone());
         }
