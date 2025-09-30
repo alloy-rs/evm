@@ -87,7 +87,15 @@ pub fn from_account_with_tx_index(
     }
 
     account_changes.address = address;
-    if account.status == AccountStatus::SelfDestructed {
+    if account.status == AccountStatus::SelfDestructed
+        || account.status == AccountStatus::SelfDestructedLocal
+    {
+        tracing::debug!(
+            "Account {:#x} was self-destructed. reads: {:?}, writes: {:?}",
+            address,
+            account_changes.storage_reads,
+            account_changes.storage_changes
+        );
         account_changes.nonce_changes.clear();
         account_changes.code_changes.clear();
         for slot in &account_changes.storage_changes {
