@@ -12,7 +12,8 @@ use alloy_evm::{
         StateChangePostBlockSource, StateChangeSource, SystemCaller,
     },
     eth::receipt_builder::ReceiptBuilderCtx,
-    Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded,
+    op::OpTxEnv,
+    Database, Evm, EvmFactory,
 };
 use alloy_op_hardforks::{OpChainHardforks, OpHardforks};
 use alloy_primitives::{Bytes, B256};
@@ -22,15 +23,10 @@ use op_revm::{
     constants::{DA_FOOTPRINT_GAS_SCALAR_OFFSET, DA_FOOTPRINT_GAS_SCALAR_SLOT, L1_BLOCK_CONTRACT},
     estimate_tx_compressed_size,
     transaction::deposit::DEPOSIT_TRANSACTION_TYPE,
-    OpTransaction,
 };
 pub use receipt_builder::OpAlloyReceiptBuilder;
 use receipt_builder::OpReceiptBuilder;
-use revm::{
-    context::{result::ResultAndState, TxEnv},
-    database::State,
-    DatabaseCommit, Inspector,
-};
+use revm::{context::result::ResultAndState, database::State, DatabaseCommit, Inspector};
 
 mod canyon;
 pub mod receipt_builder;
@@ -119,8 +115,7 @@ pub enum OpBlockExecutionError {
 impl<'db, DB, E, R, Spec> OpBlockExecutor<E, R, Spec>
 where
     DB: Database + 'db,
-    E: Evm<DB = &'db mut State<DB>, Tx = OpTransaction<TxEnv>>,
-    OpTransaction<TxEnv>: FromRecoveredTx<R::Transaction> + FromTxWithEncoded<R::Transaction>,
+    E: Evm<DB = &'db mut State<DB>, Tx: OpTxEnv<R::Transaction>>,
     R: OpReceiptBuilder<Transaction: Transaction + Encodable2718, Receipt: TxReceipt>,
     Spec: OpHardforks,
 {
@@ -149,11 +144,13 @@ where
         &mut self,
         tx: &impl ExecutableTx<OpBlockExecutor<E, R, Spec>>,
     ) -> Result<u64, BlockExecutionError> {
-        // Try to use the enveloped tx if it exists, otherwise re-encode the transaction.
-        let enveloped_tx =
-            tx.to_tx_env().enveloped_tx.unwrap_or_else(|| tx.tx().encoded_2718().into());
+        // Try to use the enveloped tx if it exists, otherwise use the encoded 2718 bytes
+        let encoded = match tx.to_tx_env().encoded_bytes() {
+            Some(encoded) => estimate_tx_compressed_size(encoded),
+            None => estimate_tx_compressed_size(tx.tx().encoded_2718().as_ref()),
+        };
 
-        Ok(estimate_tx_compressed_size(&enveloped_tx)
+        Ok(encoded
             .saturating_div(1_000_000)
             .saturating_mul(self.get_jovian_da_footprint_scalar()?.into()))
     }
@@ -162,8 +159,7 @@ where
 impl<'db, DB, E, R, Spec> BlockExecutor for OpBlockExecutor<E, R, Spec>
 where
     DB: Database + 'db,
-    E: Evm<DB = &'db mut State<DB>, Tx = OpTransaction<TxEnv>>,
-    OpTransaction<TxEnv>: FromRecoveredTx<R::Transaction> + FromTxWithEncoded<R::Transaction>,
+    E: Evm<DB = &'db mut State<DB>, Tx: OpTxEnv<R::Transaction>>,
     R: OpReceiptBuilder<Transaction: Transaction + Encodable2718, Receipt: TxReceipt>,
     Spec: OpHardforks,
 {
@@ -404,8 +400,7 @@ impl<R, Spec, EvmF> BlockExecutorFactory for OpBlockExecutorFactory<R, Spec, Evm
 where
     R: OpReceiptBuilder<Transaction: Transaction + Encodable2718, Receipt: TxReceipt>,
     Spec: OpHardforks,
-    EvmF: EvmFactory<Tx = OpTransaction<TxEnv>>,
-    OpTransaction<TxEnv>: FromRecoveredTx<R::Transaction> + FromTxWithEncoded<R::Transaction>,
+    EvmF: EvmFactory<Tx: OpTxEnv<R::Transaction>>,
     Self: 'static,
 {
     type EvmFactory = EvmF;
