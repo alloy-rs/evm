@@ -11,7 +11,7 @@ use core::fmt::Debug;
 use revm::{
     context::LocalContextTr,
     handler::{EthPrecompiles, PrecompileProvider},
-    interpreter::{CallInput, Gas, InputsImpl, InstructionResult, InterpreterResult},
+    interpreter::{CallInput, CallInputs, Gas, InstructionResult, InterpreterResult},
     precompile::{PrecompileError, PrecompileFn, PrecompileId, PrecompileResult, Precompiles},
     Context, Journal,
 };
@@ -375,19 +375,16 @@ where
     fn run(
         &mut self,
         context: &mut Context<BlockEnv, TxEnv, CfgEnv, DB, Journal<DB>, Chain>,
-        address: &Address,
-        inputs: &InputsImpl,
-        _is_static: bool,
-        gas_limit: u64,
+        inputs: &CallInputs,
     ) -> Result<Option<InterpreterResult>, String> {
         // Get the precompile at the address
-        let Some(precompile) = self.get(address) else {
+        let Some(precompile) = self.get(&inputs.target_address) else {
             return Ok(None);
         };
 
         let mut result = InterpreterResult {
             result: InstructionResult::Return,
-            gas: Gas::new(gas_limit),
+            gas: Gas::new(inputs.gas_limit),
             output: Bytes::new(),
         };
 
@@ -412,12 +409,12 @@ where
 
         let precompile_result = precompile.call(PrecompileInput {
             data: input_bytes,
-            gas: gas_limit,
-            caller: inputs.caller_address,
-            value: inputs.call_value,
+            gas: inputs.gas_limit,
+            caller: inputs.caller,
+            value: inputs.call_value(),
             internals: EvmInternals::new(journal, &context.block),
             target_address: inputs.target_address,
-            bytecode_address: inputs.bytecode_address.expect("always set for precompile calls"),
+            bytecode_address: inputs.bytecode_address,
         });
 
         match precompile_result {
