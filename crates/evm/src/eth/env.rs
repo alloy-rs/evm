@@ -60,11 +60,8 @@ impl EvmEnv<SpecId> {
         chain_id: ChainId,
         blob_params: Option<BlobParams>,
     ) -> Self {
-        let spec = crate::eth::spec_by_timestamp_and_block_number(
-            &chain_spec,
-            input.timestamp,
-            input.height,
-        );
+        let spec =
+            crate::spec_by_timestamp_and_block_number(&chain_spec, input.timestamp, input.height);
         let mut cfg_env = CfgEnv::new_with_spec(spec).with_chain_id(chain_id);
 
         if let Some(blob_params) = &blob_params {
@@ -105,11 +102,8 @@ impl EvmEnv<SpecId> {
         chain_id: ChainId,
         blob_params: Option<BlobParams>,
     ) -> Self {
-        let spec = crate::eth::spec_by_timestamp_and_block_number(
-            &chain_spec,
-            input.timestamp,
-            input.height,
-        );
+        let spec =
+            crate::spec_by_timestamp_and_block_number(&chain_spec, input.timestamp, input.height);
         let mut cfg_env = CfgEnv::new_with_spec(spec).with_chain_id(chain_id);
 
         if let Some(blob_params) = &blob_params {

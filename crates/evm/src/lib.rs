@@ -37,3 +37,5 @@ mod either;
 #[cfg(feature = "op")]
 pub use op_revm;
 pub use revm;
+
+pub use eth::spec_id::{spec, spec_by_timestamp_and_block_number};

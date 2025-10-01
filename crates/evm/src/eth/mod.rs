@@ -1,7 +1,6 @@
 //! Ethereum EVM implementation.
 
 pub use env::NextEvmEnvAttributes;
-pub use spec_id::{spec, spec_by_timestamp_and_block_number};
 
 pub(crate) use env::EvmEnvInput;
 
@@ -31,7 +30,7 @@ pub mod receipt_builder;
 pub mod spec;
 
 mod env;
-mod spec_id;
+pub(crate) mod spec_id;
 
 /// The Ethereum EVM context type.
 pub type EthEvmContext<DB> = Context<BlockEnv, TxEnv, CfgEnv, DB>;
