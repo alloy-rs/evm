@@ -409,13 +409,12 @@ where
             }
             CallInput::Bytes(bytes) => bytes.as_ref(),
         };
-
         let precompile_result = precompile.call(PrecompileInput {
             data: input_bytes,
             gas: gas_limit,
             caller: inputs.caller_address,
             value: inputs.call_value,
-            internals: EvmInternals::new(journal, &context.block),
+            internals: EvmInternals::new(journal, &context.block, &mut context.tx),
             target_address: inputs.target_address,
             bytecode_address: inputs.bytecode_address.expect("always set for precompile calls"),
         });
@@ -816,7 +815,7 @@ mod tests {
                 gas: gas_limit,
                 caller: Address::ZERO,
                 value: U256::ZERO,
-                internals: EvmInternals::new(&mut ctx.journaled_state, &ctx.block),
+                internals: EvmInternals::new(&mut ctx.journaled_state, &ctx.block, &mut ctx.tx),
                 target_address: identity_address,
                 bytecode_address: identity_address,
             })
@@ -850,7 +849,7 @@ mod tests {
                 gas: gas_limit,
                 caller: Address::ZERO,
                 value: U256::ZERO,
-                internals: EvmInternals::new(&mut ctx.journaled_state, &ctx.block),
+                internals: EvmInternals::new(&mut ctx.journaled_state, &ctx.block, &mut ctx.tx),
                 target_address: identity_address,
                 bytecode_address: identity_address,
             })
@@ -885,7 +884,7 @@ mod tests {
                 gas: gas_limit,
                 caller: Address::ZERO,
                 value: U256::ZERO,
-                internals: EvmInternals::new(&mut ctx.journaled_state, &ctx.block),
+                internals: EvmInternals::new(&mut ctx.journaled_state, &ctx.block, &mut ctx.tx),
                 target_address: Address::ZERO,
                 bytecode_address: Address::ZERO,
             })
@@ -949,7 +948,6 @@ mod tests {
         let dynamic_address = address!("0xDEAD000000000000000000000000000000000001");
         let dynamic_precompile = spec_precompiles.get(&dynamic_address);
         assert!(dynamic_precompile.is_some(), "Dynamic precompile should be found");
-
         // Execute the dynamic precompile
         let result = dynamic_precompile
             .unwrap()
@@ -958,7 +956,7 @@ mod tests {
                 gas: 1000,
                 caller: Address::ZERO,
                 value: U256::ZERO,
-                internals: EvmInternals::new(&mut ctx.journaled_state, &ctx.block),
+                internals: EvmInternals::new(&mut ctx.journaled_state, &ctx.block, &mut ctx.tx),
                 target_address: dynamic_address,
                 bytecode_address: dynamic_address,
             })
@@ -994,7 +992,7 @@ mod tests {
                 value: U256::ZERO,
                 target_address: identity_address,
                 bytecode_address: identity_address,
-                internals: EvmInternals::new(&mut ctx.journaled_state, &ctx.block),
+                internals: EvmInternals::new(&mut ctx.journaled_state, &ctx.block, &mut ctx.tx),
             })
             .unwrap();
         assert_eq!(result.bytes, test_input, "Identity precompile should return the input data");
@@ -1021,7 +1019,7 @@ mod tests {
                 gas: gas_limit,
                 caller: Address::ZERO,
                 value: U256::ZERO,
-                internals: EvmInternals::new(&mut ctx.journaled_state, &ctx.block),
+                internals: EvmInternals::new(&mut ctx.journaled_state, &ctx.block, &mut ctx.tx),
                 target_address: identity_address,
                 bytecode_address: identity_address,
             })
