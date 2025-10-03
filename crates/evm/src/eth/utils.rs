@@ -67,7 +67,7 @@ pub fn from_account_with_tx_index(
 
     // Records if only post_balance != pre_balance
     let (pre_balance, post_balance, zero_value_transfer) = account.balance_change;
-    if !zero_value_transfer {
+    if post_balance != pre_balance || !zero_value_transfer {
         account_changes.balance_changes.push(BalanceChange { block_access_index, post_balance });
     }
 
