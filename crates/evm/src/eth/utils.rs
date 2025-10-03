@@ -86,6 +86,7 @@ pub fn from_account_with_tx_index(
     }
 
     account_changes.address = address;
+    tracing::debug!("Account Status: {:#x} -> {:#?}", address, account.status);
     if account.is_selfdestructed() || account.is_selfdestructed_locally() {
         tracing::debug!(
             "Account {:#x} was self-destructed. reads: {:?}, writes: {:?}",
