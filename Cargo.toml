@@ -75,3 +75,4 @@ alloy-eips = { git = "https://github.com/Soubhik-10/alloy", branch = "bal" }
 alloy-consensus = { git = "https://github.com/Soubhik-10/alloy", branch = "bal" }
 # alloy-hardforks = { git = "https://github.com/Rimeeeeee/hardforks", branch = "amsterdam" }
 alloy-rpc-types-eth = { git = "https://github.com/Soubhik-10/alloy", branch = "bal" }
+alloy-rpc-types-engine = { git = "https://github.com/Soubhik-10/alloy", branch = "bal" }
