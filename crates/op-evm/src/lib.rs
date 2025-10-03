@@ -4,10 +4,12 @@
     html_favicon_url = "https://raw.githubusercontent.com/alloy-rs/core/main/assets/favicon.ico"
 )]
 #![cfg_attr(not(test), warn(unused_crate_dependencies))]
-#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(not(feature = "std"), no_std)]
 
 extern crate alloc;
+
+pub use alloy_evm::op::{spec, spec_by_timestamp_after_bedrock};
 
 use alloy_evm::{precompiles::PrecompilesMap, Database, Evm, EvmEnv, EvmFactory};
 use alloy_primitives::{Address, Bytes};
@@ -30,9 +32,6 @@ use revm::{
 
 pub mod block;
 pub use block::{OpBlockExecutionCtx, OpBlockExecutor, OpBlockExecutorFactory};
-
-mod spec;
-pub use spec::*;
 
 /// OP EVM implementation.
 ///

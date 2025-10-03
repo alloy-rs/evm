@@ -5,14 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.21.1](https://github.com/alloy-rs/evm/releases/tag/v0.21.1) - 2025-09-17
-
-### Features
-
-- Add `EthereumHardforks` => `SpecId` and `OpHardforks` => `OpSpecId` mapping ([#174](https://github.com/alloy-rs/evm/issues/174))
-- Add `BlockValidationError::Other` ([#176](https://github.com/alloy-rs/evm/issues/176))
-
-## [0.21.0](https://github.com/alloy-rs/evm/releases/tag/v0.21.0) - 2025-09-12
+## [0.21.2](https://github.com/alloy-rs/evm/releases/tag/v0.21.2) - 2025-10-01
 
 ### Dependencies
 
@@ -20,17 +13,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Features
 
+- Add next block constructors for `EvmEnv` ([#182](https://github.com/alloy-rs/evm/issues/182))
+- Add payload constructors for `EvmEnv` ([#177](https://github.com/alloy-rs/evm/issues/177))
+- Add constructor of `EvmEnv` for a block ([#173](https://github.com/alloy-rs/evm/issues/173))
+- Add `EthereumHardforks` => `SpecId` and `OpHardforks` => `OpSpecId` mapping ([#174](https://github.com/alloy-rs/evm/issues/174))
+- Add `BlockValidationError::Other` ([#176](https://github.com/alloy-rs/evm/issues/176))
 - Decompose execute_transaction_with_commit_condition in BlockExecutor ([#163](https://github.com/alloy-rs/evm/issues/163))
 - Add evmext trait ([#149](https://github.com/alloy-rs/evm/issues/149))
 
 ### Miscellaneous Tasks
 
+- Restore exports of spec helpers ([#189](https://github.com/alloy-rs/evm/issues/189))
+- Remove doc_auto_cfg ([#186](https://github.com/alloy-rs/evm/issues/186))
+- Add precompileid helper ([#185](https://github.com/alloy-rs/evm/issues/185))
+- Remove unused script/clippy.toml ([#181](https://github.com/alloy-rs/evm/issues/181))
+- Make OpBlockExecutor fields pub ([#178](https://github.com/alloy-rs/evm/issues/178))
+- Release 0.21.1
 - Release 0.21.0
 - `missing-const-for-fn` lint back to "warn". ([#167](https://github.com/alloy-rs/evm/issues/167))
 
 ### Other
 
 - Update GitHub Actions in CI Workflows ([#169](https://github.com/alloy-rs/evm/issues/169))
+
+### Refactor
+
+- Remove London boundary hardfork branch in `EvmEnv` constructor for next block ([#184](https://github.com/alloy-rs/evm/issues/184))
 
 ## [0.20.1](https://github.com/alloy-rs/evm/releases/tag/v0.20.1) - 2025-08-26
 
@@ -222,10 +230,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.12.2](https://github.com/alloy-rs/evm/releases/tag/v0.12.2) - 2025-06-23
 
-### Bug Fixes
-
-- Fix compilation
-
 ### Documentation
 
 - Fix typo in tracing.rs comment ([#113](https://github.com/alloy-rs/evm/issues/113))
@@ -239,6 +243,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Release 0.12.2
 - Derive Copy for `PrecompileInput` ([#110](https://github.com/alloy-rs/evm/issues/110))
+
+## [0.12.1](https://github.com/alloy-rs/evm/releases/tag/v0.12.1) - 2025-06-20
+
+### Bug Fixes
+
+- Fix compilation
+
+### Miscellaneous Tasks
+
 - Release 0.12.1
 
 ## [0.12.0](https://github.com/alloy-rs/evm/releases/tag/v0.12.0) - 2025-06-20

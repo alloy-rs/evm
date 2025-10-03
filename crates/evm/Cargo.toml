@@ -19,8 +19,11 @@ alloy-primitives.workspace = true
 alloy-sol-types.workspace = true
 alloy-eips.workspace = true
 alloy-hardforks.workspace = true
+alloy-op-hardforks = { workspace = true, optional = true }
 alloy-rpc-types-eth = { workspace = true, optional = true }
 alloy-rlp.workspace = true
+alloy-rpc-types-engine = { workspace = true, optional = true }
+op-alloy-rpc-types-engine = { workspace = true, optional = true }
 
 revm = { workspace = true, features = ["glamsterdam"] }
 op-revm = { workspace = true, optional = true }
@@ -51,7 +54,12 @@ std = [
 	"alloy-rpc-types-eth?/std",
 	"alloy-rlp/std",
 	"tracing/std",
+    "alloy-rpc-types-engine?/std",
+    "op-alloy-rpc-types-engine?/std",
 ]
-op = ["op-revm", "op-alloy-consensus"]
+op = ["op-revm", "op-alloy-consensus", "alloy-op-hardforks"]
 overrides = ["dep:alloy-rpc-types-eth"]
 call-util = ["overrides"]
+engine = ["dep:alloy-rpc-types-engine"]
+op-engine = ["dep:op-alloy-rpc-types-engine"]
+asm-keccak = ["alloy-primitives/asm-keccak", "revm/asm-keccak"]

@@ -1,5 +1,9 @@
 //! Ethereum EVM implementation.
 
+pub use env::NextEvmEnvAttributes;
+
+pub(crate) use env::EvmEnvInput;
+
 use crate::{env::EvmEnv, evm::EvmFactory, precompiles::PrecompilesMap, Database, Evm};
 use alloy_primitives::{Address, Bytes};
 use core::{
@@ -25,6 +29,9 @@ pub mod eip6110;
 pub mod receipt_builder;
 pub mod spec;
 pub mod utils;
+
+mod env;
+pub(crate) mod spec_id;
 
 /// The Ethereum EVM context type.
 pub type EthEvmContext<DB> = Context<BlockEnv, TxEnv, CfgEnv, DB>;

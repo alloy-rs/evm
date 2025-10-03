@@ -41,22 +41,21 @@ pub struct OpBlockExecutionCtx {
 #[derive(Debug)]
 pub struct OpBlockExecutor<Evm, R: OpReceiptBuilder, Spec> {
     /// Spec.
-    spec: Spec,
+    pub spec: Spec,
     /// Receipt builder.
-    receipt_builder: R,
-
+    pub receipt_builder: R,
     /// Context for block execution.
-    ctx: OpBlockExecutionCtx,
+    pub ctx: OpBlockExecutionCtx,
     /// The EVM used by executor.
-    evm: Evm,
+    pub evm: Evm,
     /// Receipts of executed transactions.
-    receipts: Vec<R::Receipt>,
+    pub receipts: Vec<R::Receipt>,
     /// Total gas used by executed transactions.
-    gas_used: u64,
+    pub gas_used: u64,
     /// Whether Regolith hardfork is active.
-    is_regolith: bool,
+    pub is_regolith: bool,
     /// Utility to call system smart contracts.
-    system_caller: SystemCaller<Spec>,
+    pub system_caller: SystemCaller<Spec>,
 }
 
 impl<E, R, Spec> OpBlockExecutor<E, R, Spec>
