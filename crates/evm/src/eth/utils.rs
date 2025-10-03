@@ -42,6 +42,7 @@ pub fn from_account_with_tx_index(
     address: Address,
     block_access_index: u64,
     account: &Account,
+    is_sender: bool,
 ) -> AccountChanges {
     let mut account_changes = AccountChanges::default();
     for key in &account.storage_access.reads {
@@ -66,8 +67,8 @@ pub fn from_account_with_tx_index(
     }
 
     // Records if only post_balance != pre_balance
-    let (pre_balance, post_balance, zero_value_transfer) = account.balance_change;
-    if post_balance != pre_balance || !zero_value_transfer {
+    let (pre_balance, post_balance, _zero_value_transfer) = account.balance_change;
+    if pre_balance != post_balance || is_sender {
         account_changes.balance_changes.push(BalanceChange { block_access_index, post_balance });
     }
 
