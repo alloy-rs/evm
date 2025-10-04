@@ -373,14 +373,22 @@ where
                         .unwrap_or(U256::ZERO);
 
                     if state.contains_key(&addr) {
-                        if let Some(bal) = self.block_access_list.as_mut() {
-                            bal.push(crate::eth::utils::from_account_with_tx_index(
-                                addr,
-                                self.receipts.len() as u64,
-                                state.get(&addr).unwrap(),
-                                initial_balance,
-                            ));
-                            state.get_mut(&addr).unwrap().clear_state_changes();
+                        let acc = state.get(&addr).unwrap();
+                        if !acc.storage_access.reads.is_empty()
+                            || !acc.storage_access.writes.is_empty()
+                            || acc.nonce_change.0 != acc.nonce_change.1
+                            || acc.balance_change.0 != acc.balance_change.1
+                            || !acc.code_change.is_empty()
+                        {
+                            if let Some(bal) = self.block_access_list.as_mut() {
+                                bal.push(crate::eth::utils::from_account_with_tx_index(
+                                    addr,
+                                    self.receipts.len() as u64,
+                                    state.get(&addr).unwrap(),
+                                    initial_balance,
+                                ));
+                                state.get_mut(&addr).unwrap().clear_state_changes();
+                            }
                         }
                     }
                 }
