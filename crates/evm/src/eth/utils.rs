@@ -6,7 +6,7 @@ use alloy_eips::eip7928::{
     AccountChanges, BlockAccessIndex, BlockAccessList, SlotChanges, StorageChange, MAX_CODE_SIZE,
     MAX_TXS_PER_BLOCK,
 };
-use alloy_primitives::{Address, B256};
+use alloy_primitives::{Address, B256, U256};
 use revm::{
     primitives::{StorageKey, StorageValue},
     state::Account,
@@ -42,9 +42,10 @@ pub fn from_account_with_tx_index(
     address: Address,
     block_access_index: u64,
     account: &Account,
-    is_sender: bool,
+    initial_balance: U256,
 ) -> AccountChanges {
     let mut account_changes = AccountChanges::default();
+    let final_balance = account.info.balance;
     for key in &account.storage_access.reads {
         tracing::debug!("Storage read at {:#x}: {:#x} ", address, key);
         account_changes.storage_reads.push((*key).into());
@@ -53,7 +54,7 @@ pub fn from_account_with_tx_index(
     // Group writes by slots
     let mut slot_map: BTreeMap<StorageKey, Vec<StorageChange>> = BTreeMap::new();
 
-    for (slot, (_pre, post)) in &account.storage_access.writes {
+    for (slot, (_, post)) in &account.storage_access.writes {
         tracing::debug!("Storage write at {:#x}: {:#x} -> {:#x}", address, slot, post);
         slot_map
             .entry(*slot)
@@ -67,8 +68,15 @@ pub fn from_account_with_tx_index(
     }
 
     // Records if only post_balance != pre_balance
-    let (pre_balance, post_balance, zero_value_transfer) = account.balance_change;
-    if (pre_balance != post_balance && !zero_value_transfer) || is_sender {
+    let (_, post_balance) = account.balance_change;
+    tracing::debug!(
+        "Balance change at {:#x}: initial: {}, final: {}, post: {}",
+        address,
+        initial_balance,
+        final_balance,
+        post_balance
+    );
+    if initial_balance != post_balance && initial_balance != final_balance {
         account_changes.balance_changes.push(BalanceChange { block_access_index, post_balance });
     }
 
@@ -97,6 +105,7 @@ pub fn from_account_with_tx_index(
         );
         account_changes.nonce_changes.clear();
         account_changes.code_changes.clear();
+
         for slot in &account_changes.storage_changes {
             account_changes.storage_reads.push(slot.slot);
         }
