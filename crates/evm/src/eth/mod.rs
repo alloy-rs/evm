@@ -28,6 +28,7 @@ pub mod dao_fork;
 pub mod eip6110;
 pub mod receipt_builder;
 pub mod spec;
+pub mod utils;
 
 mod env;
 pub(crate) mod spec_id;
