@@ -272,8 +272,6 @@ where
             cumulative_gas_used: self.gas_used,
         }));
 
-        // Commit the state changes.
-        // self.evm.db_mut().commit(state.clone());
         if self.spec.is_amsterdam_active_at_timestamp(self.evm.block().timestamp.saturating_to()) {
             if let Some(addr) = tx.tx().to() {
                 let initial_balance = self
@@ -329,17 +327,35 @@ where
                     state.get_mut(tx.signer()).unwrap().clear_state_changes();
                 }
             }
-            for (address, account) in state.clone().iter() {
-                if address != tx.signer() && Some(address) != tx.tx().to().as_ref() {
-                    let initial_balance = self
-                        .evm
-                        .db_mut()
-                        .database
-                        .basic(*address)
-                        .ok()
-                        .and_then(|acc| acc.map(|a| a.balance))
-                        .unwrap_or(U256::ZERO);
 
+            for (address, account) in state.clone().iter() {
+                // Skip signer and tx.to()
+                if address == tx.signer() || Some(address) == tx.tx().to().as_ref() {
+                    continue;
+                }
+
+                // Get the initial balance from DB
+                let initial_balance = self
+                    .evm
+                    .db_mut()
+                    .database
+                    .basic(*address)
+                    .ok()
+                    .and_then(|acc| acc.map(|a| a.balance))
+                    .unwrap_or(U256::ZERO);
+
+                // Check if address is in the access list
+                let in_access_list = tx
+                    .tx()
+                    .access_list()
+                    .map(|al| al.flattened().iter().any(|(addr, _)| addr == address))
+                    .unwrap_or(false);
+
+                // If address is in access list, require it to be touched
+                // If not in access list, push unconditionally
+                let should_push = if in_access_list { account.is_touched() } else { true };
+
+                if should_push {
                     if let Some(bal) = self.block_access_list.as_mut() {
                         bal.push(crate::eth::utils::from_account_with_tx_index(
                             *address,
@@ -347,14 +363,18 @@ where
                             account,
                             initial_balance,
                         ));
-                        tracing::debug!(
-                            "BlockAccessList: touched address {:#x}, tx_index={}, storage: {:#?}",
-                            address,
-                            self.receipts.len(),
-                            account.storage_access,
-                        );
-                        state.get_mut(address).unwrap().clear_state_changes();
                     }
+
+                    tracing::debug!(
+                    "BlockAccessList: {:#x}, tx_index={}, in_access_list={}, touched={}, pushed={}",
+                    address,
+                    self.receipts.len(),
+                    in_access_list,
+                    account.is_touched(),
+                    should_push,
+                                );
+
+                    state.get_mut(address).unwrap().clear_state_changes();
                 }
             }
 
