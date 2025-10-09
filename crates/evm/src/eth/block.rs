@@ -303,28 +303,30 @@ where
             }
 
             if let Some(acc) = state.get(tx.signer()) {
-                let initial_balance = self
-                    .evm
-                    .db_mut()
-                    .database
-                    .basic(*tx.signer())
-                    .ok()
-                    .and_then(|acc| acc.map(|a| a.balance))
-                    .unwrap_or(U256::ZERO);
+                if *tx.signer() != tx.tx().to().unwrap_or_default() {
+                    let initial_balance = self
+                        .evm
+                        .db_mut()
+                        .database
+                        .basic(*tx.signer())
+                        .ok()
+                        .and_then(|acc| acc.map(|a| a.balance))
+                        .unwrap_or(U256::ZERO);
 
-                if let Some(bal) = self.block_access_list.as_mut() {
-                    bal.push(crate::eth::utils::from_account_with_tx_index(
-                        *tx.signer(),
-                        self.receipts.len() as u64,
-                        acc,
-                        initial_balance,
-                    ));
-                    tracing::debug!(
-                        "BlockAccessList: Tx signer arm tx_index={}, storage: {:#?}",
-                        self.receipts.len(),
-                        acc.storage_access,
-                    );
-                    state.get_mut(tx.signer()).unwrap().clear_state_changes();
+                    if let Some(bal) = self.block_access_list.as_mut() {
+                        bal.push(crate::eth::utils::from_account_with_tx_index(
+                            *tx.signer(),
+                            self.receipts.len() as u64,
+                            acc,
+                            initial_balance,
+                        ));
+                        tracing::debug!(
+                            "BlockAccessList: Tx signer arm tx_index={}, storage: {:#?}",
+                            self.receipts.len(),
+                            acc.storage_access,
+                        );
+                        state.get_mut(tx.signer()).unwrap().clear_state_changes();
+                    }
                 }
             }
 
