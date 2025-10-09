@@ -32,8 +32,8 @@ use alloy_eips::{
 use alloy_hardforks::EthereumHardfork;
 use alloy_primitives::{Address, Log, B256, U256};
 use revm::{
-    context_interface::result::ResultAndState, database::State, primitives::StorageKey,
-    state::AccountStatus, DatabaseCommit, Inspector,
+    context::result::HaltReason, context_interface::result::ResultAndState, database::State,
+    primitives::StorageKey, state::AccountStatus, DatabaseCommit, Inspector,
 };
 
 /// Context for Ethereum block execution.
@@ -260,6 +260,48 @@ where
 
         let gas_used = result.gas_used();
 
+        let mut halt_reason = None;
+        let mut is_oog = false;
+
+        match &result {
+            revm::context::result::ExecutionResult::Halt { reason, .. } => {
+                halt_reason = Some(reason.clone());
+            }
+            _ => {}
+        };
+
+        if let Some(halt_reason) = &halt_reason {
+            if *halt_reason
+                == <E as Evm>::HaltReason::from(HaltReason::OutOfGas(
+                    revm::context::result::OutOfGasError::Basic,
+                ))
+                || *halt_reason
+                    == <E as Evm>::HaltReason::from(HaltReason::OutOfGas(
+                        revm::context::result::OutOfGasError::MemoryLimit,
+                    ))
+                || *halt_reason
+                    == <E as Evm>::HaltReason::from(HaltReason::OutOfGas(
+                        revm::context::result::OutOfGasError::Memory,
+                    ))
+                || *halt_reason
+                    == <E as Evm>::HaltReason::from(HaltReason::OutOfGas(
+                        revm::context::result::OutOfGasError::Precompile,
+                    ))
+                || *halt_reason
+                    == <E as Evm>::HaltReason::from(HaltReason::OutOfGas(
+                        revm::context::result::OutOfGasError::InvalidOperand,
+                    ))
+                || *halt_reason
+                    == <E as Evm>::HaltReason::from(HaltReason::OutOfGas(
+                        revm::context::result::OutOfGasError::ReentrancySentry,
+                    ))
+            {
+                is_oog = true;
+            } else {
+                is_oog = false;
+            }
+        }
+
         // append gas used
         self.gas_used += gas_used;
 
@@ -290,6 +332,7 @@ where
                             self.receipts.len() as u64,
                             acc,
                             initial_balance,
+                            is_oog,
                         ));
                         tracing::debug!(
                         "BlockAccessList: CREATE parent contract {:#x}, tx_index={}, storage: {:#?}",
@@ -319,6 +362,7 @@ where
                             self.receipts.len() as u64,
                             acc,
                             initial_balance,
+                            is_oog,
                         ));
                         tracing::debug!(
                             "BlockAccessList: Tx signer arm tx_index={}, storage: {:#?}",
@@ -368,6 +412,7 @@ where
                             self.receipts.len() as u64,
                             account,
                             initial_balance,
+                            is_oog,
                         ));
                     }
 

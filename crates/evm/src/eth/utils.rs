@@ -43,6 +43,7 @@ pub fn from_account_with_tx_index(
     block_access_index: u64,
     account: &Account,
     initial_balance: U256,
+    is_oog: bool,
 ) -> AccountChanges {
     let mut account_changes = AccountChanges::default();
     let final_balance = account.info.balance;
@@ -106,6 +107,12 @@ pub fn from_account_with_tx_index(
         account_changes.nonce_changes.clear();
         account_changes.code_changes.clear();
 
+        for slot in &account_changes.storage_changes {
+            account_changes.storage_reads.push(slot.slot);
+        }
+        account_changes.storage_changes.clear();
+    }
+    if is_oog {
         for slot in &account_changes.storage_changes {
             account_changes.storage_reads.push(slot.slot);
         }
