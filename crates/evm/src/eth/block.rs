@@ -39,21 +39,21 @@ pub struct EthBlockExecutionCtx<'a> {
 #[derive(Debug)]
 pub struct EthBlockExecutor<'a, Evm, Spec, R: ReceiptBuilder> {
     /// Reference to the specification object.
-    spec: Spec,
+    pub spec: Spec,
 
     /// Context for block execution.
     pub ctx: EthBlockExecutionCtx<'a>,
     /// Inner EVM.
-    evm: Evm,
+    pub evm: Evm,
     /// Utility to call system smart contracts.
-    system_caller: SystemCaller<Spec>,
+    pub system_caller: SystemCaller<Spec>,
     /// Receipt builder.
-    receipt_builder: R,
+    pub receipt_builder: R,
 
     /// Receipts of executed transactions.
-    receipts: Vec<R::Receipt>,
+    pub receipts: Vec<R::Receipt>,
     /// Total gas used by transactions in this block.
-    gas_used: u64,
+    pub gas_used: u64,
 }
 
 impl<'a, Evm, Spec, R> EthBlockExecutor<'a, Evm, Spec, R>
