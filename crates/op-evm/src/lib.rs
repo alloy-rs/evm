@@ -18,8 +18,8 @@ use core::{
     ops::{Deref, DerefMut},
 };
 use op_revm::{
-    precompiles::OpPrecompiles, DefaultOp, OpBuilder, OpContext, OpHaltReason, OpSpecId,
-    OpTransaction, OpTransactionError,
+    precompiles::OpPrecompiles, DefaultOp, L1BlockInfo, OpBuilder, OpContext, OpHaltReason,
+    OpSpecId, OpTransaction, OpTransactionError,
 };
 use revm::{
     context::{BlockEnv, TxEnv},
@@ -171,15 +171,19 @@ impl EvmFactory for OpEvmFactory {
 
     fn create_evm<DB: Database>(
         &self,
-        db: DB,
+        mut db: DB,
         input: EvmEnv<OpSpecId>,
     ) -> Self::Evm<DB, NoOpInspector> {
         let spec_id = input.cfg_env.spec;
+        let l1_block = L1BlockInfo::try_fetch(&mut db, input.block_env.number, spec_id)
+            .expect("Failed to fetch L1 block info");
+
         OpEvm {
             inner: Context::op()
                 .with_db(db)
                 .with_block(input.block_env)
                 .with_cfg(input.cfg_env)
+                .with_chain(l1_block)
                 .build_op_with_inspector(NoOpInspector {})
                 .with_precompiles(PrecompilesMap::from_static(
                     OpPrecompiles::new_with_spec(spec_id).precompiles(),
@@ -190,16 +194,19 @@ impl EvmFactory for OpEvmFactory {
 
     fn create_evm_with_inspector<DB: Database, I: Inspector<Self::Context<DB>>>(
         &self,
-        db: DB,
+        mut db: DB,
         input: EvmEnv<OpSpecId>,
         inspector: I,
     ) -> Self::Evm<DB, I> {
         let spec_id = input.cfg_env.spec;
+        let l1_block = L1BlockInfo::try_fetch(&mut db, input.block_env.number, spec_id)
+            .expect("Failed to fetch L1 block info");
         OpEvm {
             inner: Context::op()
                 .with_db(db)
                 .with_block(input.block_env)
                 .with_cfg(input.cfg_env)
+                .with_chain(l1_block)
                 .build_op_with_inspector(inspector)
                 .with_precompiles(PrecompilesMap::from_static(
                     OpPrecompiles::new_with_spec(spec_id).precompiles(),
