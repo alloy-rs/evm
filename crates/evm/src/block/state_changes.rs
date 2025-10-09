@@ -38,6 +38,7 @@ where
         // Ommer rewards
         for ommer in ommers {
             *balance_increments.entry(ommer.beneficiary()).or_default() += calc::ommer_reward(
+                //bal
                 base_block_reward,
                 block_env.number.saturating_to(),
                 ommer.number(),
@@ -45,6 +46,11 @@ where
         }
 
         // Full block reward
+        tracing::debug!(
+            "Adding block reward of {} to beneficiary {:?}",
+            calc::block_reward(base_block_reward, ommers.len()),
+            block_env.beneficiary
+        );
         *balance_increments.entry(block_env.beneficiary).or_default() +=
             calc::block_reward(base_block_reward, ommers.len());
     }
@@ -131,6 +137,7 @@ where
                 storage: Default::default(),
                 status: AccountStatus::Touched,
                 transaction_id: 0,
+                ..Default::default()
             },
         ))
     };

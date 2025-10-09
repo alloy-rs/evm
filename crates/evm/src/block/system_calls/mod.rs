@@ -4,13 +4,17 @@ use crate::{
     block::{BlockExecutionError, OnStateHook},
     Evm,
 };
-use alloc::{borrow::Cow, boxed::Box};
+use alloc::{borrow::Cow, boxed::Box, vec::Vec};
 use alloy_consensus::BlockHeader;
 use alloy_eips::{
-    eip7002::WITHDRAWAL_REQUEST_TYPE, eip7251::CONSOLIDATION_REQUEST_TYPE, eip7685::Requests,
+    eip2935::{HISTORY_SERVE_WINDOW, HISTORY_STORAGE_ADDRESS},
+    eip7002::WITHDRAWAL_REQUEST_TYPE,
+    eip7251::CONSOLIDATION_REQUEST_TYPE,
+    eip7685::Requests,
+    eip7928::{AccountChanges, SlotChanges, StorageChange},
 };
 use alloy_hardforks::EthereumHardforks;
-use alloy_primitives::{Bytes, B256};
+use alloy_primitives::{Bytes, B256, U256};
 use revm::{state::EvmState, DatabaseCommit};
 
 use super::{StateChangePostBlockSource, StateChangePreBlockSource, StateChangeSource};
@@ -88,7 +92,7 @@ where
         &mut self,
         parent_block_hash: B256,
         evm: &mut impl Evm<DB: DatabaseCommit>,
-    ) -> Result<(), BlockExecutionError> {
+    ) -> Result<Option<AccountChanges>, BlockExecutionError> {
         let result_and_state =
             eip2935::transact_blockhashes_contract_call(&self.spec, parent_block_hash, evm)?;
 
@@ -100,9 +104,23 @@ where
                 );
             }
             evm.db_mut().commit(res.state);
+
+            if self.spec.is_amsterdam_active_at_timestamp(evm.block().timestamp.saturating_to()) {
+                let block_num: u64 = evm.block().number.saturating_to();
+                let slot_change = SlotChanges::default()
+                    .with_change(StorageChange {
+                        block_access_index: 0,
+                        new_value: parent_block_hash,
+                    })
+                    .with_slot(U256::from((block_num - 1) % HISTORY_SERVE_WINDOW as u64).into());
+                let acc_changes = AccountChanges::default()
+                    .with_storage_change(slot_change)
+                    .with_address(HISTORY_STORAGE_ADDRESS);
+                return Ok(Some(acc_changes));
+            }
         }
 
-        Ok(())
+        Ok(None)
     }
 
     /// Applies the pre-block call to the EIP-4788 beacon root contract.
@@ -110,7 +128,7 @@ where
         &mut self,
         parent_beacon_block_root: Option<B256>,
         evm: &mut impl Evm<DB: DatabaseCommit>,
-    ) -> Result<(), BlockExecutionError> {
+    ) -> Result<Option<Vec<SlotChanges>>, BlockExecutionError> {
         let result_and_state =
             eip4788::transact_beacon_root_contract_call(&self.spec, parent_beacon_block_root, evm)?;
 
@@ -122,9 +140,33 @@ where
                 );
             }
             evm.db_mut().commit(res.state);
-        }
+            if self.spec.is_amsterdam_active_at_timestamp(evm.block().timestamp.saturating_to()) {
+                let timestamp: u64 = evm.block().timestamp.saturating_to();
+                let slot_changes: Vec<SlotChanges> = alloc::vec![
+                    SlotChanges::default()
+                        .with_change(StorageChange {
+                            block_access_index: 0,
+                            new_value: U256::from(timestamp).into(),
+                        })
+                        .with_slot(U256::from(timestamp % HISTORY_SERVE_WINDOW as u64).into()),
+                    SlotChanges::default()
+                        .with_change(StorageChange {
+                            block_access_index: 0,
+                            new_value: parent_beacon_block_root.unwrap(),
+                        })
+                        .with_slot(
+                            U256::from(
+                                (timestamp % HISTORY_SERVE_WINDOW as u64)
+                                    + HISTORY_SERVE_WINDOW as u64,
+                            )
+                            .into(),
+                        ),
+                ];
 
-        Ok(())
+                return Ok(Some(slot_changes));
+            }
+        }
+        Ok(None)
     }
 
     /// Applies the post-block call to the EIP-7002 withdrawal request contract.

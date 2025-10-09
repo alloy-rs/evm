@@ -21,17 +21,18 @@ alloy-eips.workspace = true
 alloy-hardforks.workspace = true
 alloy-op-hardforks = { workspace = true, optional = true }
 alloy-rpc-types-eth = { workspace = true, optional = true }
+alloy-rlp.workspace = true
 alloy-rpc-types-engine = { workspace = true, optional = true }
 op-alloy-rpc-types-engine = { workspace = true, optional = true }
 
-revm.workspace = true
+revm = { workspace = true, features = ["glamsterdam"] }
 op-revm = { workspace = true, optional = true }
 op-alloy-consensus = { workspace = true, optional = true }
 
 auto_impl.workspace = true
 derive_more.workspace = true
 thiserror.workspace = true
-
+tracing.workspace = true
 [dev-dependencies]
 alloy-primitives = { workspace = true, features = ["serde"] }
 serde_json.workspace = true
@@ -39,21 +40,20 @@ test-case.workspace = true
 
 [features]
 default = ["std"]
-secp256k1 = [
-    "std",
-    "alloy-consensus/secp256k1",
-]
+secp256k1 = ["std", "alloy-consensus/secp256k1"]
 std = [
-    "alloy-primitives/std",
-    "revm/std",
-    "alloy-consensus/std",
-    "alloy-eips/std",
-    "alloy-sol-types/std",
-    "derive_more/std",
-    "op-revm?/std",
-    "thiserror/std",
-    "op-alloy-consensus?/std",
-    "alloy-rpc-types-eth?/std",
+	"alloy-primitives/std",
+	"revm/std",
+	"alloy-consensus/std",
+	"alloy-eips/std",
+	"alloy-sol-types/std",
+	"derive_more/std",
+	"op-revm?/std",
+	"thiserror/std",
+	"op-alloy-consensus?/std",
+	"alloy-rpc-types-eth?/std",
+	"alloy-rlp/std",
+	"tracing/std",
     "alloy-rpc-types-engine?/std",
     "op-alloy-rpc-types-engine?/std",
 ]
