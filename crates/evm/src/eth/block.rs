@@ -380,6 +380,8 @@ where
                     continue;
                 }
 
+                let is_coinbase = *address == self.evm.block().beneficiary;
+
                 // Get the initial balance from DB
                 let initial_balance = self
                     .evm
@@ -399,7 +401,7 @@ where
 
                 // If address is in access list, require it to be touched
                 // If not in access list, push unconditionally
-                let should_push = if in_access_list {
+                let should_push = if in_access_list || is_coinbase {
                     account.is_touched() && account.status != AccountStatus::default()
                 } else {
                     true
@@ -430,40 +432,6 @@ where
             }
 
             tracing::debug!("######## Block : {:?} #########", self.evm.block());
-            // // Store access list changes in bal.
-            // if let Some(access_list) = tx.tx().access_list() {
-            //     for item in &access_list.0 {
-            //         let addr = item.address;
-            //         let initial_balance = self
-            //             .evm
-            //             .db_mut()
-            //             .database
-            //             .basic(addr)
-            //             .ok()
-            //             .and_then(|acc| acc.map(|a| a.balance))
-            //             .unwrap_or(U256::ZERO);
-
-            //         if state.contains_key(&addr) {
-            //             let acc = state.get(&addr).unwrap();
-            //             if !acc.storage_access.reads.is_empty()
-            //                 || !acc.storage_access.writes.is_empty()
-            //                 || acc.nonce_change.0 != acc.nonce_change.1
-            //                 || acc.balance_change.0 != acc.balance_change.1
-            //                 || !acc.code_change.is_empty()
-            //             {
-            //                 if let Some(bal) = self.block_access_list.as_mut() {
-            //                     bal.push(crate::eth::utils::from_account_with_tx_index(
-            //                         addr,
-            //                         self.receipts.len() as u64,
-            //                         state.get(&addr).unwrap(),
-            //                         initial_balance,
-            //                     ));
-            //                     state.get_mut(&addr).unwrap().clear_state_changes();
-            //                 }
-            //             }
-            //         }
-            //     }
-            // }
         }
 
         // Commit the state changes.
