@@ -401,11 +401,15 @@ where
 
                 // If address is in access list, require it to be touched
                 // If not in access list, push unconditionally
-                let should_push = if in_access_list || is_coinbase {
+                let should_push = if in_access_list {
                     account.is_touched() && account.status != AccountStatus::default()
                 } else {
                     true
                 };
+
+                if is_coinbase && account.balance_change == (U256::ZERO, U256::ZERO) {
+                    continue;
+                }
 
                 if should_push {
                     if let Some(bal) = self.block_access_list.as_mut() {
