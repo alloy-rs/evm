@@ -255,6 +255,7 @@ where
         tx: impl ExecutableTx<Self>,
     ) -> Result<u64, BlockExecutionError> {
         let ResultAndState { result, mut state } = output;
+        tracing::debug!("Transaction executed with result: {:?}", result);
 
         self.system_caller.on_state(StateChangeSource::Transaction(self.receipts.len()), &state);
 
