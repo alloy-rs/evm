@@ -45,6 +45,7 @@ pub fn from_account_with_tx_index(
     initial_balance: U256,
     is_oog: bool,
 ) -> AccountChanges {
+    tracing::debug!("Account  {:?}", account);
     let mut account_changes = AccountChanges::default();
     let final_balance = account.info.balance;
     for key in &account.storage_access.reads {
