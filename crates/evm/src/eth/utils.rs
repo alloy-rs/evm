@@ -113,9 +113,8 @@ pub fn from_account_with_tx_index(
         account_changes.storage_changes.clear();
     }
     if is_oog {
-        for slot in &account_changes.storage_changes {
-            account_changes.storage_reads.push(slot.slot);
-        }
+        account_changes.storage_reads.clear();
+
         account_changes.storage_changes.clear();
     }
     account_changes
