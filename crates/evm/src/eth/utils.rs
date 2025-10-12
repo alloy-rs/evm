@@ -261,15 +261,3 @@ pub fn validate_block_access_list(
     }
     true
 }
-#[cfg(test)]
-mod tests {
-    use alloy_eips::eip7928::CodeChange;
-
-    #[test]
-    fn it_works() {
-        let c = CodeChange::default().new_code;
-        println!("{:?}", c);
-        println!("{:?}", c.len());
-        println!("{:?}", c.is_empty());
-    }
-}
