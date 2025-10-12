@@ -89,8 +89,8 @@ pub fn from_account_with_tx_index(
             .push(NonceChange { block_access_index, new_nonce: post_nonce });
     }
 
-    let code = &account.code_change;
-    if !code.is_empty() {
+    let (code, modified) = &account.code_change;
+    if !code.is_empty() || *modified {
         account_changes
             .code_changes
             .push(CodeChange { block_access_index, new_code: code.clone() });
@@ -260,4 +260,16 @@ pub fn validate_block_access_list(
         return false;
     }
     true
+}
+#[cfg(test)]
+mod tests {
+    use alloy_eips::eip7928::CodeChange;
+
+    #[test]
+    fn it_works() {
+        let c = CodeChange::default().new_code;
+        println!("{:?}", c);
+        println!("{:?}", c.len());
+        println!("{:?}", c.is_empty());
+    }
 }
