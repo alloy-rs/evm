@@ -8,7 +8,7 @@ use alloc::{boxed::Box, string::ToString};
 use alloy_eips::eip4788::BEACON_ROOTS_ADDRESS;
 use alloy_hardforks::EthereumHardforks;
 use alloy_primitives::B256;
-use revm::context_interface::result::ResultAndState;
+use revm::{context::Block, context_interface::result::ResultAndState};
 
 /// Applies the pre-block call to the [EIP-4788] beacon block root contract, using the given block,
 /// chain spec, EVM.
@@ -25,7 +25,7 @@ pub(crate) fn transact_beacon_root_contract_call<Halt>(
     parent_beacon_block_root: Option<B256>,
     evm: &mut impl Evm<HaltReason = Halt>,
 ) -> Result<Option<ResultAndState<Halt>>, BlockExecutionError> {
-    if !spec.is_cancun_active_at_timestamp(evm.block().timestamp.saturating_to()) {
+    if !spec.is_cancun_active_at_timestamp(evm.block().timestamp().saturating_to()) {
         return Ok(None);
     }
 
@@ -34,7 +34,7 @@ pub(crate) fn transact_beacon_root_contract_call<Halt>(
 
     // if the block number is zero (genesis block) then the parent beacon block root must
     // be 0x0 and no system transaction may occur as per EIP-4788
-    if evm.block().number.is_zero() {
+    if evm.block().number().is_zero() {
         if !parent_beacon_block_root.is_zero() {
             return Err(BlockValidationError::CancunGenesisParentBeaconBlockRootNotZero {
                 parent_beacon_block_root,
