@@ -42,7 +42,7 @@ pub trait OpTxEnv {
     fn encoded_bytes(&self) -> Option<&Bytes>;
 }
 
-impl OpTxEnv for OpTransaction<TxEnv> {
+impl<T> OpTxEnv for OpTransaction<T> {
     fn encoded_bytes(&self) -> Option<&Bytes> {
         self.enveloped_tx.as_ref()
     }
