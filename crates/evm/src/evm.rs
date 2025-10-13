@@ -54,7 +54,7 @@ pub trait Evm {
     /// Identifier of the EVM specification. EVM is expected to use this identifier to determine
     /// which features are enabled.
     type Spec: Debug + Copy + Hash + Eq + Send + Sync + Default + 'static;
-    /// Optional extension to the environment.
+    /// Block environment used by the EVM.
     type BlockEnv: BlockEnvironment;
     /// Precompiles used by the EVM.
     type Precompiles;
@@ -275,8 +275,8 @@ pub trait EvmFactory {
     type HaltReason: HaltReasonTr + Send + Sync + 'static;
     /// The EVM specification identifier, see [`Evm::Spec`].
     type Spec: Debug + Copy + Hash + Eq + Send + Sync + Default + 'static;
-    /// Optional extension to the environment.
-    type BlockEnv: Debug + Send + Sync + 'static;
+    /// Block environment used by the EVM. See [`Evm::BlockEnv`].
+    type BlockEnv: BlockEnvironment;
     /// Precompiles used by the EVM.
     type Precompiles;
 

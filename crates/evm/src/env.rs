@@ -61,7 +61,7 @@ impl<Spec, BlockEnv: BlockEnvironment> EvmEnv<Spec, BlockEnv> {
 
     /// Overrides the configured block number
     pub fn with_block_number(mut self, number: U256) -> Self {
-        self.block_env.inner().number = number;
+        self.block_env.inner_mut().number = number;
         self
     }
 
@@ -71,7 +71,7 @@ impl<Spec, BlockEnv: BlockEnvironment> EvmEnv<Spec, BlockEnv> {
     /// This is intended for block overrides.
     pub fn with_block_number_opt(mut self, number: Option<U256>) -> Self {
         if let Some(number) = number {
-            self.block_env.inner().number = number;
+            self.block_env.inner_mut().number = number;
         }
         self
     }
@@ -79,14 +79,14 @@ impl<Spec, BlockEnv: BlockEnvironment> EvmEnv<Spec, BlockEnv> {
     /// Sets the block number if provided.
     pub fn set_block_number_opt(&mut self, number: Option<U256>) -> &mut Self {
         if let Some(number) = number {
-            self.block_env.inner().number = number;
+            self.block_env.inner_mut().number = number;
         }
         self
     }
 
     /// Overrides the configured block timestamp.
     pub fn with_timestamp(mut self, timestamp: U256) -> Self {
-        self.block_env.inner().timestamp = timestamp;
+        self.block_env.inner_mut().timestamp = timestamp;
         self
     }
 
@@ -96,7 +96,7 @@ impl<Spec, BlockEnv: BlockEnvironment> EvmEnv<Spec, BlockEnv> {
     /// This is intended for block overrides.
     pub fn with_timestamp_opt(mut self, timestamp: Option<U256>) -> Self {
         if let Some(timestamp) = timestamp {
-            self.block_env.inner().timestamp = timestamp;
+            self.block_env.inner_mut().timestamp = timestamp;
         }
         self
     }
@@ -104,14 +104,14 @@ impl<Spec, BlockEnv: BlockEnvironment> EvmEnv<Spec, BlockEnv> {
     /// Sets the block timestamp if provided.
     pub fn set_timestamp_opt(&mut self, timestamp: Option<U256>) -> &mut Self {
         if let Some(timestamp) = timestamp {
-            self.block_env.inner().timestamp = timestamp;
+            self.block_env.inner_mut().timestamp = timestamp;
         }
         self
     }
 
     /// Overrides the configured block base fee.
     pub fn with_base_fee(mut self, base_fee: u64) -> Self {
-        self.block_env.inner().basefee = base_fee;
+        self.block_env.inner_mut().basefee = base_fee;
         self
     }
 
@@ -121,7 +121,7 @@ impl<Spec, BlockEnv: BlockEnvironment> EvmEnv<Spec, BlockEnv> {
     /// This is intended for block overrides.
     pub fn with_base_fee_opt(mut self, base_fee: Option<u64>) -> Self {
         if let Some(base_fee) = base_fee {
-            self.block_env.inner().basefee = base_fee;
+            self.block_env.inner_mut().basefee = base_fee;
         }
         self
     }
@@ -129,7 +129,7 @@ impl<Spec, BlockEnv: BlockEnvironment> EvmEnv<Spec, BlockEnv> {
     /// Sets the block base fee if provided.
     pub fn set_base_fee_opt(&mut self, base_fee: Option<u64>) -> &mut Self {
         if let Some(base_fee) = base_fee {
-            self.block_env.inner().basefee = base_fee;
+            self.block_env.inner_mut().basefee = base_fee;
         }
         self
     }
@@ -146,11 +146,11 @@ impl<Spec, BlockEnv> From<(CfgEnv<Spec>, BlockEnv)> for EvmEnv<Spec, BlockEnv> {
 /// Assumes that the type wraps an inner [`revm::context::BlockEnv`].
 pub trait BlockEnvironment: revm::context::Block + Debug + Send + Sync + 'static {
     /// Returns a mutable reference to the inner [`revm::context::BlockEnv`].
-    fn inner(&mut self) -> &mut revm::context::BlockEnv;
+    fn inner_mut(&mut self) -> &mut revm::context::BlockEnv;
 }
 
 impl BlockEnvironment for BlockEnv {
-    fn inner(&mut self) -> &mut revm::context::BlockEnv {
+    fn inner_mut(&mut self) -> &mut revm::context::BlockEnv {
         self
     }
 }
