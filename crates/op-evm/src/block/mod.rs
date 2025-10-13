@@ -26,11 +26,7 @@ use op_revm::{
 };
 pub use receipt_builder::OpAlloyReceiptBuilder;
 use receipt_builder::OpReceiptBuilder;
-use revm::{
-    context::{result::ResultAndState, TxEnv},
-    database::State,
-    DatabaseCommit, Inspector,
-};
+use revm::{context::result::ResultAndState, database::State, DatabaseCommit, Inspector};
 
 mod canyon;
 pub mod receipt_builder;
@@ -42,7 +38,7 @@ pub trait OpTxEnv {
     fn encoded_bytes(&self) -> Option<&Bytes>;
 }
 
-impl<T> OpTxEnv for OpTransaction<T> {
+impl<T: revm::context::Transaction> OpTxEnv for OpTransaction<T> {
     fn encoded_bytes(&self) -> Option<&Bytes> {
         self.enveloped_tx.as_ref()
     }
@@ -162,7 +158,7 @@ where
 
     fn jovian_da_footprint_estimation(
         &mut self,
-        tx: &impl ExecutableTx<OpBlockExecutor<E, R, Spec>>,
+        tx: &impl ExecutableTx<Self>,
     ) -> Result<u64, BlockExecutionError> {
         // Try to use the enveloped tx if it exists, otherwise use the encoded 2718 bytes
         let encoded = match tx.to_tx_env().encoded_bytes() {
