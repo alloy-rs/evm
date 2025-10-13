@@ -37,12 +37,13 @@ test-case.workspace = true
 [features]
 default = ["std"]
 std = [
-    "alloy-primitives/std",
-    "revm/std",
-    "alloy-evm/std",
-    "op-revm/std",
-    "alloy-consensus/std",
-    "alloy-eips/std",
-    "op-alloy-consensus/std"
+	"alloy-primitives/std",
+	"revm/std",
+	"alloy-evm/std",
+	"op-revm/std",
+	"alloy-consensus/std",
+	"alloy-eips/std",
+	"op-alloy-consensus/std",
+	"thiserror/std"
 ]
 asm-keccak = ["alloy-evm/asm-keccak", "alloy-primitives/asm-keccak", "revm/asm-keccak"]

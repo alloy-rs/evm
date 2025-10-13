@@ -448,6 +448,7 @@ where
 
 #[cfg(test)]
 mod tests {
+    use alloc::{string::ToString, vec};
     use alloy_consensus::{transaction::Recovered, SignableTransaction, TxLegacy};
     use alloy_eips::eip2718::WithEncoded;
     use alloy_evm::EvmEnv;
