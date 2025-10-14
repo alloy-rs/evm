@@ -144,7 +144,7 @@ impl<Spec, BlockEnv> From<(CfgEnv<Spec>, BlockEnv)> for EvmEnv<Spec, BlockEnv> {
 /// Trait for types that can be used as a block environment.
 ///
 /// Assumes that the type wraps an inner [`revm::context::BlockEnv`].
-pub trait BlockEnvironment: revm::context::Block + Debug + Send + Sync + 'static {
+pub trait BlockEnvironment: revm::context::Block + Clone + Debug + Send + Sync + 'static {
     /// Returns a mutable reference to the inner [`revm::context::BlockEnv`].
     fn inner_mut(&mut self) -> &mut revm::context::BlockEnv;
 }
