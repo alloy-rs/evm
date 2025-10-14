@@ -20,7 +20,10 @@ use alloy_consensus::{Header, Transaction, TxReceipt};
 use alloy_eips::{eip4895::Withdrawals, eip7685::Requests, Encodable2718};
 use alloy_hardforks::EthereumHardfork;
 use alloy_primitives::{Log, B256};
-use revm::{context_interface::result::ResultAndState, database::State, DatabaseCommit, Inspector};
+use revm::{
+    context::Block, context_interface::result::ResultAndState, database::State, DatabaseCommit,
+    Inspector,
+};
 
 /// Context for Ethereum block execution.
 #[derive(Debug, Clone)]
@@ -39,21 +42,25 @@ pub struct EthBlockExecutionCtx<'a> {
 #[derive(Debug)]
 pub struct EthBlockExecutor<'a, Evm, Spec, R: ReceiptBuilder> {
     /// Reference to the specification object.
-    spec: Spec,
+    pub spec: Spec,
 
     /// Context for block execution.
     pub ctx: EthBlockExecutionCtx<'a>,
     /// Inner EVM.
-    evm: Evm,
+    pub evm: Evm,
     /// Utility to call system smart contracts.
-    system_caller: SystemCaller<Spec>,
+    pub system_caller: SystemCaller<Spec>,
     /// Receipt builder.
-    receipt_builder: R,
+    pub receipt_builder: R,
 
     /// Receipts of executed transactions.
-    receipts: Vec<R::Receipt>,
+    pub receipts: Vec<R::Receipt>,
     /// Total gas used by transactions in this block.
-    gas_used: u64,
+    pub gas_used: u64,
+
+    /// Blob gas used by the block.
+    /// Before cancun activation, this is always 0.
+    pub blob_gas_used: u64,
 }
 
 impl<'a, Evm, Spec, R> EthBlockExecutor<'a, Evm, Spec, R>
@@ -68,6 +75,7 @@ where
             ctx,
             receipts: Vec::new(),
             gas_used: 0,
+            blob_gas_used: 0,
             system_caller: SystemCaller::new(spec.clone()),
             spec,
             receipt_builder,
@@ -92,7 +100,7 @@ where
     fn apply_pre_execution_changes(&mut self) -> Result<(), BlockExecutionError> {
         // Set state clear flag if the block is after the Spurious Dragon hardfork.
         let state_clear_flag =
-            self.spec.is_spurious_dragon_active_at_block(self.evm.block().number.saturating_to());
+            self.spec.is_spurious_dragon_active_at_block(self.evm.block().number().saturating_to());
         self.evm.db_mut().set_state_clear_flag(state_clear_flag);
 
         self.system_caller.apply_blockhashes_contract_call(self.ctx.parent_hash, &mut self.evm)?;
@@ -108,7 +116,7 @@ where
     ) -> Result<ResultAndState<<Self::Evm as Evm>::HaltReason>, BlockExecutionError> {
         // The sum of the transaction's gas limit, Tg, and the gas utilized in this block prior,
         // must be no greater than the block's gasLimit.
-        let block_available_gas = self.evm.block().gas_limit - self.gas_used;
+        let block_available_gas = self.evm.block().gas_limit() - self.gas_used;
 
         if tx.tx().gas_limit() > block_available_gas {
             return Err(BlockValidationError::TransactionGasLimitMoreThanAvailableBlockGas {
@@ -139,6 +147,13 @@ where
         // append gas used
         self.gas_used += gas_used;
 
+        // only determine cancun fields when active
+        if self.spec.is_cancun_active_at_timestamp(self.evm.block().timestamp().saturating_to()) {
+            let tx_blob_gas_used = tx.tx().blob_gas_used().unwrap_or_default();
+
+            self.blob_gas_used = self.blob_gas_used.saturating_add(tx_blob_gas_used);
+        }
+
         // Push transaction changeset and calculate header bloom filter for receipt.
         self.receipts.push(self.receipt_builder.build_receipt(ReceiptBuilderCtx {
             tx: tx.tx(),
@@ -159,7 +174,7 @@ where
     ) -> Result<(Self::Evm, BlockExecutionResult<R::Receipt>), BlockExecutionError> {
         let requests = if self
             .spec
-            .is_prague_active_at_timestamp(self.evm.block().timestamp.saturating_to())
+            .is_prague_active_at_timestamp(self.evm.block().timestamp().saturating_to())
         {
             // Collect all EIP-6110 deposits
             let deposit_requests =
@@ -188,7 +203,7 @@ where
         if self
             .spec
             .ethereum_fork_activation(EthereumHardfork::Dao)
-            .transitions_at_block(self.evm.block().number.saturating_to())
+            .transitions_at_block(self.evm.block().number().saturating_to())
         {
             // drain balances from hardcoded addresses.
             let drained_balance: u128 = self
@@ -221,7 +236,12 @@ where
 
         Ok((
             self.evm,
-            BlockExecutionResult { receipts: self.receipts, requests, gas_used: self.gas_used },
+            BlockExecutionResult {
+                receipts: self.receipts,
+                requests,
+                gas_used: self.gas_used,
+                blob_gas_used: self.blob_gas_used,
+            },
         ))
     }
 
