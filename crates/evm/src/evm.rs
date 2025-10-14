@@ -261,6 +261,7 @@ pub trait EvmFactory {
         HaltReason = Self::HaltReason,
         Error = Self::Error<DB::Error>,
         Spec = Self::Spec,
+        BlockEnv = Self::BlockEnv,
         Precompiles = Self::Precompiles,
         Inspector = I,
     >;
