@@ -40,14 +40,14 @@ alloy-op-evm = { version = "0.21.2", path = "crates/op-evm", default-features = 
 
 # alloy
 alloy-eip2124 = { version = "0.2", default-features = false }
-alloy-chains = { version = "0.2.0", default-features = false }
-alloy-eips = { version = "1.0.34", default-features = false }
-alloy-consensus = { version = "1.0.27", default-features = false }
-alloy-primitives = { version = "1.0.0", default-features = false }
-alloy-sol-types = { version = "1.0.0", default-features = false }
+alloy-chains = { version = "0.2.14", default-features = false }
+alloy-eips = { version = "1.0.38", default-features = false }
+alloy-consensus = { version = "1.0.38", default-features = false }
+alloy-primitives = { version = "1.4", default-features = false }
+alloy-sol-types = { version = "1.4", default-features = false }
 alloy-hardforks = { version = "0.3" }
-alloy-rpc-types-eth = { version = "1.0.27", default-features = false }
-alloy-rpc-types-engine = { version = "1.0.27", default-features = false }
+alloy-rpc-types-eth = { version = "1.0.38", default-features = false }
+alloy-rpc-types-engine = { version = "1.0.38", default-features = false }
 
 # op-alloy
 alloy-op-hardforks = { version = "0.3" }
@@ -55,8 +55,8 @@ op-alloy-consensus = { version = "0.20", default-features = false }
 op-alloy-rpc-types-engine = { version = "0.20", default-features = false }
 
 # revm
-revm = { version = "30.0.0", default-features = false }
-op-revm = { version = "11.0.0", default-features = false }
+revm = { version = "30.1.0", default-features = false }
+op-revm = { version = "11.1.0", default-features = false }
 
 # misc
 auto_impl = "1"
