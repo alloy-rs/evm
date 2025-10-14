@@ -378,7 +378,7 @@ where
         inputs: &CallInputs,
     ) -> Result<Option<InterpreterResult>, String> {
         // Get the precompile at the address
-        let Some(precompile) = self.get(&inputs.target_address) else {
+        let Some(precompile) = self.get(&inputs.bytecode_address) else {
             return Ok(None);
         };
 
