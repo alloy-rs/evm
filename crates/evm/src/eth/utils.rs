@@ -43,7 +43,7 @@ pub fn from_account_with_tx_index(
     block_access_index: u64,
     account: &Account,
     initial_balance: U256,
-    is_oog: bool,
+    _is_oog: bool,
 ) -> AccountChanges {
     tracing::debug!("Account  {:?}", account);
     let mut account_changes = AccountChanges::default();
@@ -113,11 +113,11 @@ pub fn from_account_with_tx_index(
         }
         account_changes.storage_changes.clear();
     }
-    if is_oog {
-        account_changes.storage_reads.clear();
+    // if is_oog {
+    //     account_changes.storage_reads.clear();
 
-        account_changes.storage_changes.clear();
-    }
+    //     account_changes.storage_changes.clear();
+    // }
     account_changes
 }
 
