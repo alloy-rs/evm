@@ -27,7 +27,7 @@ pub(crate) fn transact_consolidation_requests_contract_call<Halt>(
     //
     // At the end of processing any execution block where block.timestamp >= FORK_TIMESTAMP (i.e.
     // after processing all transactions and after performing the block body requests validations)
-    // clienst software MUST [..] call the contract as `SYSTEM_ADDRESS` and empty input data to
+    // client software MUST [..] call the contract as `SYSTEM_ADDRESS` and empty input data to
     // trigger the system subroutine execute.
     let res = match evm.transact_system_call(
         alloy_eips::eip7002::SYSTEM_ADDRESS,
