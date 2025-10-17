@@ -14,7 +14,7 @@ use revm::context_interface::result::{ExecutionResult, ResultAndState};
 ///
 /// If Prague is not active at the given timestamp, then this is a no-op.
 ///
-/// Note: this does not commit the state changes to the database, it only transact the call.
+/// Note: this does not commit the state changes to the database, it only transacts the call.
 #[inline]
 pub(crate) fn transact_withdrawal_requests_contract_call<Halt>(
     evm: &mut impl Evm<HaltReason = Halt>,
