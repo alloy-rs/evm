@@ -19,10 +19,8 @@ use alloy_primitives::{Bytes, B256};
 use canyon::ensure_create2_deployer;
 use op_alloy_consensus::OpDepositReceipt;
 use op_revm::{
-    constants::{DA_FOOTPRINT_GAS_SCALAR_OFFSET, DA_FOOTPRINT_GAS_SCALAR_SLOT, L1_BLOCK_CONTRACT},
-    estimate_tx_compressed_size,
-    transaction::deposit::DEPOSIT_TRANSACTION_TYPE,
-    OpTransaction,
+    constants::L1_BLOCK_CONTRACT, estimate_tx_compressed_size,
+    transaction::deposit::DEPOSIT_TRANSACTION_TYPE, L1BlockInfo, OpTransaction,
 };
 pub use receipt_builder::OpAlloyReceiptBuilder;
 use receipt_builder::OpReceiptBuilder;
@@ -120,7 +118,7 @@ pub enum OpBlockExecutionError {
     GetJovianDaFootprintScalar(Box<dyn core::error::Error + Send + Sync + 'static>),
 
     /// Transaction DA footprint exceeds available block DA footprint.
-    #[error("transaction DA footprint exceeds available block DA footprint")]
+    #[error("transaction DA footprint exceeds available block DA footprint. transaction_da_footprint: {transaction_da_footprint}, available_block_da_footprint: {available_block_da_footprint}")]
     TransactionDaFootprintAboveGasLimit {
         /// The DA footprint of the transaction to execute.
         transaction_da_footprint: u64,
@@ -139,27 +137,6 @@ where
     R: OpReceiptBuilder<Transaction: Transaction + Encodable2718, Receipt: TxReceipt>,
     Spec: OpHardforks,
 {
-    fn get_jovian_da_footprint_scalar(&mut self) -> Result<u16, BlockExecutionError> {
-        let da_footprint_gas_scalar_slot = self
-            .evm
-            .db_mut()
-            .database
-            .storage(L1_BLOCK_CONTRACT, DA_FOOTPRINT_GAS_SCALAR_SLOT)
-            .map_err(|e| {
-                BlockExecutionError::other(OpBlockExecutionError::GetJovianDaFootprintScalar(
-                    Box::new(e),
-                ))
-            })?
-            .to_be_bytes::<32>();
-
-        // Extract the first 2 bytes directly as a u16 in big-endian format
-        let bytes = [
-            da_footprint_gas_scalar_slot[DA_FOOTPRINT_GAS_SCALAR_OFFSET],
-            da_footprint_gas_scalar_slot[DA_FOOTPRINT_GAS_SCALAR_OFFSET + 1],
-        ];
-        Ok(u16::from_be_bytes(bytes))
-    }
-
     fn jovian_da_footprint_estimation(
         &mut self,
         tx: &impl ExecutableTx<Self>,
@@ -168,11 +145,21 @@ where
         let encoded = match tx.to_tx_env().encoded_bytes() {
             Some(encoded) => estimate_tx_compressed_size(encoded),
             None => estimate_tx_compressed_size(tx.tx().encoded_2718().as_ref()),
-        };
+        }
+        .saturating_div(1_000_000);
 
-        Ok(encoded
-            .saturating_div(1_000_000)
-            .saturating_mul(self.get_jovian_da_footprint_scalar()?.into()))
+        // Load the L1 block contract into the cache. If the L1 block contract is not pre-loaded the
+        // database will panic when trying to fetch the DA footprint gas scalar.
+        self.evm
+            .db_mut()
+            .load_cache_account(L1_BLOCK_CONTRACT)
+            .map_err(BlockExecutionError::other)?;
+
+        let da_footprint_gas_scalar = L1BlockInfo::fetch_da_footprint_gas_scalar(self.evm.db_mut())
+            .map_err(BlockExecutionError::other)?
+            .into();
+
+        Ok(encoded.saturating_mul(da_footprint_gas_scalar))
     }
 }
 
@@ -463,7 +450,7 @@ mod tests {
     use op_revm::{
         constants::{
             BASE_FEE_SCALAR_OFFSET, ECOTONE_L1_BLOB_BASE_FEE_SLOT, ECOTONE_L1_FEE_SCALARS_SLOT,
-            L1_BASE_FEE_SLOT, OPERATOR_FEE_SCALARS_SLOT,
+            L1_BASE_FEE_SLOT, L1_BLOCK_CONTRACT, OPERATOR_FEE_SCALARS_SLOT,
         },
         DefaultOp, L1BlockInfo, OpBuilder, OpSpecId,
     };
@@ -471,6 +458,7 @@ mod tests {
         context::BlockEnv,
         database::{CacheDB, EmptyDB, InMemoryDB},
         inspector::NoOpInspector,
+        primitives::HashMap,
         state::AccountInfo,
         Context,
     };
@@ -515,48 +503,30 @@ mod tests {
             0,
             0,
         ]);
-        const OPERATOR_FEE_SCALAR: u64 = 5;
-        const OPERATOR_FEE_CONST: u64 = 6;
-        const OPERATOR_FEE: U256 =
-            U256::from_limbs([OPERATOR_FEE_CONST, OPERATOR_FEE_SCALAR, 0, 0]);
-
-        let mut da_footprint_scalar_bytes = [0; 8];
-        da_footprint_scalar_bytes[0] = (da_footprint_gas_scalar >> 8) as u8;
-        da_footprint_scalar_bytes[1] = da_footprint_gas_scalar as u8;
-
-        let da_footprint_gas_scalar_u64: u64 = u64::from_be_bytes(da_footprint_scalar_bytes);
-        let da_footprint_gas_scalar_slot_value: U256 =
-            U256::from_limbs([0, 0, 0, da_footprint_gas_scalar_u64]);
+        const OPERATOR_FEE_SCALAR: u8 = 5;
+        const OPERATOR_FEE_CONST: u8 = 6;
+        let da_footprint_gas_scalar_bytes = da_footprint_gas_scalar.to_be_bytes();
+        let mut operator_fee_and_da_footprint = [0u8; 32];
+        operator_fee_and_da_footprint[31] = OPERATOR_FEE_CONST;
+        operator_fee_and_da_footprint[23] = OPERATOR_FEE_SCALAR;
+        operator_fee_and_da_footprint[19] = da_footprint_gas_scalar_bytes[1];
+        operator_fee_and_da_footprint[18] = da_footprint_gas_scalar_bytes[0];
+        let operator_fee_and_da_footprint_u256 = U256::from_be_bytes(operator_fee_and_da_footprint);
 
         let mut db = State::builder().with_database(InMemoryDB::default()).build();
 
-        db.database.insert_account_info(L1_BLOCK_CONTRACT, AccountInfo { ..Default::default() });
+        db.insert_account_with_storage(
+            L1_BLOCK_CONTRACT,
+            AccountInfo { ..Default::default() },
+            HashMap::from_iter([
+                (L1_BASE_FEE_SLOT, L1_BASE_FEE),
+                (ECOTONE_L1_FEE_SCALARS_SLOT, L1_FEE_SCALARS),
+                (ECOTONE_L1_BLOB_BASE_FEE_SLOT, L1_BLOB_BASE_FEE),
+                (OPERATOR_FEE_SCALARS_SLOT, operator_fee_and_da_footprint_u256),
+            ]),
+        );
 
-        db.database
-            .insert_account_storage(L1_BLOCK_CONTRACT, L1_BASE_FEE_SLOT, L1_BASE_FEE)
-            .unwrap();
-        db.database
-            .insert_account_storage(
-                L1_BLOCK_CONTRACT,
-                ECOTONE_L1_BLOB_BASE_FEE_SLOT,
-                L1_BLOB_BASE_FEE,
-            )
-            .unwrap();
-        db.database
-            .insert_account_storage(L1_BLOCK_CONTRACT, ECOTONE_L1_FEE_SCALARS_SLOT, L1_FEE_SCALARS)
-            .unwrap();
-        db.database
-            .insert_account_storage(L1_BLOCK_CONTRACT, OPERATOR_FEE_SCALARS_SLOT, OPERATOR_FEE)
-            .unwrap();
-        db.database
-            .insert_account_storage(
-                L1_BLOCK_CONTRACT,
-                DA_FOOTPRINT_GAS_SCALAR_SLOT,
-                da_footprint_gas_scalar_slot_value,
-            )
-            .unwrap();
-
-        db.database.insert_account_info(
+        db.insert_account(
             Address::ZERO,
             AccountInfo { balance: U256::from(400_000_000), ..Default::default() },
         );

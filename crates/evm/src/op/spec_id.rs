@@ -16,6 +16,8 @@ pub fn spec(chain_spec: impl OpHardforks, header: impl BlockHeader) -> OpSpecId 
 pub fn spec_by_timestamp_after_bedrock(chain_spec: impl OpHardforks, timestamp: u64) -> OpSpecId {
     if chain_spec.is_interop_active_at_timestamp(timestamp) {
         OpSpecId::INTEROP
+    } else if chain_spec.is_jovian_active_at_timestamp(timestamp) {
+        OpSpecId::JOVIAN
     } else if chain_spec.is_isthmus_active_at_timestamp(timestamp) {
         OpSpecId::ISTHMUS
     } else if chain_spec.is_holocene_active_at_timestamp(timestamp) {
@@ -56,6 +58,10 @@ mod tests {
     impl FakeHardfork {
         fn interop() -> Self {
             Self::from_timestamp_zero(OpHardfork::Interop)
+        }
+
+        fn jovian() -> Self {
+            Self::from_timestamp_zero(OpHardfork::Jovian)
         }
 
         fn isthmus() -> Self {
@@ -116,6 +122,7 @@ mod tests {
     }
 
     #[test_case::test_case(FakeHardfork::interop(), OpSpecId::INTEROP; "Interop")]
+    #[test_case::test_case(FakeHardfork::jovian(), OpSpecId::JOVIAN; "Jovian")]
     #[test_case::test_case(FakeHardfork::isthmus(), OpSpecId::ISTHMUS; "Isthmus")]
     #[test_case::test_case(FakeHardfork::holocene(), OpSpecId::HOLOCENE; "Holocene")]
     #[test_case::test_case(FakeHardfork::granite(), OpSpecId::GRANITE; "Granite")]
