@@ -46,7 +46,7 @@ impl EvmEnv<OpSpecId> {
         chain_id: ChainId,
     ) -> Self {
         Self::for_op(
-            EvmEnvInput::from_parent_header(header, attributes, base_fee_per_gas),
+            EvmEnvInput::for_next(header, attributes, base_fee_per_gas, None),
             chain_spec,
             chain_id,
         )
@@ -64,7 +64,7 @@ impl EvmEnv<OpSpecId> {
         let is_merge_active = spec.into_eth_spec() >= SpecId::MERGE;
 
         let block_env = BlockEnv {
-            number: U256::from(input.height),
+            number: U256::from(input.number),
             beneficiary: input.beneficiary,
             timestamp: U256::from(input.timestamp),
             difficulty: if is_merge_active { U256::ZERO } else { input.difficulty },
@@ -107,14 +107,13 @@ mod payload {
         pub(crate) fn from_op_payload(payload: &OpExecutionPayload) -> Self {
             Self {
                 timestamp: payload.timestamp(),
-                height: payload.block_number(),
+                number: payload.block_number(),
                 beneficiary: payload.as_v1().fee_recipient,
                 mix_hash: Some(payload.as_v1().prev_randao),
                 difficulty: payload.as_v1().prev_randao.into(),
                 gas_limit: payload.as_v1().gas_limit,
                 excess_blob_gas: payload.as_v3().map(|v| v.excess_blob_gas),
                 base_fee_per_gas: payload.as_v1().base_fee_per_gas.saturating_to(),
-                blob_gas_used: None,
             }
         }
     }
