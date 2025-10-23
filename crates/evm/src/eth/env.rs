@@ -135,7 +135,8 @@ impl EvmEnvInput {
             mix_hash: Some(attributes.prev_randao),
             difficulty: U256::ZERO,
             gas_limit: attributes.gas_limit,
-            // If header does not have blob fields, assume that excess blob gas is 0.
+            // If header does not have blob fields, but we have blob params, assume that excess blob
+            // gas is 0.
             excess_blob_gas: parent
                 .maybe_next_block_excess_blob_gas(blob_params)
                 .or_else(|| blob_params.map(|_| 0)),
