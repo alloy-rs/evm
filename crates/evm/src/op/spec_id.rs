@@ -46,7 +46,7 @@ mod tests {
         EthereumHardforks, ForkCondition, OpChainHardforks, OpHardfork,
         OP_MAINNET_CANYON_TIMESTAMP, OP_MAINNET_ECOTONE_TIMESTAMP, OP_MAINNET_FJORD_TIMESTAMP,
         OP_MAINNET_GRANITE_TIMESTAMP, OP_MAINNET_HOLOCENE_TIMESTAMP, OP_MAINNET_ISTHMUS_TIMESTAMP,
-        OP_MAINNET_REGOLITH_TIMESTAMP,
+        OP_MAINNET_JOVIAN_TIMESTAMP, OP_MAINNET_REGOLITH_TIMESTAMP,
     };
     use alloy_primitives::BlockTimestamp;
 
@@ -138,6 +138,7 @@ mod tests {
         assert_eq!(actual_spec, expected_spec);
     }
 
+    #[test_case::test_case(OP_MAINNET_JOVIAN_TIMESTAMP, OpSpecId::JOVIAN; "Jovian")]
     #[test_case::test_case(OP_MAINNET_ISTHMUS_TIMESTAMP, OpSpecId::ISTHMUS; "Isthmus")]
     #[test_case::test_case(OP_MAINNET_HOLOCENE_TIMESTAMP, OpSpecId::HOLOCENE; "Holocene")]
     #[test_case::test_case(OP_MAINNET_GRANITE_TIMESTAMP, OpSpecId::GRANITE; "Granite")]
