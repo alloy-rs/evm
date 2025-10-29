@@ -56,7 +56,7 @@ op-alloy-rpc-types-engine = { version = "0.21", default-features = false }
 
 # revm
 revm = { version = "30.0.0", default-features = false }
-op-revm = { version = "11.2.0", default-features = false }
+op-revm = { version = "11.3.0", default-features = false }
 
 # misc
 auto_impl = "1"
