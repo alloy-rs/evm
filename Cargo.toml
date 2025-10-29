@@ -51,8 +51,8 @@ alloy-rpc-types-engine = { version = "1.0.27", default-features = false }
 
 # op-alloy
 alloy-op-hardforks = { version = "0.4.2" }
-op-alloy-consensus = { version = "0.21", default-features = false }
-op-alloy-rpc-types-engine = { version = "0.21", default-features = false }
+op-alloy-consensus = { version = "0.22", default-features = false }
+op-alloy-rpc-types-engine = { version = "0.22", default-features = false }
 
 # revm
 revm = { version = "30.0.0", default-features = false }
