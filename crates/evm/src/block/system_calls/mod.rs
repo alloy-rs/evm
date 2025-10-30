@@ -127,7 +127,7 @@ where
         Ok(())
     }
 
-    /// Applies the post-block call to the EIP-7002 withdrawal request contract.
+    /// Applies the post-block call to the EIP-7002 withdrawal requests contract.
     pub fn apply_withdrawal_requests_contract_call(
         &mut self,
         evm: &mut impl Evm<DB: DatabaseCommit>,
