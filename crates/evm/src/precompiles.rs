@@ -202,6 +202,61 @@ impl PrecompilesMap {
         self
     }
 
+    /// Extends the precompile map with multiple precompiles.
+    ///
+    /// This is a convenience method for inserting or replacing multiple precompiles at once.
+    /// Each precompile in the iterator is applied to its corresponding address.
+    ///
+    /// **Note**: This method will **replace** any existing precompiles at the given addresses.
+    /// If you need to modify existing precompiles, use [`map_precompile`](Self::map_precompile)
+    /// or [`apply_precompile`](Self::apply_precompile) instead.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// let precompiles = vec![
+    ///     (address1, my_precompile1),
+    ///     (address2, my_precompile2),
+    /// ];
+    /// precompiles_map.extend_precompiles(precompiles);
+    /// ```
+    pub fn extend_precompiles<I>(&mut self, precompiles: I)
+    where
+        I: IntoIterator<Item = (Address, DynPrecompile)>,
+    {
+        for (addr, precompile) in precompiles {
+            self.apply_precompile(&addr, |_| Some(precompile));
+        }
+    }
+
+    /// Builder-style method that extends the precompile map with multiple precompiles.
+    ///
+    /// This is a consuming version of [`extend_precompiles`](Self::extend_precompiles) that returns
+    /// `Self`.
+    ///
+    /// **Note**: This method will **replace** any existing precompiles at the given addresses.
+    /// If you need to modify existing precompiles, use
+    /// [`with_mapped_precompile`](Self::with_mapped_precompile)
+    /// or [`with_applied_precompile`](Self::with_applied_precompile) instead.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// let precompiles = vec![
+    ///     (address1, my_precompile1),
+    ///     (address2, my_precompile2),
+    /// ];
+    /// let map = PrecompilesMap::new(precompiles_cow)
+    ///     .with_extended_precompiles(precompiles);
+    /// ```
+    pub fn with_extended_precompiles<I>(mut self, precompiles: I) -> Self
+    where
+        I: IntoIterator<Item = (Address, DynPrecompile)>,
+    {
+        self.extend_precompiles(precompiles);
+        self
+    }
+
     /// Sets a dynamic precompile lookup function that is called for addresses not found
     /// in the static precompile map.
     ///
