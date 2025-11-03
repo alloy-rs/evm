@@ -2,6 +2,7 @@
 
 pub use env::NextEvmEnvAttributes;
 
+#[cfg(feature = "op")]
 pub(crate) use env::EvmEnvInput;
 
 use crate::{env::EvmEnv, evm::EvmFactory, precompiles::PrecompilesMap, Database, Evm};
