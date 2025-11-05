@@ -10,6 +10,7 @@ use revm::{
     primitives::{StorageKey, StorageValue},
     state::{Account, AccountInfo, Bytecode},
 };
+use revm::context::journaled_state::TransferError;
 
 /// Erased error type.
 #[derive(thiserror::Error, Debug)]
@@ -52,6 +53,28 @@ trait EvmInternalsTr: Database<Error = ErasedError> + Debug {
         address: Address,
     ) -> Result<StateLoad<&Account>, EvmInternalsError>;
 
+    /// Increments the balance of the account.
+    fn balance_incr(
+        &mut self,
+        address: Address,
+        balance: U256,
+    ) -> Result<(), EvmInternalsError>;
+
+    /// Transfers the balance from one account to another.
+    ///
+    /// This will load both accounts
+    fn transfer(
+        &mut self,
+        from: Address,
+        to: Address,
+        balance: U256,
+    ) -> Result<Option<TransferError>, EvmInternalsError>;
+
+    /// Increments the nonce of the account.
+    ///
+    /// This creates a new journal entry with this change.
+    fn nonce_bump_journal_entry(&mut self, address: Address);
+
     fn sload(
         &mut self,
         address: Address,
@@ -61,6 +84,9 @@ trait EvmInternalsTr: Database<Error = ErasedError> + Debug {
     fn touch_account(&mut self, address: Address);
 
     fn set_code(&mut self, address: Address, code: Bytecode);
+
+    /// Sets bytecode with hash. Assume that account is warm.
+    fn set_code_with_hash(&mut self, address: Address, code: Bytecode, hash: B256);
 
     fn sstore(
         &mut self,
@@ -118,6 +144,27 @@ where
         self.0.load_account_with_code(address).map_err(EvmInternalsError::database)
     }
 
+    fn balance_incr(
+        &mut self,
+        address: Address,
+        balance: U256,
+    ) -> Result<(), EvmInternalsError> {
+        self.0.balance_incr(address, balance).map_err(EvmInternalsError::database)
+    }
+
+    fn transfer(
+        &mut self,
+        from: Address,
+        to: Address,
+        balance: U256,
+    ) -> Result<Option<TransferError>, EvmInternalsError> {
+        self.0.transfer(from, to, balance).map_err(EvmInternalsError::database)
+    }
+
+    fn nonce_bump_journal_entry(&mut self, address: Address) {
+        self.0.nonce_bump_journal_entry(address);
+    }
+
     fn sload(
         &mut self,
         address: Address,
@@ -132,6 +179,10 @@ where
 
     fn set_code(&mut self, address: Address, code: Bytecode) {
         self.0.set_code(address, code);
+    }
+
+    fn set_code_with_hash(&mut self, address: Address, code: Bytecode, hash: B256) {
+        self.0.set_code_with_hash(address, code, hash);
     }
 
     fn sstore(
@@ -202,6 +253,34 @@ impl<'a> EvmInternals<'a> {
         self.internals.load_account_code(address)
     }
 
+    /// Increments the balance of the account.
+    pub fn balance_incr(
+        &mut self,
+        address: Address,
+        balance: U256,
+    ) -> Result<(), EvmInternalsError> {
+        self.internals.balance_incr(address, balance)
+    }
+
+    /// Transfers the balance from one account to another.
+    ///
+    /// This will load both accounts and return an error if the transfer fails.
+    pub fn transfer(
+        &mut self,
+        from: Address,
+        to: Address,
+        balance: U256,
+    ) -> Result<Option<TransferError>, EvmInternalsError> {
+        self.internals.transfer(from, to, balance)
+    }
+
+    /// Increments the nonce of the account.
+    ///
+    /// This creates a new journal entry with this change.
+    pub fn nonce_bump_journal_entry(&mut self, address: Address) {
+        self.internals.nonce_bump_journal_entry(address);
+    }
+
     /// Loads a storage slot.
     pub fn sload(
         &mut self,
@@ -219,6 +298,13 @@ impl<'a> EvmInternals<'a> {
     /// Sets bytecode to the account.
     pub fn set_code(&mut self, address: Address, code: Bytecode) {
         self.internals.set_code(address, code);
+    }
+
+    /// Sets bytecode with hash to the account.
+    ///
+    /// Assumes that the account is warm.
+    pub fn set_code_with_hash(&mut self, address: Address, code: Bytecode, hash: B256) {
+        self.internals.set_code_with_hash(address, code, hash);
     }
 
     /// Stores the storage value in Journal state.
