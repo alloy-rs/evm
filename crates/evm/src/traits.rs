@@ -5,12 +5,11 @@ use alloc::boxed::Box;
 use alloy_primitives::{Address, Log, B256, U256};
 use core::{error::Error, fmt, fmt::Debug};
 use revm::{
-    context::{Block, DBErrorMarker, JournalTr},
+    context::{journaled_state::TransferError, Block, DBErrorMarker, JournalTr},
     interpreter::{SStoreResult, StateLoad},
     primitives::{StorageKey, StorageValue},
     state::{Account, AccountInfo, Bytecode},
 };
-use revm::context::journaled_state::TransferError;
 
 /// Erased error type.
 #[derive(thiserror::Error, Debug)]
@@ -54,11 +53,7 @@ trait EvmInternalsTr: Database<Error = ErasedError> + Debug {
     ) -> Result<StateLoad<&Account>, EvmInternalsError>;
 
     /// Increments the balance of the account.
-    fn balance_incr(
-        &mut self,
-        address: Address,
-        balance: U256,
-    ) -> Result<(), EvmInternalsError>;
+    fn balance_incr(&mut self, address: Address, balance: U256) -> Result<(), EvmInternalsError>;
 
     /// Transfers the balance from one account to another.
     ///
@@ -144,11 +139,7 @@ where
         self.0.load_account_with_code(address).map_err(EvmInternalsError::database)
     }
 
-    fn balance_incr(
-        &mut self,
-        address: Address,
-        balance: U256,
-    ) -> Result<(), EvmInternalsError> {
+    fn balance_incr(&mut self, address: Address, balance: U256) -> Result<(), EvmInternalsError> {
         self.0.balance_incr(address, balance).map_err(EvmInternalsError::database)
     }
 
