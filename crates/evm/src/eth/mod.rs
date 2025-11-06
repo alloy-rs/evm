@@ -209,6 +209,7 @@ where
     type BlockEnv = BlockEnv;
     type Precompiles = PRECOMPILE;
     type Inspector = I;
+    type Context = EthEvmContext<DB>;
 
     fn block(&self) -> &BlockEnv {
         &self.block
@@ -216,6 +217,14 @@ where
 
     fn chain_id(&self) -> u64 {
         self.cfg.chain_id
+    }
+
+    fn ctx(&self) -> &Self::Context {
+        Self::ctx(self)
+    }
+
+    fn ctx_mut(&mut self) -> &mut Self::Context {
+        Self::ctx_mut(self)
     }
 
     fn transact_raw(
@@ -344,5 +353,34 @@ mod tests {
                 "{name} precompile at {precompile_addr:?} should be available for later spec {later_spec:?}"
             );
         }
+    }
+
+    #[test]
+    fn test_context_access_through_trait() {
+        use crate::Evm;
+        use revm::context_interface::{Block, Cfg, ContextTr};
+
+        let mut cfg_env = CfgEnv::default();
+        cfg_env.spec = SpecId::CANCUN;
+        cfg_env.chain_id = 1;
+
+        let env = EvmEnv { block_env: BlockEnv::default(), cfg_env };
+        let factory = EthEvmFactory;
+        let mut evm = factory.create_evm(EmptyDB::default(), env);
+
+        fn access_context_through_trait(evm: &mut impl Evm) {
+            let ctx = evm.ctx();
+            assert_eq!(ctx.block().number(), 0);
+            assert_eq!(ctx.cfg().chain_id(), 1);
+        }
+
+        access_context_through_trait(&mut evm);
+
+        fn mutate_context_through_trait(evm: &mut impl Evm) {
+            let ctx = evm.ctx_mut();
+            let _journal = ctx.journal();
+        }
+
+        mutate_context_through_trait(&mut evm);
     }
 }

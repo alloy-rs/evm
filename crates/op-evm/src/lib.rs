@@ -99,6 +99,7 @@ where
     type BlockEnv = BlockEnv;
     type Precompiles = P;
     type Inspector = I;
+    type Context = OpContext<DB>;
 
     fn block(&self) -> &BlockEnv {
         &self.block
@@ -106,6 +107,14 @@ where
 
     fn chain_id(&self) -> u64 {
         self.cfg.chain_id
+    }
+
+    fn ctx(&self) -> &Self::Context {
+        Self::ctx(self)
+    }
+
+    fn ctx_mut(&mut self) -> &mut Self::Context {
+        Self::ctx_mut(self)
     }
 
     fn transact_raw(
@@ -374,5 +383,33 @@ mod tests {
         });
 
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_context_access_through_trait() {
+        use alloy_evm::Evm;
+        use revm::context_interface::{Block, Cfg, ContextTr};
+
+        let mut cfg_env = CfgEnv::new_with_spec(OpSpecId::CANYON);
+        cfg_env.chain_id = 10;
+
+        let env = EvmEnv::new(cfg_env, BlockEnv::default());
+        let factory = OpEvmFactory;
+        let mut evm = factory.create_evm(EmptyDB::default(), env);
+
+        fn access_context_through_trait(evm: &mut impl Evm) {
+            let ctx = evm.ctx();
+            assert_eq!(ctx.block().number(), 0);
+            assert_eq!(ctx.cfg().chain_id(), 10);
+        }
+
+        access_context_through_trait(&mut evm);
+
+        fn mutate_context_through_trait(evm: &mut impl Evm) {
+            let ctx = evm.ctx_mut();
+            let _journal = ctx.journal();
+        }
+
+        mutate_context_through_trait(&mut evm);
     }
 }

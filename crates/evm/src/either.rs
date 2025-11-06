@@ -14,6 +14,7 @@ where
         BlockEnv = L::BlockEnv,
         Precompiles = L::Precompiles,
         Inspector = L::Inspector,
+        Context = L::Context,
     >,
 {
     type DB = L::DB;
@@ -24,6 +25,7 @@ where
     type BlockEnv = L::BlockEnv;
     type Precompiles = L::Precompiles;
     type Inspector = L::Inspector;
+    type Context = L::Context;
 
     fn block(&self) -> &Self::BlockEnv {
         either::for_both!(self, evm => evm.block())
@@ -31,6 +33,14 @@ where
 
     fn chain_id(&self) -> u64 {
         either::for_both!(self, evm => evm.chain_id())
+    }
+
+    fn ctx(&self) -> &Self::Context {
+        either::for_both!(self, evm => evm.ctx())
+    }
+
+    fn ctx_mut(&mut self) -> &mut Self::Context {
+        either::for_both!(self, evm => evm.ctx_mut())
     }
 
     fn transact_raw(
