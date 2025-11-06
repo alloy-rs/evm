@@ -91,6 +91,10 @@ trait EvmInternalsTr: Database<Error = ErasedError> + Debug {
     ) -> Result<StateLoad<SStoreResult>, EvmInternalsError>;
 
     fn log(&mut self, log: Log);
+
+    fn tload(&mut self, address: Address, key: StorageKey) -> StorageValue;
+
+    fn tstore(&mut self, address: Address, key: StorageKey, value: StorageValue);
 }
 
 /// Helper internal struct for implementing [`EvmInternals`].
@@ -188,6 +192,14 @@ where
     fn log(&mut self, log: Log) {
         self.0.log(log);
     }
+
+    fn tload(&mut self, address: Address, key: StorageKey) -> StorageValue {
+        self.0.tload(address, key)
+    }
+
+    fn tstore(&mut self, address: Address, key: StorageKey, value: StorageValue) {
+        self.0.tstore(address, key, value);
+    }
 }
 
 /// Helper type exposing hooks into EVM and access to evm internal settings.
@@ -236,7 +248,7 @@ impl<'a> EvmInternals<'a> {
         self.internals.load_account(address)
     }
 
-    /// Loads code of an account.
+    /// Loads an account AND it's code.
     pub fn load_account_code(
         &mut self,
         address: Address,
@@ -311,6 +323,16 @@ impl<'a> EvmInternals<'a> {
     /// Logs the log in Journal state.
     pub fn log(&mut self, log: Log) {
         self.internals.log(log);
+    }
+
+    /// Loads a transient storage value.
+    pub fn tload(&mut self, address: Address, key: StorageKey) -> StorageValue {
+        self.internals.tload(address, key)
+    }
+
+    /// Stores a transient storage value.
+    pub fn tstore(&mut self, address: Address, key: StorageKey, value: StorageValue) {
+        self.internals.tstore(address, key, value);
     }
 }
 
