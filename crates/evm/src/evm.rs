@@ -60,10 +60,7 @@ pub trait Evm {
     type Precompiles;
     /// Evm inspector.
     type Inspector;
-    /// The EVM context type that holds internal state including the journal.
-    ///
-    /// This provides access to revm's internal context object, allowing upper-level clients
-    /// to access the journal and other internal state for benchmarking, logging etc..
+    /// EVM context that holds internal state including the journal.
     type Context: ContextTr<Db = Self::DB, Journal: JournalExt>;
 
     /// Reference to [`Evm::BlockEnv`].
@@ -73,15 +70,9 @@ pub trait Evm {
     fn chain_id(&self) -> u64;
 
     /// Returns a reference to the EVM context.
-    ///
-    /// The context provides access to internal EVM state including the journal,
-    /// which tracks all state changes during transaction execution.
     fn ctx(&self) -> &Self::Context;
 
     /// Returns a mutable reference to the EVM context.
-    ///
-    /// The context provides access to internal EVM state including the journal,
-    /// which tracks all state changes during transaction execution.
     fn ctx_mut(&mut self) -> &mut Self::Context;
 
     /// Executes a transaction and returns the outcome.
