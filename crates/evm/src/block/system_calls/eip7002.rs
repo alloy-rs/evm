@@ -19,9 +19,9 @@ use revm::context_interface::result::{ExecutionResult, ResultAndState};
 pub(crate) fn transact_withdrawal_requests_contract_call<Halt>(
     evm: &mut impl Evm<HaltReason = Halt>,
 ) -> Result<ResultAndState<Halt>, BlockExecutionError> {
-    // Execute EIP-7002 withdrawal requests contract message data.
+    // Execute EIP-7002 withdrawal requests contract call.
     //
-    // This requirement for the withdrawal requests contract call defined by
+    // The requirement for the withdrawal requests contract call defined by
     // [EIP-7002](https://eips.ethereum.org/EIPS/eip-7002) is:
     //
     // At the end of processing any execution block where `block.timestamp >= FORK_TIMESTAMP` (i.e.
