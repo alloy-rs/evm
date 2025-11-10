@@ -984,6 +984,7 @@ mod tests {
                 Some(DynPrecompile::new(PrecompileId::Custom("dynamic".into()), |_input| {
                     Ok(PrecompileOutput {
                         gas_used: 100,
+                        gas_refunded: 0,
                         bytes: Bytes::from("dynamic precompile response"),
                         reverted: false,
                     })
