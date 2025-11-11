@@ -22,12 +22,10 @@ alloy-hardforks.workspace = true
 alloy-op-hardforks = { workspace = true, optional = true }
 alloy-rpc-types-eth = { workspace = true, optional = true }
 alloy-rpc-types-engine = { workspace = true, optional = true }
-op-alloy-rpc-types-engine = { workspace = true, optional = true }
 
 revm.workspace = true
 op-revm = { workspace = true, optional = true }
-op-alloy-consensus = { workspace = true, optional = true }
-op-alloy-rpc-types = { workspace = true, optional = true }
+op-alloy = { workspace = true, optional = true }
 
 auto_impl.workspace = true
 derive_more.workspace = true
@@ -53,17 +51,13 @@ std = [
 	"derive_more/std",
 	"op-revm?/std",
 	"thiserror/std",
-	"op-alloy-consensus?/std",
+	"op-alloy?/std",
 	"alloy-rpc-types-eth?/std",
-	"alloy-rpc-types-engine?/std",
-	"op-alloy-rpc-types-engine?/std",
-	"op-alloy-rpc-types?/std"
+	"alloy-rpc-types-engine?/std"
 ]
-op = ["op-revm", "op-alloy-consensus", "alloy-op-hardforks"]
+op = ["op-revm", "op-alloy", "alloy-op-hardforks"]
 overrides = ["dep:alloy-rpc-types-eth"]
 call-util = ["overrides"]
-engine = ["dep:alloy-rpc-types-engine"]
-op-engine = ["dep:op-alloy-rpc-types-engine"]
+engine = ["dep:alloy-rpc-types-engine", "op-alloy?/rpc-types-engine"]
 asm-keccak = ["alloy-primitives/asm-keccak", "revm/asm-keccak"]
-rpc = ["dep:alloy-rpc-types-eth"]
-op-rpc = ["rpc", "dep:op-alloy-rpc-types"]
+rpc = ["dep:alloy-rpc-types-eth", "op-alloy?/rpc-types"]

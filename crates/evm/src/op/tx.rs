@@ -3,7 +3,7 @@ use crate::{FromRecoveredTx, FromTxWithEncoded};
 use alloy_consensus::{Signed, TxEip1559, TxEip2930, TxEip4844, TxEip7702, TxLegacy};
 use alloy_eips::{Encodable2718, Typed2718};
 use alloy_primitives::{Address, Bytes};
-use op_alloy_consensus::{OpTxEnvelope, TxDeposit};
+use op_alloy::consensus::{OpTxEnvelope, TxDeposit};
 use op_revm::{transaction::deposit::DepositTransactionParts, OpTransaction};
 use revm::context::TxEnv;
 

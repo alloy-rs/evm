@@ -1,5 +1,5 @@
 use alloy_primitives::Bytes;
-use op_alloy_rpc_types::OpTransactionRequest;
+use op_alloy::rpc_types::OpTransactionRequest;
 use op_revm::OpTransaction;
 use revm::context::{BlockEnv, TxEnv};
 

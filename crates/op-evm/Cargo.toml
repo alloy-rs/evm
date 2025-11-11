@@ -21,7 +21,7 @@ alloy-consensus.workspace = true
 alloy-primitives.workspace = true
 
 alloy-op-hardforks.workspace = true
-op-alloy-consensus.workspace = true
+op-alloy.workspace = true
 
 revm.workspace = true
 op-revm.workspace = true
@@ -43,7 +43,7 @@ std = [
 	"op-revm/std",
 	"alloy-consensus/std",
 	"alloy-eips/std",
-	"op-alloy-consensus/std",
+	"op-alloy/std",
 	"thiserror/std"
 ]
 asm-keccak = ["alloy-evm/asm-keccak", "alloy-primitives/asm-keccak", "revm/asm-keccak"]

@@ -79,10 +79,10 @@ impl EvmEnv<OpSpecId> {
     }
 }
 
-#[cfg(feature = "op-engine")]
+#[cfg(feature = "engine")]
 mod payload {
     use super::*;
-    use op_alloy_rpc_types_engine::OpExecutionPayload;
+    use op_alloy::rpc_types_engine::OpExecutionPayload;
 
     impl EvmEnv<OpSpecId> {
         /// Create a new `EvmEnv` with [`OpSpecId`] from a `payload`, `chain_id`, `chain_spec` and

@@ -17,7 +17,7 @@ use alloy_evm::{
 use alloy_op_hardforks::{OpChainHardforks, OpHardforks};
 use alloy_primitives::{Bytes, B256};
 use canyon::ensure_create2_deployer;
-use op_alloy_consensus::OpDepositReceipt;
+use op_alloy::consensus::OpDepositReceipt;
 use op_revm::{
     constants::L1_BLOCK_CONTRACT, estimate_tx_compressed_size,
     transaction::deposit::DEPOSIT_TRANSACTION_TYPE, L1BlockInfo, OpTransaction,
@@ -446,7 +446,7 @@ mod tests {
     use alloy_hardforks::ForkCondition;
     use alloy_op_hardforks::OpHardfork;
     use alloy_primitives::{uint, Address, Signature, U256};
-    use op_alloy_consensus::OpTxEnvelope;
+    use op_alloy::consensus::OpTxEnvelope;
     use op_revm::{
         constants::{
             BASE_FEE_SCALAR_OFFSET, ECOTONE_L1_BLOB_BASE_FEE_SLOT, ECOTONE_L1_FEE_SCALARS_SLOT,
