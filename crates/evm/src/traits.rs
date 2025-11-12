@@ -55,6 +55,9 @@ trait EvmInternalsTr: Database<Error = ErasedError> + Debug {
     /// Increments the balance of the account.
     fn balance_incr(&mut self, address: Address, balance: U256) -> Result<(), EvmInternalsError>;
 
+    /// Sets the balance of the account.
+    fn set_balance(&mut self, address: Address, balance: U256) -> Result<(), EvmInternalsError>;
+
     /// Transfers the balance from one account to another.
     ///
     /// This will load both accounts
@@ -145,6 +148,11 @@ where
 
     fn balance_incr(&mut self, address: Address, balance: U256) -> Result<(), EvmInternalsError> {
         self.0.balance_incr(address, balance).map_err(EvmInternalsError::database)
+    }
+
+    fn set_balance(&mut self, address: Address, balance: U256) -> Result<(), EvmInternalsError> {
+        self.0.load_account_mut(address).map_err(EvmInternalsError::database)?.set_balance(balance);
+        Ok(())
     }
 
     fn transfer(
@@ -264,6 +272,15 @@ impl<'a> EvmInternals<'a> {
         balance: U256,
     ) -> Result<(), EvmInternalsError> {
         self.internals.balance_incr(address, balance)
+    }
+
+    /// Sets the balance of the account.
+    pub fn set_balance(
+        &mut self,
+        address: Address,
+        balance: U256,
+    ) -> Result<(), EvmInternalsError> {
+        self.internals.set_balance(address, balance)
     }
 
     /// Transfers the balance from one account to another.
