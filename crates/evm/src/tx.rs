@@ -6,7 +6,7 @@
 
 use alloy_consensus::{
     crypto::secp256k1, transaction::Recovered, EthereumTxEnvelope, Signed, TxEip1559, TxEip2930,
-    TxEip4844, TxEip7702, TxLegacy,
+    TxEip4844, TxEip4844Variant, TxEip7702, TxLegacy,
 };
 use alloy_eips::{
     eip2718::WithEncoded,
@@ -278,6 +278,24 @@ impl FromRecoveredTx<Signed<TxEip4844>> for TxEnv {
 
 impl FromTxWithEncoded<TxEip4844> for TxEnv {
     fn from_encoded_tx(tx: &TxEip4844, sender: Address, _encoded: Bytes) -> Self {
+        Self::from_recovered_tx(tx, sender)
+    }
+}
+
+impl FromRecoveredTx<TxEip4844Variant> for TxEnv {
+    fn from_recovered_tx(tx: &TxEip4844Variant, sender: Address) -> Self {
+        Self::from_recovered_tx(tx.tx(), sender)
+    }
+}
+
+impl FromRecoveredTx<Signed<TxEip4844Variant>> for TxEnv {
+    fn from_recovered_tx(tx: &Signed<TxEip4844Variant>, sender: Address) -> Self {
+        Self::from_recovered_tx(tx.tx(), sender)
+    }
+}
+
+impl FromTxWithEncoded<TxEip4844Variant> for TxEnv {
+    fn from_encoded_tx(tx: &TxEip4844Variant, sender: Address, _encoded: Bytes) -> Self {
         Self::from_recovered_tx(tx, sender)
     }
 }

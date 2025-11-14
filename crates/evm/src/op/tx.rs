@@ -1,6 +1,8 @@
 use crate::{FromRecoveredTx, FromTxWithEncoded};
 
-use alloy_consensus::{Signed, TxEip1559, TxEip2930, TxEip4844, TxEip7702, TxLegacy};
+use alloy_consensus::{
+    Signed, TxEip1559, TxEip2930, TxEip4844, TxEip4844Variant, TxEip7702, TxLegacy,
+};
 use alloy_eips::{Encodable2718, Typed2718};
 use alloy_primitives::{Address, Bytes};
 use op_alloy::consensus::{OpTxEnvelope, TxDeposit};
@@ -143,6 +145,26 @@ impl FromTxWithEncoded<Signed<TxEip4844>> for OpTransaction<TxEnv> {
 
 impl FromTxWithEncoded<TxEip4844> for OpTransaction<TxEnv> {
     fn from_encoded_tx(tx: &TxEip4844, caller: Address, encoded: Bytes) -> Self {
+        let base = TxEnv::from_recovered_tx(tx, caller);
+        Self { base, enveloped_tx: Some(encoded), deposit: Default::default() }
+    }
+}
+
+impl FromRecoveredTx<Signed<TxEip4844Variant>> for OpTransaction<TxEnv> {
+    fn from_recovered_tx(tx: &Signed<TxEip4844Variant>, sender: Address) -> Self {
+        let encoded = tx.encoded_2718();
+        Self::from_encoded_tx(tx, sender, encoded.into())
+    }
+}
+
+impl FromTxWithEncoded<Signed<TxEip4844Variant>> for OpTransaction<TxEnv> {
+    fn from_encoded_tx(tx: &Signed<TxEip4844Variant>, caller: Address, encoded: Bytes) -> Self {
+        Self::from_encoded_tx(tx.tx(), caller, encoded)
+    }
+}
+
+impl FromTxWithEncoded<TxEip4844Variant> for OpTransaction<TxEnv> {
+    fn from_encoded_tx(tx: &TxEip4844Variant, caller: Address, encoded: Bytes) -> Self {
         let base = TxEnv::from_recovered_tx(tx, caller);
         Self { base, enveloped_tx: Some(encoded), deposit: Default::default() }
     }
