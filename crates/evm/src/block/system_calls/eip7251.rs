@@ -15,7 +15,7 @@ use revm::context_interface::result::{ExecutionResult, ResultAndState};
 /// If Prague is not active at the given timestamp, then this is a no-op, and an empty vector is
 /// returned. Otherwise, the consolidation requests are returned.
 ///
-/// Note: this does not commit the state changes to the database, it only transact the call.
+/// Note: this does not commit the state changes to the database, it only transacts the call.
 #[inline]
 pub(crate) fn transact_consolidation_requests_contract_call<Halt>(
     evm: &mut impl Evm<HaltReason = Halt>,

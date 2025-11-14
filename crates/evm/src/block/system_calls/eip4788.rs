@@ -13,7 +13,7 @@ use revm::{context::Block, context_interface::result::ResultAndState};
 /// Applies the pre-block call to the [EIP-4788] beacon block root contract, using the given block,
 /// chain spec, EVM.
 ///
-/// Note: this does not commit the state changes to the database, it only transact the call.
+/// Note: this does not commit the state changes to the database, it only transacts the call.
 ///
 /// Returns `None` if Cancun is not active or the block is the genesis block, otherwise returns the
 /// result of the call.
