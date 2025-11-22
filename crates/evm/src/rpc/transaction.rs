@@ -1,14 +1,12 @@
 use crate::{
+    env::BlockEnvironment,
     rpc::{CallFees, CallFeesError},
     EvmEnv,
 };
 use alloy_primitives::{TxKind, U256};
 use alloy_rpc_types_eth::request::{TransactionInputError, TransactionRequest};
 use core::fmt::Debug;
-use revm::{
-    context::{BlockEnv, TxEnv},
-    context_interface::{either::Either, Block},
-};
+use revm::{context::TxEnv, context_interface::either::Either};
 use thiserror::Error;
 
 /// Converts `self` into `T`.
@@ -34,10 +32,10 @@ pub enum EthTxEnvError {
     Input(#[from] TransactionInputError),
 }
 
-impl TryIntoTxEnv<TxEnv> for TransactionRequest {
+impl<Block: BlockEnvironment> TryIntoTxEnv<TxEnv, Block> for TransactionRequest {
     type Err = EthTxEnvError;
 
-    fn try_into_tx_env<Spec>(self, evm_env: &EvmEnv<Spec, BlockEnv>) -> Result<TxEnv, Self::Err> {
+    fn try_into_tx_env<Spec>(self, evm_env: &EvmEnv<Spec, Block>) -> Result<TxEnv, Self::Err> {
         // Ensure that if versioned hashes are set, they're not empty
         if self.blob_versioned_hashes.as_ref().is_some_and(|hashes| hashes.is_empty()) {
             return Err(CallFeesError::BlobTransactionMissingBlobHashes.into());
@@ -69,7 +67,7 @@ impl TryIntoTxEnv<TxEnv> for TransactionRequest {
                 gas_price.map(U256::from),
                 max_fee_per_gas.map(U256::from),
                 max_priority_fee_per_gas.map(U256::from),
-                U256::from(evm_env.block_env().basefee),
+                U256::from(evm_env.block_env().basefee()),
                 blob_versioned_hashes.as_deref(),
                 max_fee_per_blob_gas.map(U256::from),
                 evm_env.block_env().blob_gasprice().map(U256::from),
@@ -81,7 +79,7 @@ impl TryIntoTxEnv<TxEnv> for TransactionRequest {
             // it's possible to derive the gas limit from the block:
             // <https://github.com/ledgerwatch/erigon/blob/eae2d9a79cb70dbe30b3a6b79c436872e4605458/cmd/rpcdaemon/commands/trace_adhoc.go#L956
             // https://github.com/ledgerwatch/erigon/blob/eae2d9a79cb70dbe30b3a6b79c436872e4605458/eth/ethconfig/config.go#L94>
-            evm_env.block_env().gas_limit,
+            evm_env.block_env().gas_limit(),
         );
 
         let chain_id = chain_id.unwrap_or(evm_env.cfg_env().chain_id);

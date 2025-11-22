@@ -5,11 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.24.2](https://github.com/alloy-rs/evm/releases/tag/v0.24.2) - 2025-11-14
+
+### Documentation
+
+- Minor improvement for docs ([#215](https://github.com/alloy-rs/evm/issues/215))
+
+### Features
+
+- Add set_balance ([#228](https://github.com/alloy-rs/evm/issues/228))
+
+### Miscellaneous Tasks
+
+- Relax bounds ([#231](https://github.com/alloy-rs/evm/issues/231))
+
 ## [0.24.1](https://github.com/alloy-rs/evm/releases/tag/v0.24.1) - 2025-11-12
 
 ### Dependencies
 
 - Bump to revm 33 ([#226](https://github.com/alloy-rs/evm/issues/226))
+
+### Miscellaneous Tasks
+
+- Release 0.24.1
 
 ## [0.24.0](https://github.com/alloy-rs/evm/releases/tag/v0.24.0) - 2025-11-12
 
