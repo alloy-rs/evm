@@ -318,6 +318,28 @@ pub trait BlockExecutor {
 
         self.apply_post_execution_changes()
     }
+
+    /// Like [`execute_block`], but with a custom closure to process each transaction.
+    ///
+    /// For instance, this enables capturing per-transaction performance metrics.
+    fn execute_block_with_transaction_closure<F, Tx>(
+        mut self,
+        transactions: impl IntoIterator<Item = Tx>,
+        mut f: F,
+    ) -> Result<(Self::Evm, BlockExecutionResult<Self::Receipt>), BlockExecutionError>
+    where
+        Self: Sized,
+        Tx: ExecutableTx<Self>,
+        F: FnMut(&mut Self, Tx) -> Result<u64, BlockExecutionError>,
+    {
+        self.apply_pre_execution_changes()?;
+
+        for tx in transactions {
+            f(&mut self, tx)?;
+        }
+
+        self.finish()
+    }
 }
 
 /// A helper trait encapsulating the constraints on [`BlockExecutor`] produced by the
