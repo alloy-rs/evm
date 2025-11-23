@@ -150,7 +150,7 @@ impl FromTxWithEncoded<TxEip4844> for OpTransaction<TxEnv> {
     }
 }
 
-/// `TxEip4844Variant<T>` conversion is not necessary for OpTransaction<TxEnv>, but it's useful
+/// `TxEip4844Variant<T>` conversion is not necessary for `OpTransaction<TxEnv>``, but it's useful
 /// sugar for Foundry.
 impl<T> FromRecoveredTx<Signed<TxEip4844Variant<T>>> for OpTransaction<TxEnv>
 where
