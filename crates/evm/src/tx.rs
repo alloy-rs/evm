@@ -282,20 +282,20 @@ impl FromTxWithEncoded<TxEip4844> for TxEnv {
     }
 }
 
-impl FromRecoveredTx<TxEip4844Variant> for TxEnv {
-    fn from_recovered_tx(tx: &TxEip4844Variant, sender: Address) -> Self {
+impl<T> FromRecoveredTx<TxEip4844Variant<T>> for TxEnv {
+    fn from_recovered_tx(tx: &TxEip4844Variant<T>, sender: Address) -> Self {
         Self::from_recovered_tx(tx.tx(), sender)
     }
 }
 
-impl FromRecoveredTx<Signed<TxEip4844Variant>> for TxEnv {
-    fn from_recovered_tx(tx: &Signed<TxEip4844Variant>, sender: Address) -> Self {
+impl<T> FromRecoveredTx<Signed<TxEip4844Variant<T>>> for TxEnv {
+    fn from_recovered_tx(tx: &Signed<TxEip4844Variant<T>>, sender: Address) -> Self {
         Self::from_recovered_tx(tx.tx(), sender)
     }
 }
 
-impl FromTxWithEncoded<TxEip4844Variant> for TxEnv {
-    fn from_encoded_tx(tx: &TxEip4844Variant, sender: Address, _encoded: Bytes) -> Self {
+impl<T> FromTxWithEncoded<TxEip4844Variant<T>> for TxEnv {
+    fn from_encoded_tx(tx: &TxEip4844Variant<T>, sender: Address, _encoded: Bytes) -> Self {
         Self::from_recovered_tx(tx, sender)
     }
 }
