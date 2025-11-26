@@ -1,7 +1,9 @@
 use crate::{FromRecoveredTx, FromTxWithEncoded};
 
-use alloy_consensus::{Signed, TxEip1559, TxEip2930, TxEip4844, TxEip7702, TxLegacy};
-use alloy_eips::{Encodable2718, Typed2718};
+use alloy_consensus::{
+    Signed, TxEip1559, TxEip2930, TxEip4844, TxEip4844Variant, TxEip7702, TxLegacy,
+};
+use alloy_eips::{eip7594::Encodable7594, Encodable2718, Typed2718};
 use alloy_primitives::{Address, Bytes};
 use op_alloy::consensus::{OpTxEnvelope, TxDeposit};
 use op_revm::{transaction::deposit::DepositTransactionParts, OpTransaction};
@@ -143,6 +145,31 @@ impl FromTxWithEncoded<Signed<TxEip4844>> for OpTransaction<TxEnv> {
 
 impl FromTxWithEncoded<TxEip4844> for OpTransaction<TxEnv> {
     fn from_encoded_tx(tx: &TxEip4844, caller: Address, encoded: Bytes) -> Self {
+        let base = TxEnv::from_recovered_tx(tx, caller);
+        Self { base, enveloped_tx: Some(encoded), deposit: Default::default() }
+    }
+}
+
+/// `TxEip4844Variant<T>` conversion is not necessary for `OpTransaction<TxEnv>`, but it's useful
+/// sugar for Foundry.
+impl<T> FromRecoveredTx<Signed<TxEip4844Variant<T>>> for OpTransaction<TxEnv>
+where
+    T: Encodable7594 + Send + Sync,
+{
+    fn from_recovered_tx(tx: &Signed<TxEip4844Variant<T>>, sender: Address) -> Self {
+        let encoded = tx.encoded_2718();
+        Self::from_encoded_tx(tx, sender, encoded.into())
+    }
+}
+
+impl<T> FromTxWithEncoded<Signed<TxEip4844Variant<T>>> for OpTransaction<TxEnv> {
+    fn from_encoded_tx(tx: &Signed<TxEip4844Variant<T>>, caller: Address, encoded: Bytes) -> Self {
+        Self::from_encoded_tx(tx.tx(), caller, encoded)
+    }
+}
+
+impl<T> FromTxWithEncoded<TxEip4844Variant<T>> for OpTransaction<TxEnv> {
+    fn from_encoded_tx(tx: &TxEip4844Variant<T>, caller: Address, encoded: Bytes) -> Self {
         let base = TxEnv::from_recovered_tx(tx, caller);
         Self { base, enveloped_tx: Some(encoded), deposit: Default::default() }
     }
