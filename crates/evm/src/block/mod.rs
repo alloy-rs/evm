@@ -324,7 +324,7 @@ pub trait BlockExecutor {
     /// For instance, this enables capturing per-transaction performance metrics.
     fn execute_block_with_transaction_closure<F, Tx>(
         mut self,
-        transactions: impl IntoIterator<Item = Tx>,
+        transactions: impl IntoIterator<Item = Result<Tx, BlockExecutionError>>,
         mut f: F,
     ) -> Result<(Self::Evm, BlockExecutionResult<Self::Receipt>), BlockExecutionError>
     where
@@ -335,6 +335,7 @@ pub trait BlockExecutor {
         self.apply_pre_execution_changes()?;
 
         for tx in transactions {
+            let tx = tx?;
             f(&mut self, tx)?;
         }
 
