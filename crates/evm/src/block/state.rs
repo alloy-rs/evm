@@ -27,14 +27,14 @@ pub trait StateDB: revm::Database {
 /// auto_impl unable to reconcile return associated type from supertrait
 impl<T: StateDB> StateDB for &mut T {
     fn set_state_clear_flag(&mut self, has_state_clear: bool) {
-        (*self).set_state_clear_flag(has_state_clear);
+        StateDB::set_state_clear_flag(*self, has_state_clear);
     }
 
     fn increment_balances(
         &mut self,
         balances: impl IntoIterator<Item = (Address, u128)>,
     ) -> Result<(), Self::Error> {
-        (*self).increment_balances(balances)
+        StateDB::increment_balances(*self, balances)
     }
 }
 
@@ -47,6 +47,6 @@ impl<DB: revm::Database> StateDB for State<DB> {
         &mut self,
         balances: impl IntoIterator<Item = (Address, u128)>,
     ) -> Result<(), Self::Error> {
-        self.increment_balances(balances)
+        State::increment_balances(self, balances)
     }
 }
