@@ -69,8 +69,9 @@ test-case = "3"
 
 [patch.crates-io]
 # staging the origin/main branch
-revm = { git = "https://github.com/bluealloy/revm", rev = "77abd37" }
-op-revm = { git = "https://github.com/bluealloy/revm", rev = "77abd37" }
+# branch https://github.com/bluealloy/revm/pull/3201
+revm = { git = "https://github.com/bluealloy/revm", rev = "2276905d" }
+op-revm = { git = "https://github.com/bluealloy/revm", rev = "2276905d" }
 
 #alloy-hardforks = { git = "https://github.com/alloy-rs/hardforks", rev = "0fd230f5aa24c4f6a8c593918b7449df0c20f60a" }
 #alloy-op-hardforks = { git = "https://github.com/alloy-rs/hardforks", rev = "0fd230f5aa24c4f6a8c593918b7449df0c20f60a" }
