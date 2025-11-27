@@ -8,6 +8,12 @@ pub trait InvalidTxError: Error + Send + Sync + Any + 'static {
     /// Returns whether the error cause by transaction having a nonce lower than expected.
     fn is_nonce_too_low(&self) -> bool;
 
+    /// Returns whether the error is due to the transaction gas limit being higher than allowed.
+    fn is_gas_limit_too_high(&self) -> bool;
+
+    /// Returns whether the error is due to the transaction gas limit being lower than required.
+    fn is_gas_limit_too_low(&self) -> bool;
+
     /// Returns the underlying [`InvalidTransaction`] if any.
     ///
     /// This is primarily used for error conversions, e.g. for rpc responses.
@@ -17,6 +23,14 @@ pub trait InvalidTxError: Error + Send + Sync + Any + 'static {
 impl InvalidTxError for InvalidTransaction {
     fn is_nonce_too_low(&self) -> bool {
         matches!(self, Self::NonceTooLow { .. })
+    }
+
+    fn is_gas_limit_too_high(&self) -> bool {
+        matches!(self, Self::TxGasLimitGreaterThanCap { .. })
+    }
+
+    fn is_gas_limit_too_low(&self) -> bool {
+        matches!(self, Self::CallGasCostMoreThanGasLimit { .. })
     }
 
     fn as_invalid_tx_err(&self) -> Option<&InvalidTransaction> {
@@ -75,6 +89,14 @@ where
 impl InvalidTxError for op_revm::OpTransactionError {
     fn is_nonce_too_low(&self) -> bool {
         matches!(self, Self::Base(tx) if tx.is_nonce_too_low())
+    }
+
+    fn is_gas_limit_too_high(&self) -> bool {
+        matches!(self, Self::Base(tx) if tx.is_gas_limit_too_high())
+    }
+
+    fn is_gas_limit_too_low(&self) -> bool {
+        matches!(self, Self::Base(tx) if tx.is_gas_limit_too_low())
     }
 
     fn as_invalid_tx_err(&self) -> Option<&InvalidTransaction> {
