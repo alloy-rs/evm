@@ -1,5 +1,4 @@
 //! State database abstraction.
-use core::error::Error;
 
 use alloy_primitives::Address;
 use revm::database::State;
@@ -7,11 +6,7 @@ use revm::database::State;
 /// A type which has the state of the blockchain.
 ///
 /// This trait encapsulates some of the functionality found in [`State`]
-#[auto_impl::auto_impl(&mut)]
-pub trait StateDB {
-    /// The database error type.
-    type Error: Error;
-
+pub trait StateDB: revm::Database {
     /// State clear EIP-161 is enabled in Spurious Dragon hardfork.
     fn set_state_clear_flag(&mut self, has_state_clear: bool);
 
@@ -29,9 +24,21 @@ pub trait StateDB {
     ) -> Result<(), Self::Error>;
 }
 
-impl<DB: revm::Database> StateDB for State<DB> {
-    type Error = DB::Error;
+/// auto_impl unable to reconcile return associated type from supertrait
+impl<T: StateDB> StateDB for &mut T {
+    fn set_state_clear_flag(&mut self, has_state_clear: bool) {
+        (*self).set_state_clear_flag(has_state_clear);
+    }
 
+    fn increment_balances(
+        &mut self,
+        balances: impl IntoIterator<Item = (Address, u128)>,
+    ) -> Result<(), Self::Error> {
+        (*self).increment_balances(balances)
+    }
+}
+
+impl<DB: revm::Database> StateDB for State<DB> {
     fn set_state_clear_flag(&mut self, has_state_clear: bool) {
         self.cache.set_state_clear_flag(has_state_clear);
     }
