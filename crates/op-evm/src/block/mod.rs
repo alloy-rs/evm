@@ -159,7 +159,7 @@ where
     }
 }
 
-impl<'db, E, R, Spec> BlockExecutor for OpBlockExecutor<E, R, Spec>
+impl<E, R, Spec> BlockExecutor for OpBlockExecutor<E, R, Spec>
 where
     E: Evm<
         DB: Database + DatabaseCommit + StateDB,
