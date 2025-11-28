@@ -127,7 +127,7 @@ pub enum OpBlockExecutionError {
     },
 }
 
-impl<'db, E, R, Spec> OpBlockExecutor<E, R, Spec>
+impl<E, R, Spec> OpBlockExecutor<E, R, Spec>
 where
     E: Evm<
         DB: Database + DatabaseCommit + StateDB,
