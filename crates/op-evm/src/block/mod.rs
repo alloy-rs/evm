@@ -9,7 +9,7 @@ use alloy_evm::{
         state_changes::{balance_increment_state, post_block_balance_increments},
         BlockExecutionError, BlockExecutionResult, BlockExecutor, BlockExecutorFactory,
         BlockExecutorFor, BlockValidationError, ExecutableTx, OnStateHook,
-        StateChangePostBlockSource, StateChangeSource, SystemCaller,
+        StateChangePostBlockSource, StateChangeSource, StateDB, SystemCaller,
     },
     eth::receipt_builder::ReceiptBuilderCtx,
     Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded,
@@ -27,7 +27,7 @@ use receipt_builder::OpReceiptBuilder;
 use revm::{
     context::{result::ResultAndState, Block},
     database::State,
-    DatabaseCommit, Inspector,
+    Database as _, DatabaseCommit, Inspector,
 };
 
 mod canyon;
@@ -127,11 +127,10 @@ pub enum OpBlockExecutionError {
     },
 }
 
-impl<'db, DB, E, R, Spec> OpBlockExecutor<E, R, Spec>
+impl<E, R, Spec> OpBlockExecutor<E, R, Spec>
 where
-    DB: Database + 'db,
     E: Evm<
-        DB = &'db mut State<DB>,
+        DB: Database + DatabaseCommit + StateDB,
         Tx: FromRecoveredTx<R::Transaction> + FromTxWithEncoded<R::Transaction> + OpTxEnv,
     >,
     R: OpReceiptBuilder<Transaction: Transaction + Encodable2718, Receipt: TxReceipt>,
@@ -150,10 +149,7 @@ where
 
         // Load the L1 block contract into the cache. If the L1 block contract is not pre-loaded the
         // database will panic when trying to fetch the DA footprint gas scalar.
-        self.evm
-            .db_mut()
-            .load_cache_account(L1_BLOCK_CONTRACT)
-            .map_err(BlockExecutionError::other)?;
+        self.evm.db_mut().basic(L1_BLOCK_CONTRACT).map_err(BlockExecutionError::other)?;
 
         let da_footprint_gas_scalar = L1BlockInfo::fetch_da_footprint_gas_scalar(self.evm.db_mut())
             .map_err(BlockExecutionError::other)?
@@ -163,11 +159,10 @@ where
     }
 }
 
-impl<'db, DB, E, R, Spec> BlockExecutor for OpBlockExecutor<E, R, Spec>
+impl<E, R, Spec> BlockExecutor for OpBlockExecutor<E, R, Spec>
 where
-    DB: Database + 'db,
     E: Evm<
-        DB = &'db mut State<DB>,
+        DB: Database + DatabaseCommit + StateDB,
         Tx: FromRecoveredTx<R::Transaction> + FromTxWithEncoded<R::Transaction> + OpTxEnv,
     >,
     R: OpReceiptBuilder<Transaction: Transaction + Encodable2718, Receipt: TxReceipt>,
@@ -255,12 +250,7 @@ where
         // were not introduced in Bedrock. In addition, regular transactions don't have deposit
         // nonces, so we don't need to touch the DB for those.
         let depositor = (self.is_regolith && is_deposit)
-            .then(|| {
-                self.evm
-                    .db_mut()
-                    .load_cache_account(*tx.signer())
-                    .map(|acc| acc.account_info().unwrap_or_default())
-            })
+            .then(|| self.evm.db_mut().basic(*tx.signer()).map(|acc| acc.unwrap_or_default()))
             .transpose()
             .map_err(BlockExecutionError::other)?;
 

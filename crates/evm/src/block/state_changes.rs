@@ -7,7 +7,6 @@ use alloy_hardforks::EthereumHardforks;
 use alloy_primitives::{map::HashMap, Address};
 use revm::{
     context::Block,
-    database::State,
     state::{Account, AccountStatus, EvmState},
     Database,
 };
@@ -110,24 +109,24 @@ pub fn insert_post_block_withdrawals_balance_increments(
 /// Zero balance increments are ignored and won't create state entries.
 pub fn balance_increment_state<DB>(
     balance_increments: &HashMap<Address, u128>,
-    state: &mut State<DB>,
+    state: &mut DB,
 ) -> Result<EvmState, BlockExecutionError>
 where
     DB: Database,
 {
     let mut load_account = |address: &Address| -> Result<(Address, Account), BlockExecutionError> {
-        let cache_account = state.load_cache_account(*address).map_err(|_| {
+        let cache_account = state.basic(*address).map_err(|_| {
             BlockExecutionError::msg("could not load account for balance increment")
         })?;
 
-        let account = cache_account.account.as_ref().ok_or_else(|| {
+        let account = cache_account.as_ref().ok_or_else(|| {
             BlockExecutionError::msg("could not load account for balance increment")
         })?;
 
         Ok((
             *address,
             Account {
-                info: account.info.clone(),
+                info: account.clone(),
                 storage: Default::default(),
                 status: AccountStatus::Touched,
                 transaction_id: 0,
