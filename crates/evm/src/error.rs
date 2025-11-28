@@ -40,21 +40,6 @@ pub trait InvalidTxError: Error + Send + Sync + Any + 'static {
 }
 
 impl InvalidTxError for InvalidTransaction {
-    fn is_nonce_too_low(&self) -> bool {
-        matches!(self, Self::NonceTooLow { .. })
-    }
-
-    fn is_gas_limit_too_high(&self) -> bool {
-        matches!(self, Self::TxGasLimitGreaterThanCap { .. } | Self::CallerGasLimitMoreThanBlock)
-    }
-
-    fn is_gas_limit_too_low(&self) -> bool {
-        matches!(
-            self,
-            Self::CallGasCostMoreThanGasLimit { .. } | Self::GasFloorMoreThanGasLimit { .. }
-        )
-    }
-
     fn as_invalid_tx_err(&self) -> Option<&InvalidTransaction> {
         Some(self)
     }
@@ -109,18 +94,6 @@ where
 
 #[cfg(feature = "op")]
 impl InvalidTxError for op_revm::OpTransactionError {
-    fn is_nonce_too_low(&self) -> bool {
-        matches!(self, Self::Base(tx) if tx.is_nonce_too_low())
-    }
-
-    fn is_gas_limit_too_high(&self) -> bool {
-        matches!(self, Self::Base(tx) if tx.is_gas_limit_too_high())
-    }
-
-    fn is_gas_limit_too_low(&self) -> bool {
-        matches!(self, Self::Base(tx) if tx.is_gas_limit_too_low())
-    }
-
     fn as_invalid_tx_err(&self) -> Option<&InvalidTransaction> {
         match self {
             Self::Base(tx) => Some(tx),
