@@ -16,7 +16,7 @@ use revm::{context::Block, context_interface::result::ResultAndState};
 /// If Prague is not activated, or the block is the genesis block, then this is a no-op, and no
 /// state changes are made.
 ///
-/// Note: this does not commit the state changes to the database, it only transact the call.
+/// Note: this does not commit the state changes to the database, it only transacts the call.
 ///
 /// Returns `None` if Prague is not active or the block is the genesis block, otherwise returns the
 /// result of the call.
