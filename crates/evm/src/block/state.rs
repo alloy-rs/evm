@@ -47,6 +47,6 @@ impl<DB: revm::Database> StateDB for State<DB> {
         &mut self,
         balances: impl IntoIterator<Item = (Address, u128)>,
     ) -> Result<(), Self::Error> {
-        State::increment_balances(self, balances)
+        Self::increment_balances(self, balances)
     }
 }
