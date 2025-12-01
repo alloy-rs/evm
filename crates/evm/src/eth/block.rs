@@ -11,7 +11,7 @@ use crate::{
         state_changes::{balance_increment_state, post_block_balance_increments},
         BlockExecutionError, BlockExecutionResult, BlockExecutor, BlockExecutorFactory,
         BlockExecutorFor, BlockValidationError, ExecutableTx, OnStateHook,
-        StateChangePostBlockSource, StateChangeSource, SystemCaller,
+        StateChangePostBlockSource, StateChangeSource, StateDB, SystemCaller,
     },
     Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded,
 };
@@ -20,10 +20,7 @@ use alloy_consensus::{Header, Transaction, TxReceipt};
 use alloy_eips::{eip4895::Withdrawals, eip7685::Requests, Encodable2718};
 use alloy_hardforks::EthereumHardfork;
 use alloy_primitives::{Log, B256};
-use revm::{
-    context::Block, context_interface::result::ResultAndState, database::State, DatabaseCommit,
-    Inspector,
-};
+use revm::{context::Block, context_interface::result::ResultAndState, DatabaseCommit, Inspector};
 
 /// Context for Ethereum block execution.
 #[derive(Debug, Clone)]
@@ -83,11 +80,10 @@ where
     }
 }
 
-impl<'db, DB, E, Spec, R> BlockExecutor for EthBlockExecutor<'_, E, Spec, R>
+impl<E, Spec, R> BlockExecutor for EthBlockExecutor<'_, E, Spec, R>
 where
-    DB: Database + 'db,
     E: Evm<
-        DB = &'db mut State<DB>,
+        DB: Database + DatabaseCommit + StateDB,
         Tx: FromRecoveredTx<R::Transaction> + FromTxWithEncoded<R::Transaction>,
     >,
     Spec: EthExecutorSpec,
@@ -314,12 +310,12 @@ where
 
     fn create_executor<'a, DB, I>(
         &'a self,
-        evm: EvmF::Evm<&'a mut State<DB>, I>,
+        evm: EvmF::Evm<DB, I>,
         ctx: Self::ExecutionCtx<'a>,
     ) -> impl BlockExecutorFor<'a, Self, DB, I>
     where
-        DB: Database + 'a,
-        I: Inspector<EvmF::Context<&'a mut State<DB>>> + 'a,
+        DB: Database + DatabaseCommit + StateDB + 'a,
+        I: Inspector<EvmF::Context<DB>> + 'a,
     {
         EthBlockExecutor::new(evm, ctx, &self.spec, &self.receipt_builder)
     }

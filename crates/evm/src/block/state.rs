@@ -1,5 +1,6 @@
 //! State database abstraction.
 
+use alloc::vec::Vec;
 use alloy_primitives::Address;
 use revm::database::State;
 
@@ -22,6 +23,12 @@ pub trait StateDB: revm::Database {
         &mut self,
         balances: impl IntoIterator<Item = (Address, u128)>,
     ) -> Result<(), Self::Error>;
+
+    /// Drains balances from the given accounts and returns the removed balances.
+    fn drain_balances(
+        &mut self,
+        addresses: impl IntoIterator<Item = Address>,
+    ) -> Result<Vec<u128>, Self::Error>;
 }
 
 /// auto_impl unable to reconcile return associated type from supertrait
@@ -36,6 +43,13 @@ impl<T: StateDB> StateDB for &mut T {
     ) -> Result<(), Self::Error> {
         StateDB::increment_balances(*self, balances)
     }
+
+    fn drain_balances(
+        &mut self,
+        addresses: impl IntoIterator<Item = Address>,
+    ) -> Result<Vec<u128>, Self::Error> {
+        StateDB::drain_balances(*self, addresses)
+    }
 }
 
 impl<DB: revm::Database> StateDB for State<DB> {
@@ -48,5 +62,12 @@ impl<DB: revm::Database> StateDB for State<DB> {
         balances: impl IntoIterator<Item = (Address, u128)>,
     ) -> Result<(), Self::Error> {
         Self::increment_balances(self, balances)
+    }
+
+    fn drain_balances(
+        &mut self,
+        addresses: impl IntoIterator<Item = Address>,
+    ) -> Result<Vec<u128>, Self::Error> {
+        Self::drain_balances(self, addresses)
     }
 }
