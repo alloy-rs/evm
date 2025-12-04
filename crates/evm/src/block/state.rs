@@ -15,12 +15,12 @@ pub trait StateDB: revm::Database {
     /// Gets a mutable reference to the internal [`BundleState`]
     fn bundle_state_mut(&mut self) -> &mut BundleState;
 
-    /// This will not apply any pending [`TransitionState`].
+    /// This will not apply any pending [`revm::database::TransitionState`].
     ///
     /// It is recommended to call [`StateDB::merge_transitions`] before taking the bundle.
     ///
     /// If the `State` has been built with the
-    /// [`StateBuilder::with_bundle_prestate`] option, the pre-state will be
+    /// [`revm::database::StateBuilder::with_bundle_prestate`] option, the pre-state will be
     /// taken along with any changes made by [`StateDB::merge_transitions`].
     fn take_bundle(&mut self) -> BundleState {
         core::mem::take(self.bundle_state_mut())
