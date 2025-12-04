@@ -5,7 +5,10 @@ use alloc::boxed::Box;
 use alloy_primitives::{Address, Log, B256, U256};
 use core::{error::Error, fmt, fmt::Debug};
 use revm::{
-    context::{journaled_state::TransferError, Block, DBErrorMarker, JournalTr},
+    context::{
+        journaled_state::{account::JournaledAccountTr as _, TransferError},
+        Block, DBErrorMarker, JournalTr,
+    },
     interpreter::{SStoreResult, StateLoad},
     primitives::{StorageKey, StorageValue},
     state::{Account, AccountInfo, Bytecode},
