@@ -23,7 +23,7 @@ use alloy_primitives::{Bytes, Log, B256};
 use revm::{
     context::Block,
     context_interface::result::ResultAndState,
-    database::{DatabaseCommitExt, State},
+    database::{DatabaseCommitExt as _, State},
     DatabaseCommit, Inspector,
 };
 
