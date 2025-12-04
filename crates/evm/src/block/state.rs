@@ -12,21 +12,26 @@ pub trait StateDB: revm::Database {
     /// Gets a reference to the internal [`BundleState`]
     fn bundle_state(&self) -> &BundleState;
 
+    /// Gets a mutable reference to the internal [`BundleState`]
+    fn bundle_state_mut(&mut self) -> &mut BundleState;
+
+    /// This will not apply any pending [`TransitionState`].
+    ///
+    /// It is recommended to call [`StateDB::merge_transitions`] before taking the bundle.
+    ///
+    /// If the `State` has been built with the
+    /// [`StateBuilder::with_bundle_prestate`] option, the pre-state will be
+    /// taken along with any changes made by [`StateDB::merge_transitions`].
+    fn take_bundle(&mut self) -> BundleState {
+        core::mem::take(self.bundle_state_mut())
+    }
+
     /// Take all transitions and merge them inside [`BundleState`].
     ///
     /// This action will create final post state and all reverts so that
     /// we at any time revert state of bundle to the state before transition
     /// is applied.
     fn merge_transitions(&mut self, retention: BundleRetention);
-
-    /// This will not apply any pending [`TransitionState`].
-    ///
-    /// It is recommended to call [`State::merge_transitions`] before taking the bundle.
-    ///
-    /// If the `State` has been built with the
-    /// [`StateBuilder::with_bundle_prestate`] option, the pre-state will be
-    /// taken along with any changes made by [`State::merge_transitions`].
-    fn take_bundle(&mut self) -> BundleState;
 }
 
 /// auto_impl unable to reconcile return associated type from supertrait
@@ -39,12 +44,12 @@ impl<T: StateDB> StateDB for &mut T {
         StateDB::bundle_state(*self)
     }
 
-    fn merge_transitions(&mut self, retention: BundleRetention) {
-        StateDB::merge_transitions(*self, retention);
+    fn bundle_state_mut(&mut self) -> &mut BundleState {
+        StateDB::bundle_state_mut(*self)
     }
 
-    fn take_bundle(&mut self) -> BundleState {
-        StateDB::take_bundle(*self)
+    fn merge_transitions(&mut self, retention: BundleRetention) {
+        StateDB::merge_transitions(*self, retention);
     }
 }
 
@@ -57,11 +62,11 @@ impl<DB: revm::Database> StateDB for State<DB> {
         &self.bundle_state
     }
 
-    fn merge_transitions(&mut self, retention: BundleRetention) {
-        Self::merge_transitions(self, retention);
+    fn bundle_state_mut(&mut self) -> &mut BundleState {
+        &mut self.bundle_state
     }
 
-    fn take_bundle(&mut self) -> BundleState {
-        Self::take_bundle(self)
+    fn merge_transitions(&mut self, retention: BundleRetention) {
+        Self::merge_transitions(self, retention);
     }
 }
