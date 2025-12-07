@@ -10,6 +10,8 @@ use revm::{
     Inspector,
 };
 
+mod bal;
+pub use bal::*;
 mod error;
 pub use error::*;
 
@@ -92,6 +94,56 @@ impl CommitChanges {
 ///
 /// The output of [`BlockExecutor::finish`] is a [`BlockExecutionResult`] which contains all
 /// relevant information about the block execution.
+///
+/// ## Conflict free parallel execution
+///
+/// With [EIP-7928](https://eips.ethereum.org/EIPS/eip-7928) Execution can be fully parallelized if the BAL is known in advance.
+/// The BAL must still be validated by checking if the BAL recorded during validation matches the
+/// input:
+/// > The BAL MUST be complete and accurate. Missing or spurious entries invalidate the block.
+///
+/// ### Transaction independence
+///
+/// The BAL tracks all touched accounts with its accessed storage (read+write) and changes to the
+/// account itself (balance,nonce,code). All changes (storage changes, balance, nonce, code) are
+/// assigned a tx index (the tx in the block that caused the change). From this input we can make
+/// transaction execution operate on:
+/// - dependent inputs:
+///   * Any accessed account data changed in previous transactions in the block
+/// - expected outputs:
+///   * The changes recorded for this transaction in the BAL
+///
+/// Validation must then ensure that:
+/// - The state output matches the storage input:
+///   * All accessed, but unchanged slots in the _output_ set appear in the provided input set.
+///   * All storage writes provided in the input match the output
+///   * All account modifications in the input match the output
+///
+/// If any of those mismatch then the input BAL is invalid and the block is invalid.
+///
+/// Storage read caveat:
+/// Account level storage reads aren't indexed by transactions, the view of storage views is however
+/// transaction specific. In total validation must ensure that _all_ reads are present in the block,
+/// this condition can only be validation after executing all transactions in the block.
+///
+/// ### Deriving transaction level input
+///
+/// The EIP-7928 BAL tracks account level access, all writes are assigned an index (the index of the
+/// transaction in the block). Starting from the parent state, the input and output set can be
+/// derived from the BAL by sorting and grouping changes for transactions. Each transaction has a
+/// unique input and output set, which is derived from the input and output set of previous changes
+/// in the block.
+/// Because EIP-7928 BAL is just a list of `Vec<AccountChange>` where each `AccountChange` includes
+/// indexed changes, we get the transaction specific [`TxInput`] by folding the account changeset
+/// with the transaction indexes.
+///
+/// ### BAL execution/validation abstraction
+///
+/// If the BAL is valid (transaction specific input and output sets are correct) then transaction
+/// changes don't need to be committed across transactions. Parallel execution can then be achieved
+/// by using multiple instances of the [`BlockExecutor`], like a pool of executors. Hence this trait
+/// does only provide BAL abstractions for executing single transactions with the transaction
+/// specific input sets.
 pub trait BlockExecutor {
     /// Input transaction type.
     ///
@@ -232,6 +284,34 @@ pub trait BlockExecutor {
         &mut self,
         tx: impl ExecutableTx<Self>,
     ) -> Result<ResultAndState<<Self::Evm as Evm>::HaltReason>, BlockExecutionError>;
+
+    /// Executes a single transaction using the transaction specific context without committing
+    /// state changes.
+    ///
+    /// This method uses the BAL context's input for applying state changes that happened in
+    /// previous transactions in the block.
+    ///
+    /// This returns an error if the transaction's output deviates from the expected output.
+    ///
+    /// Returns a [`revm::context_interface::result::ResultAndState`] containing the execution
+    /// result and state changes.
+    /// TODO: we need the same functions for pre and post sections.
+    fn execute_transaction_with_bal_context(
+        &self,
+        tx: impl ExecutableTx<Self>,
+        ctx: BalTxContext,
+    ) -> Result<ResultAndState<<Self::Evm as Evm>::HaltReason>, BalExecutionError> {
+        // TODO: we need a away to effectively apply state overrides for previous state changes
+        //  because we don't know the tx specific reads, all state changes carry over, so ideally we
+        // don't need to apply them for _every_ transaction and instead only apply the new ones, for
+        // example if this executor was used first to execute tx 5, we need to apply changes from tx
+        // 0..=4 before, if its then reused to execute tx 9 (because 6,7,8 are executed by different
+        // block executors in the pool), then we only want to apply missing changes from 5..=8 and
+        // should reuse changes applied before executing tx5 execute the transaction and
+        // compare against the expected output for this tx, the BAL context is invalid if
+        // the expected output is not an exact match.
+        todo!()
+    }
 
     /// Commits a previously executed transaction's state changes.
     ///
