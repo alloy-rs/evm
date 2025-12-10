@@ -296,11 +296,13 @@ pub trait BlockExecutor {
     /// Returns a [`revm::context_interface::result::ResultAndState`] containing the execution
     /// result and state changes.
     /// TODO: we need the same functions for pre and post sections.
-    fn execute_transaction_with_bal_context(
+    fn execute_transaction_with_index(
         &self,
         tx: impl ExecutableTx<Self>,
-        ctx: BalTxContext,
-    ) -> Result<ResultAndState<<Self::Evm as Evm>::HaltReason>, BalExecutionError> {
+        index: usize,
+    ) -> Result<ResultAndState<<Self::Evm as Evm>::HaltReason>, BalExecutionError> 
+    where <Self::Evm as Evm>::DB: BalDb
+    {
         // TODO: we need a away to effectively apply state overrides for previous state changes
         //  because we don't know the tx specific reads, all state changes carry over, so ideally we
         // don't need to apply them for _every_ transaction and instead only apply the new ones, for
