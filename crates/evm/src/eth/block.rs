@@ -19,7 +19,7 @@ use alloc::{borrow::Cow, boxed::Box, vec::Vec};
 use alloy_consensus::{Header, Transaction, TxReceipt};
 use alloy_eips::{eip4895::Withdrawals, eip7685::Requests, Encodable2718};
 use alloy_hardforks::EthereumHardfork;
-use alloy_primitives::{Log, B256};
+use alloy_primitives::{Bytes, Log, B256};
 use revm::{
     context::Block, context_interface::result::ResultAndState, database::State, DatabaseCommit,
     Inspector,
@@ -36,6 +36,8 @@ pub struct EthBlockExecutionCtx<'a> {
     pub ommers: &'a [Header],
     /// Block withdrawals.
     pub withdrawals: Option<Cow<'a, Withdrawals>>,
+    /// Block extra data.
+    pub extra_data: Bytes,
 }
 
 /// Block executor for Ethereum.
