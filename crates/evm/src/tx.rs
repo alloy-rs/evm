@@ -4,6 +4,7 @@
 //! into a unified transaction environment ([`TxEnv`]) that the EVM can execute. The main purpose
 //! of these traits is to enable flexible transaction input while maintaining type safety.
 
+use alloc::sync::Arc;
 use alloy_consensus::{
     crypto::secp256k1, transaction::Recovered, EthereumTxEnvelope, Signed, TxEip1559, TxEip2930,
     TxEip4844, TxEip4844Variant, TxEip7702, TxLegacy,
@@ -372,6 +373,16 @@ pub trait RecoveredTx<T> {
 impl<T> RecoveredTx<T> for Recovered<&T> {
     fn tx(&self) -> &T {
         self.inner()
+    }
+
+    fn signer(&self) -> &Address {
+        self.signer_ref()
+    }
+}
+
+impl<T> RecoveredTx<T> for Recovered<Arc<T>> {
+    fn tx(&self) -> &T {
+        self.inner().as_ref()
     }
 
     fn signer(&self) -> &Address {
