@@ -467,6 +467,7 @@ where
             gas: inputs.gas_limit,
             caller: inputs.caller,
             value: inputs.call_value(),
+            is_static: inputs.is_static,
             internals: EvmInternals::new(journal, &context.block),
             target_address: inputs.target_address,
             bytecode_address: inputs.bytecode_address,
@@ -591,6 +592,8 @@ pub struct PrecompileInput<'a> {
     /// Target address of the call. Would be the same as `bytecode_address` unless it's a
     /// DELEGATECALL.
     pub target_address: Address,
+    /// Whether this call is in a STATICCALL context.
+    pub is_static: bool,
     /// Bytecode address of the call.
     pub bytecode_address: Address,
     /// Various hooks for interacting with the EVM state.
@@ -632,6 +635,11 @@ impl<'a> PrecompileInput<'a> {
     /// via a DELEGATECALL/CALLCODE.
     pub fn is_direct_call(&self) -> bool {
         self.target_address == self.bytecode_address
+    }
+
+    /// Returns whether this call is in a STATICCALL context.
+    pub const fn is_static_call(&self) -> bool {
+        self.is_static
     }
 
     /// Returns the [`EvmInternals`].
@@ -868,6 +876,7 @@ mod tests {
                 gas: gas_limit,
                 caller: Address::ZERO,
                 value: U256::ZERO,
+                is_static: false,
                 internals: EvmInternals::new(&mut ctx.journaled_state, &ctx.block),
                 target_address: identity_address,
                 bytecode_address: identity_address,
@@ -902,6 +911,7 @@ mod tests {
                 gas: gas_limit,
                 caller: Address::ZERO,
                 value: U256::ZERO,
+                is_static: false,
                 internals: EvmInternals::new(&mut ctx.journaled_state, &ctx.block),
                 target_address: identity_address,
                 bytecode_address: identity_address,
@@ -937,6 +947,7 @@ mod tests {
                 gas: gas_limit,
                 caller: Address::ZERO,
                 value: U256::ZERO,
+                is_static: false,
                 internals: EvmInternals::new(&mut ctx.journaled_state, &ctx.block),
                 target_address: Address::ZERO,
                 bytecode_address: Address::ZERO,
@@ -1011,6 +1022,7 @@ mod tests {
                 gas: 1000,
                 caller: Address::ZERO,
                 value: U256::ZERO,
+                is_static: false,
                 internals: EvmInternals::new(&mut ctx.journaled_state, &ctx.block),
                 target_address: dynamic_address,
                 bytecode_address: dynamic_address,
@@ -1045,6 +1057,7 @@ mod tests {
                 gas: gas_limit,
                 caller: Address::ZERO,
                 value: U256::ZERO,
+                is_static: false,
                 target_address: identity_address,
                 bytecode_address: identity_address,
                 internals: EvmInternals::new(&mut ctx.journaled_state, &ctx.block),
@@ -1074,6 +1087,7 @@ mod tests {
                 gas: gas_limit,
                 caller: Address::ZERO,
                 value: U256::ZERO,
+                is_static: false,
                 internals: EvmInternals::new(&mut ctx.journaled_state, &ctx.block),
                 target_address: identity_address,
                 bytecode_address: identity_address,

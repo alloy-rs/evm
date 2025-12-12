@@ -242,6 +242,7 @@ mod tests {
             gas: u64::MAX,
             caller: Address::ZERO,
             value: U256::ZERO,
+            is_static: false,
             target_address: Address::ZERO,
             bytecode_address: Address::ZERO,
             internals: EvmInternals::new(
@@ -259,6 +260,7 @@ mod tests {
             gas: u64::MAX,
             caller: Address::ZERO,
             value: U256::ZERO,
+            is_static: false,
             target_address: Address::ZERO,
             bytecode_address: Address::ZERO,
             internals: EvmInternals::new(
@@ -276,6 +278,7 @@ mod tests {
             gas: u64::MAX,
             caller: Address::ZERO,
             value: U256::ZERO,
+            is_static: false,
             target_address: Address::ZERO,
             bytecode_address: Address::ZERO,
             internals: EvmInternals::new(
@@ -293,6 +296,7 @@ mod tests {
             gas: u64::MAX,
             caller: Address::ZERO,
             value: U256::ZERO,
+            is_static: false,
             target_address: Address::ZERO,
             bytecode_address: Address::ZERO,
             internals: EvmInternals::new(
@@ -317,6 +321,7 @@ mod tests {
             gas: u64::MAX,
             caller: Address::ZERO,
             value: U256::ZERO,
+            is_static: false,
             target_address: Address::ZERO,
             bytecode_address: Address::ZERO,
             internals: EvmInternals::new(
@@ -333,6 +338,7 @@ mod tests {
             gas: u64::MAX,
             caller: Address::ZERO,
             value: U256::ZERO,
+            is_static: false,
             target_address: Address::ZERO,
             bytecode_address: Address::ZERO,
             internals: EvmInternals::new(
@@ -349,6 +355,7 @@ mod tests {
             gas: u64::MAX,
             caller: Address::ZERO,
             value: U256::ZERO,
+            is_static: false,
             target_address: Address::ZERO,
             bytecode_address: Address::ZERO,
             internals: EvmInternals::new(
@@ -365,6 +372,7 @@ mod tests {
             gas: u64::MAX,
             caller: Address::ZERO,
             value: U256::ZERO,
+            is_static: false,
             target_address: Address::ZERO,
             bytecode_address: Address::ZERO,
             internals: EvmInternals::new(
