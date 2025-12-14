@@ -21,8 +21,10 @@ use alloy_eips::{eip4895::Withdrawals, eip7685::Requests, Encodable2718};
 use alloy_hardforks::EthereumHardfork;
 use alloy_primitives::{Bytes, Log, B256};
 use revm::{
-    context::Block, context_interface::result::ResultAndState, database::State, DatabaseCommit,
-    Inspector,
+    context::Block,
+    context_interface::result::ResultAndState,
+    database::{DatabaseCommitExt, State},
+    DatabaseCommit, Inspector,
 };
 
 /// Context for Ethereum block execution.
