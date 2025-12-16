@@ -25,18 +25,21 @@ pub struct TracingCtx<'a, T, E: Evm> {
     /// State changes after transaction.
     pub state: &'a EvmState,
     /// Inspector state after transaction.
-    pub inspector: E::Inspector,
+    pub inspector: &'a mut E::Inspector,
     /// Database used when executing the transaction, _before_ committing the state changes.
     pub db: &'a mut E::DB,
+    /// Fused inspector.
+    fused_inspector: &'a E::Inspector,
+    /// Whether the inspector was fused.
+    was_fused: &'a mut bool,
 }
 
-/// Output of tracing a transaction.
-#[derive(Debug, Clone)]
-pub struct TraceOutput<H, I> {
-    /// Inner EVM output.
-    pub result: ExecutionResult<H>,
-    /// Inspector state at the end of the execution.
-    pub inspector: I,
+impl<'a, T, E: Evm<Inspector: Clone>> TracingCtx<'a, T, E> {
+    /// Fuses the inspector and returns the current inspector state.
+    pub fn take_inspector(&mut self) -> E::Inspector {
+        *self.was_fused = true;
+        core::mem::replace(self.inspector, self.fused_inspector.clone())
+    }
 }
 
 impl<E: Evm<Inspector: Clone, DB: DatabaseCommit>> TxTracer<E> {
@@ -87,8 +90,23 @@ impl<E: Evm<Inspector: Clone, DB: DatabaseCommit>> TxTracer<E> {
         F: FnMut(TracingCtx<'_, T, E>) -> Result<O, Err>,
         Err: From<E::Error>,
     {
-        TracerIter { inner: self, txs: txs.into_iter().peekable(), hook, skip_last_commit: true }
+        TracerIter {
+            inner: self,
+            txs: txs.into_iter().peekable(),
+            hook,
+            skip_last_commit: true,
+            fuse: true,
+        }
     }
+}
+
+/// Output of tracing a transaction.
+#[derive(Debug, Clone)]
+pub struct TraceOutput<H, I> {
+    /// Inner EVM output.
+    pub result: ExecutionResult<H>,
+    /// Inspector state at the end of the execution.
+    pub inspector: I,
 }
 
 /// Iterator used by tracer.
@@ -99,6 +117,7 @@ pub struct TracerIter<'a, E: Evm, Txs: Iterator, F> {
     txs: Peekable<Txs>,
     hook: F,
     skip_last_commit: bool,
+    fuse: bool,
 }
 
 impl<E: Evm, Txs: Iterator, F> TracerIter<'_, E, Txs, F> {
@@ -106,8 +125,14 @@ impl<E: Evm, Txs: Iterator, F> TracerIter<'_, E, Txs, F> {
     ///
     /// We are skipping last commit by default as it's expected that when tracing users are mostly
     /// interested in tracer output rather than in a state after it.
-    pub fn commit_last_tx(mut self) -> Self {
+    pub const fn commit_last_tx(mut self) -> Self {
         self.skip_last_commit = false;
+        self
+    }
+
+    /// Disables inspector fusing on every transaction and expects user to fuse it manually.
+    pub const fn no_fuse(mut self) -> Self {
+        self.fuse = false;
         self
     }
 }
@@ -126,22 +151,31 @@ where
         let tx = self.txs.next()?;
         let result = self.inner.evm.transact(tx.clone());
 
-        let inspector = self.inner.fuse_inspector();
+        let TxTracer { evm, fused_inspector } = self.inner;
+        let (db, inspector, _) = evm.components_mut();
+
         let Ok(ResultAndState { result, state }) = result else {
             return None;
         };
+        let mut was_fused = false;
         let output = (self.hook)(TracingCtx {
             tx,
             result,
             state: &state,
             inspector,
-            db: self.inner.evm.db_mut(),
+            db,
+            fused_inspector: &*fused_inspector,
+            was_fused: &mut was_fused,
         });
 
         // Only commit next transaction if `skip_last_commit` is disabled or there is a next
         // transaction.
         if !self.skip_last_commit || self.txs.peek().is_some() {
-            self.inner.evm.db_mut().commit(state);
+            db.commit(state);
+        }
+
+        if self.fuse && !was_fused {
+            self.inner.fuse_inspector();
         }
 
         Some(output)

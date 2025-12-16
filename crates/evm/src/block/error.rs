@@ -79,6 +79,24 @@ pub enum BlockValidationError {
     /// [EIP-6110]: https://eips.ethereum.org/EIPS/eip-6110
     #[error("failed to decode deposit requests from receipts: {_0}")]
     DepositRequestDecode(String),
+    /// Arbitrary Block validation errors.
+    #[error(transparent)]
+    Other(Box<dyn core::error::Error + Send + Sync + 'static>),
+}
+
+impl BlockValidationError {
+    /// Create a new [`BlockValidationError::Other`] variant.
+    pub fn other<E>(error: E) -> Self
+    where
+        E: core::error::Error + Send + Sync + 'static,
+    {
+        Self::Other(Box::new(error))
+    }
+
+    /// Create a new [`BlockValidationError::Other`] variant from a given message.
+    pub fn msg(msg: impl core::fmt::Display) -> Self {
+        Self::Other(msg.to_string().into())
+    }
 }
 
 /// `BlockExecutor` Errors

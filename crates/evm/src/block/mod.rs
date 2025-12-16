@@ -1,12 +1,13 @@
 //! Block execution abstraction.
 
-use crate::{
-    Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, IntoTxEnv, RecoveredTx,
-};
+use crate::{Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, RecoveredTx, ToTxEnv};
 use alloc::{boxed::Box, vec::Vec};
 use alloy_eips::eip7685::Requests;
 use revm::{
-    context::result::ExecutionResult, database::State, inspector::NoOpInspector, Inspector,
+    context::result::{ExecutionResult, ResultAndState},
+    database::State,
+    inspector::NoOpInspector,
+    Inspector,
 };
 
 mod error;
@@ -20,6 +21,9 @@ pub use system_calls::*;
 
 pub mod state_changes;
 
+pub mod state;
+pub use state::*;
+
 pub mod calc;
 
 /// The result of executing a block.
@@ -31,12 +35,14 @@ pub struct BlockExecutionResult<T> {
     pub requests: Requests,
     /// The total gas used by the block.
     pub gas_used: u64,
+    /// Blob gas used by the block.
+    pub blob_gas_used: u64,
 }
 
 /// Helper trait to encapsulate requirements for a type to be used as input for [`BlockExecutor`].
 ///
 /// This trait combines the requirements for a transaction to be executable by a block executor:
-/// - Must be convertible to the EVM's transaction environment via [`IntoTxEnv`]
+/// - Must be convertible to the EVM's transaction environment via [`ToTxEnv`]
 /// - Must provide access to the transaction and signer via [`RecoveredTx`]
 /// - Must be [`Copy`] for efficient handling during block execution (the expectation here is that
 ///   this always passed as & reference)
@@ -50,11 +56,11 @@ pub struct BlockExecutionResult<T> {
 /// The trait ensures that the block executor can both execute the transaction in the EVM
 /// and access the original transaction data for receipt generation.
 pub trait ExecutableTx<E: BlockExecutor + ?Sized>:
-    IntoTxEnv<<E::Evm as Evm>::Tx> + RecoveredTx<E::Transaction> + Copy
+    ToTxEnv<<E::Evm as Evm>::Tx> + RecoveredTx<E::Transaction>
 {
 }
-impl<E: BlockExecutor, T> ExecutableTx<E> for T where
-    T: IntoTxEnv<<E::Evm as Evm>::Tx> + RecoveredTx<E::Transaction> + Copy
+impl<E: BlockExecutor + ?Sized, T> ExecutableTx<E> for T where
+    T: ToTxEnv<<E::Evm as Evm>::Tx> + RecoveredTx<E::Transaction>
 {
 }
 
@@ -70,7 +76,7 @@ pub enum CommitChanges {
 
 impl CommitChanges {
     /// Returns `true` if transaction should be committed into block executor's state.
-    pub fn should_commit(self) -> bool {
+    pub const fn should_commit(self) -> bool {
         matches!(self, Self::Yes)
     }
 }
@@ -187,7 +193,7 @@ pub trait BlockExecutor {
     /// - Custom validation logic before committing
     ///
     /// The [`ExecutableTx`] constraint ensures that:
-    /// 1. The transaction can be converted to `TxEnv` via [`IntoTxEnv`] for EVM execution
+    /// 1. The transaction can be converted to `TxEnv` via [`ToTxEnv`] for EVM execution
     /// 2. The original transaction and signer can be accessed via [`RecoveredTx`] for receipt
     ///    generation
     ///
@@ -197,7 +203,52 @@ pub trait BlockExecutor {
         &mut self,
         tx: impl ExecutableTx<Self>,
         f: impl FnOnce(&ExecutionResult<<Self::Evm as Evm>::HaltReason>) -> CommitChanges,
-    ) -> Result<Option<u64>, BlockExecutionError>;
+    ) -> Result<Option<u64>, BlockExecutionError> {
+        // Execute transaction without committing
+        let output = self.execute_transaction_without_commit(&tx)?;
+
+        if !f(&output.result).should_commit() {
+            return Ok(None);
+        }
+
+        let gas_used = self.commit_transaction(output, tx)?;
+        Ok(Some(gas_used))
+    }
+
+    /// Executes a single transaction without committing state changes.
+    ///
+    /// This method performs the transaction execution through the EVM but does not
+    /// commit the resulting state changes. The output can be inspected and potentially
+    /// committed later using [`commit_transaction`](Self::commit_transaction).
+    ///
+    /// Returns a [`revm::context_interface::result::ResultAndState`] containing the execution
+    /// result and state changes.
+    ///
+    /// # Use Cases
+    /// - Transaction simulation without affecting state
+    /// - Inspecting transaction effects before committing
+    /// - Building custom commit logic
+    fn execute_transaction_without_commit(
+        &mut self,
+        tx: impl ExecutableTx<Self>,
+    ) -> Result<ResultAndState<<Self::Evm as Evm>::HaltReason>, BlockExecutionError>;
+
+    /// Commits a previously executed transaction's state changes.
+    ///
+    /// Takes the output from
+    /// [`execute_transaction_without_commit`](Self::execute_transaction_without_commit)
+    /// and applies the state changes, updates gas accounting, and generates a receipt.
+    ///
+    /// Returns the gas used by the transaction.
+    ///
+    /// # Parameters
+    /// - `output`: The transaction output containing execution result and state changes
+    /// - `tx`: The original transaction (needed for receipt generation)
+    fn commit_transaction(
+        &mut self,
+        output: ResultAndState<<Self::Evm as Evm>::HaltReason>,
+        tx: impl ExecutableTx<Self>,
+    ) -> Result<u64, BlockExecutionError>;
 
     /// Applies any necessary changes after executing the block's transactions, completes execution
     /// and returns the underlying EVM along with execution result.

@@ -4,19 +4,19 @@
     html_favicon_url = "https://raw.githubusercontent.com/alloy-rs/core/main/assets/favicon.ico"
 )]
 #![cfg_attr(not(test), warn(unused_crate_dependencies))]
-#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(not(feature = "std"), no_std)]
 
 extern crate alloc;
 
-use alloc::vec::Vec;
+pub use alloy_evm::op::{spec, spec_by_timestamp_after_bedrock};
+
 use alloy_evm::{precompiles::PrecompilesMap, Database, Evm, EvmEnv, EvmFactory};
-use alloy_primitives::{Address, Bytes, TxKind, U256};
+use alloy_primitives::{Address, Bytes};
 use core::{
     fmt::Debug,
     ops::{Deref, DerefMut},
 };
-use op_alloy_consensus::OpTxType;
 use op_revm::{
     precompiles::OpPrecompiles, DefaultOp, OpBuilder, OpContext, OpHaltReason, OpSpecId,
     OpTransaction, OpTransactionError,
@@ -27,7 +27,7 @@ use revm::{
     handler::{instructions::EthInstructions, PrecompileProvider},
     inspector::NoOpInspector,
     interpreter::{interpreter::EthInterpreter, InterpreterResult},
-    Context, ExecuteEvm, InspectEvm, Inspector,
+    Context, ExecuteEvm, InspectEvm, Inspector, SystemCallEvm,
 };
 
 pub mod block;
@@ -51,7 +51,7 @@ impl<DB: Database, I, P> OpEvm<DB, I, P> {
     }
 
     /// Provides a mutable reference to the EVM context.
-    pub fn ctx_mut(&mut self) -> &mut OpContext<DB> {
+    pub const fn ctx_mut(&mut self) -> &mut OpContext<DB> {
         &mut self.inner.0.ctx
     }
 }
@@ -96,6 +96,7 @@ where
     type Error = EVMError<DB::Error, OpTransactionError>;
     type HaltReason = OpHaltReason;
     type Spec = OpSpecId;
+    type BlockEnv = BlockEnv;
     type Precompiles = P;
     type Inspector = I;
 
@@ -124,72 +125,7 @@ where
         contract: Address,
         data: Bytes,
     ) -> Result<ResultAndState<Self::HaltReason>, Self::Error> {
-        let tx = OpTransaction {
-            base: TxEnv {
-                caller,
-                kind: TxKind::Call(contract),
-                // Explicitly set nonce to 0 so revm does not do any nonce checks
-                nonce: 0,
-                gas_limit: 30_000_000,
-                value: U256::ZERO,
-                data,
-                // Setting the gas price to zero enforces that no value is transferred as part of
-                // the call, and that the call will not count against the block's
-                // gas limit
-                gas_price: 0,
-                // The chain ID check is not relevant here and is disabled if set to None
-                chain_id: None,
-                // Setting the gas priority fee to None ensures the effective gas price is derived
-                // from the `gas_price` field, which we need to be zero
-                gas_priority_fee: None,
-                access_list: Default::default(),
-                // blob fields can be None for this tx
-                blob_hashes: Vec::new(),
-                max_fee_per_blob_gas: 0,
-                tx_type: OpTxType::Deposit as u8,
-                authorization_list: Default::default(),
-            },
-            // The L1 fee is not charged for the EIP-4788 transaction, submit zero bytes for the
-            // enveloped tx size.
-            enveloped_tx: Some(Bytes::default()),
-            deposit: Default::default(),
-        };
-
-        let mut gas_limit = tx.base.gas_limit;
-        let mut basefee = 0;
-        let mut disable_nonce_check = true;
-
-        // ensure the block gas limit is >= the tx
-        core::mem::swap(&mut self.block.gas_limit, &mut gas_limit);
-        // disable the base fee check for this call by setting the base fee to zero
-        core::mem::swap(&mut self.block.basefee, &mut basefee);
-        // disable the nonce check
-        core::mem::swap(&mut self.cfg.disable_nonce_check, &mut disable_nonce_check);
-
-        let mut res = self.transact(tx);
-
-        // swap back to the previous gas limit
-        core::mem::swap(&mut self.block.gas_limit, &mut gas_limit);
-        // swap back to the previous base fee
-        core::mem::swap(&mut self.block.basefee, &mut basefee);
-        // swap back to the previous nonce check flag
-        core::mem::swap(&mut self.cfg.disable_nonce_check, &mut disable_nonce_check);
-
-        // NOTE: We assume that only the contract storage is modified. Revm currently marks the
-        // caller and block beneficiary accounts as "touched" when we do the above transact calls,
-        // and includes them in the result.
-        //
-        // We're doing this state cleanup to make sure that changeset only includes the changed
-        // contract storage.
-        if let Ok(res) = &mut res {
-            res.state.retain(|addr, _| *addr == contract);
-        }
-
-        res
-    }
-
-    fn db_mut(&mut self) -> &mut Self::DB {
-        &mut self.journaled_state.database
+        self.inner.system_call_with_caller(caller, contract, data)
     }
 
     fn finish(self) -> (Self::DB, EvmEnv<Self::Spec>) {
@@ -202,20 +138,20 @@ where
         self.inspect = enabled;
     }
 
-    fn precompiles(&self) -> &Self::Precompiles {
-        &self.inner.0.precompiles
+    fn components(&self) -> (&Self::DB, &Self::Inspector, &Self::Precompiles) {
+        (
+            &self.inner.0.ctx.journaled_state.database,
+            &self.inner.0.inspector,
+            &self.inner.0.precompiles,
+        )
     }
 
-    fn precompiles_mut(&mut self) -> &mut Self::Precompiles {
-        &mut self.inner.0.precompiles
-    }
-
-    fn inspector(&self) -> &Self::Inspector {
-        &self.inner.0.inspector
-    }
-
-    fn inspector_mut(&mut self) -> &mut Self::Inspector {
-        &mut self.inner.0.inspector
+    fn components_mut(&mut self) -> (&mut Self::DB, &mut Self::Inspector, &mut Self::Precompiles) {
+        (
+            &mut self.inner.0.ctx.journaled_state.database,
+            &mut self.inner.0.inspector,
+            &mut self.inner.0.precompiles,
+        )
     }
 }
 
@@ -232,6 +168,7 @@ impl EvmFactory for OpEvmFactory {
         EVMError<DBError, OpTransactionError>;
     type HaltReason = OpHaltReason;
     type Spec = OpSpecId;
+    type BlockEnv = BlockEnv;
     type Precompiles = PrecompilesMap;
 
     fn create_evm<DB: Database>(
@@ -271,5 +208,179 @@ impl EvmFactory for OpEvmFactory {
                 )),
             inspect: true,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use alloc::{string::ToString, vec};
+    use alloy_evm::{
+        precompiles::{Precompile, PrecompileInput},
+        EvmInternals,
+    };
+    use alloy_primitives::U256;
+    use op_revm::precompiles::{bls12_381, bn254_pair};
+    use revm::{
+        context::{CfgEnv, JournalTr},
+        database::EmptyDB,
+        precompile::PrecompileError,
+        Journal, JournalEntry,
+    };
+
+    use super::*;
+
+    #[test]
+    fn test_precompiles_jovian_fail() {
+        let evm = OpEvmFactory::default().create_evm(
+            EmptyDB::default(),
+            EvmEnv::new(CfgEnv::new_with_spec(OpSpecId::JOVIAN), BlockEnv::default()),
+        );
+
+        let jovian_precompile = evm.precompiles().get(bn254_pair::JOVIAN.address()).unwrap();
+        let result = jovian_precompile.call(PrecompileInput {
+            data: &vec![0; bn254_pair::JOVIAN_MAX_INPUT_SIZE + 1],
+            gas: u64::MAX,
+            caller: Address::ZERO,
+            value: U256::ZERO,
+            is_static: false,
+            target_address: Address::ZERO,
+            bytecode_address: Address::ZERO,
+            internals: EvmInternals::new(
+                &mut Journal::<EmptyDB, JournalEntry>::new(EmptyDB::default()),
+                &BlockEnv::default(),
+            ),
+        });
+
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), PrecompileError::Bn254PairLength));
+
+        let jovian_precompile = evm.precompiles().get(bls12_381::JOVIAN_G1_MSM.address()).unwrap();
+        let result = jovian_precompile.call(PrecompileInput {
+            data: &vec![0; bls12_381::JOVIAN_G1_MSM_MAX_INPUT_SIZE + 1],
+            gas: u64::MAX,
+            caller: Address::ZERO,
+            value: U256::ZERO,
+            is_static: false,
+            target_address: Address::ZERO,
+            bytecode_address: Address::ZERO,
+            internals: EvmInternals::new(
+                &mut Journal::<EmptyDB, JournalEntry>::new(EmptyDB::default()),
+                &BlockEnv::default(),
+            ),
+        });
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("G1MSM input length too long"));
+
+        let jovian_precompile = evm.precompiles().get(bls12_381::JOVIAN_G2_MSM.address()).unwrap();
+        let result = jovian_precompile.call(PrecompileInput {
+            data: &vec![0; bls12_381::JOVIAN_G2_MSM_MAX_INPUT_SIZE + 1],
+            gas: u64::MAX,
+            caller: Address::ZERO,
+            value: U256::ZERO,
+            is_static: false,
+            target_address: Address::ZERO,
+            bytecode_address: Address::ZERO,
+            internals: EvmInternals::new(
+                &mut Journal::<EmptyDB, JournalEntry>::new(EmptyDB::default()),
+                &BlockEnv::default(),
+            ),
+        });
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("G2MSM input length too long"));
+
+        let jovian_precompile = evm.precompiles().get(bls12_381::JOVIAN_PAIRING.address()).unwrap();
+        let result = jovian_precompile.call(PrecompileInput {
+            data: &vec![0; bls12_381::JOVIAN_PAIRING_MAX_INPUT_SIZE + 1],
+            gas: u64::MAX,
+            caller: Address::ZERO,
+            value: U256::ZERO,
+            is_static: false,
+            target_address: Address::ZERO,
+            bytecode_address: Address::ZERO,
+            internals: EvmInternals::new(
+                &mut Journal::<EmptyDB, JournalEntry>::new(EmptyDB::default()),
+                &BlockEnv::default(),
+            ),
+        });
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Pairing input length too long"));
+    }
+
+    #[test]
+    fn test_precompiles_jovian() {
+        let evm = OpEvmFactory::default().create_evm(
+            EmptyDB::default(),
+            EvmEnv::new(CfgEnv::new_with_spec(OpSpecId::JOVIAN), BlockEnv::default()),
+        );
+        let jovian_precompile = evm.precompiles().get(bn254_pair::JOVIAN.address()).unwrap();
+        let result = jovian_precompile.call(PrecompileInput {
+            data: &vec![0; bn254_pair::JOVIAN_MAX_INPUT_SIZE],
+            gas: u64::MAX,
+            caller: Address::ZERO,
+            value: U256::ZERO,
+            is_static: false,
+            target_address: Address::ZERO,
+            bytecode_address: Address::ZERO,
+            internals: EvmInternals::new(
+                &mut Journal::<EmptyDB, JournalEntry>::new(EmptyDB::default()),
+                &BlockEnv::default(),
+            ),
+        });
+
+        assert!(result.is_ok());
+
+        let jovian_precompile = evm.precompiles().get(bls12_381::JOVIAN_G1_MSM.address()).unwrap();
+        let result = jovian_precompile.call(PrecompileInput {
+            data: &vec![0; bls12_381::JOVIAN_G1_MSM_MAX_INPUT_SIZE],
+            gas: u64::MAX,
+            caller: Address::ZERO,
+            value: U256::ZERO,
+            is_static: false,
+            target_address: Address::ZERO,
+            bytecode_address: Address::ZERO,
+            internals: EvmInternals::new(
+                &mut Journal::<EmptyDB, JournalEntry>::new(EmptyDB::default()),
+                &BlockEnv::default(),
+            ),
+        });
+
+        assert!(result.is_ok());
+
+        let jovian_precompile = evm.precompiles().get(bls12_381::JOVIAN_G2_MSM.address()).unwrap();
+        let result = jovian_precompile.call(PrecompileInput {
+            data: &vec![0; bls12_381::JOVIAN_G2_MSM_MAX_INPUT_SIZE],
+            gas: u64::MAX,
+            caller: Address::ZERO,
+            value: U256::ZERO,
+            is_static: false,
+            target_address: Address::ZERO,
+            bytecode_address: Address::ZERO,
+            internals: EvmInternals::new(
+                &mut Journal::<EmptyDB, JournalEntry>::new(EmptyDB::default()),
+                &BlockEnv::default(),
+            ),
+        });
+
+        assert!(result.is_ok());
+
+        let jovian_precompile = evm.precompiles().get(bls12_381::JOVIAN_PAIRING.address()).unwrap();
+        let result = jovian_precompile.call(PrecompileInput {
+            data: &vec![0; bls12_381::JOVIAN_PAIRING_MAX_INPUT_SIZE],
+            gas: u64::MAX,
+            caller: Address::ZERO,
+            value: U256::ZERO,
+            is_static: false,
+            target_address: Address::ZERO,
+            bytecode_address: Address::ZERO,
+            internals: EvmInternals::new(
+                &mut Journal::<EmptyDB, JournalEntry>::new(EmptyDB::default()),
+                &BlockEnv::default(),
+            ),
+        });
+
+        assert!(result.is_ok());
     }
 }

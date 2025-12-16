@@ -4,7 +4,7 @@
     html_favicon_url = "https://raw.githubusercontent.com/alloy-rs/core/main/assets/favicon.ico"
 )]
 #![cfg_attr(not(test), warn(unused_crate_dependencies))]
-#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(not(feature = "std"), no_std)]
 
 extern crate alloc;
@@ -20,11 +20,17 @@ pub mod error;
 pub use error::*;
 pub mod tx;
 pub use tx::*;
+pub mod traits;
+pub use traits::*;
 #[cfg(feature = "call-util")]
 pub mod call;
+#[cfg(feature = "op")]
+pub mod op;
 #[cfg(feature = "overrides")]
 pub mod overrides;
 pub mod precompiles;
+#[cfg(feature = "rpc")]
+pub mod rpc;
 pub mod tracing;
 
 mod either;
@@ -33,3 +39,5 @@ mod either;
 #[cfg(feature = "op")]
 pub use op_revm;
 pub use revm;
+
+pub use eth::spec_id::{spec, spec_by_timestamp_and_block_number};
