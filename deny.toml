@@ -29,6 +29,12 @@ allow = [
     "CC0-1.0",
 ]
 
+exceptions = [
+    # gmp feature (optional, LGPL-licensed)
+    { allow = ["LGPL-3.0-or-later"], crate = "rug" },
+    { allow = ["LGPL-3.0-or-later"], crate = "gmp-mpfr-sys" },
+]
+
 [[licenses.clarify]]
 name = "ring"
 expression = "LicenseRef-ring"

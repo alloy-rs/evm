@@ -36,6 +36,17 @@ jobs:
           # All features on MSRV
           - rust: "1.88" # MSRV
             flags: "--all-features"
+          # gmp doesn't compile on Windows
+          - os: windows-latest
+            flags: "--all-features"
+        include:
+          # Windows: all features except gmp
+          - os: windows-latest
+            rust: stable
+            flags: "--features std,secp256k1,op,overrides,call-util,engine,asm-keccak,rpc"
+          - os: windows-latest
+            rust: nightly
+            flags: "--features std,secp256k1,op,overrides,call-util,engine,asm-keccak,rpc"
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@master
