@@ -220,23 +220,20 @@ mod tests {
     };
     use alloy_primitives::U256;
     use op_revm::precompiles::{bls12_381, bn254_pair};
-    use revm::{
-        context::{CfgEnv, JournalTr},
-        database::EmptyDB,
-        precompile::PrecompileError,
-        Journal, JournalEntry,
-    };
+    use revm::{context::CfgEnv, database::EmptyDB, precompile::PrecompileError};
 
     use super::*;
 
     #[test]
     fn test_precompiles_jovian_fail() {
-        let evm = OpEvmFactory::default().create_evm(
+        let mut evm = OpEvmFactory::default().create_evm(
             EmptyDB::default(),
             EvmEnv::new(CfgEnv::new_with_spec(OpSpecId::JOVIAN), BlockEnv::default()),
         );
 
-        let jovian_precompile = evm.precompiles().get(bn254_pair::JOVIAN.address()).unwrap();
+        let (precompiles, ctx) = (&mut evm.inner.0.precompiles, &mut evm.inner.0.ctx);
+
+        let jovian_precompile = precompiles.get(bn254_pair::JOVIAN.address()).unwrap();
         let result = jovian_precompile.call(PrecompileInput {
             data: &vec![0; bn254_pair::JOVIAN_MAX_INPUT_SIZE + 1],
             gas: u64::MAX,
@@ -245,16 +242,13 @@ mod tests {
             is_static: false,
             target_address: Address::ZERO,
             bytecode_address: Address::ZERO,
-            internals: EvmInternals::new(
-                &mut Journal::<EmptyDB, JournalEntry>::new(EmptyDB::default()),
-                &BlockEnv::default(),
-            ),
+            internals: EvmInternals::from_context(ctx),
         });
 
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), PrecompileError::Bn254PairLength));
 
-        let jovian_precompile = evm.precompiles().get(bls12_381::JOVIAN_G1_MSM.address()).unwrap();
+        let jovian_precompile = precompiles.get(bls12_381::JOVIAN_G1_MSM.address()).unwrap();
         let result = jovian_precompile.call(PrecompileInput {
             data: &vec![0; bls12_381::JOVIAN_G1_MSM_MAX_INPUT_SIZE + 1],
             gas: u64::MAX,
@@ -263,16 +257,13 @@ mod tests {
             is_static: false,
             target_address: Address::ZERO,
             bytecode_address: Address::ZERO,
-            internals: EvmInternals::new(
-                &mut Journal::<EmptyDB, JournalEntry>::new(EmptyDB::default()),
-                &BlockEnv::default(),
-            ),
+            internals: EvmInternals::from_context(ctx),
         });
 
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("G1MSM input length too long"));
 
-        let jovian_precompile = evm.precompiles().get(bls12_381::JOVIAN_G2_MSM.address()).unwrap();
+        let jovian_precompile = precompiles.get(bls12_381::JOVIAN_G2_MSM.address()).unwrap();
         let result = jovian_precompile.call(PrecompileInput {
             data: &vec![0; bls12_381::JOVIAN_G2_MSM_MAX_INPUT_SIZE + 1],
             gas: u64::MAX,
@@ -281,16 +272,13 @@ mod tests {
             is_static: false,
             target_address: Address::ZERO,
             bytecode_address: Address::ZERO,
-            internals: EvmInternals::new(
-                &mut Journal::<EmptyDB, JournalEntry>::new(EmptyDB::default()),
-                &BlockEnv::default(),
-            ),
+            internals: EvmInternals::from_context(ctx),
         });
 
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("G2MSM input length too long"));
 
-        let jovian_precompile = evm.precompiles().get(bls12_381::JOVIAN_PAIRING.address()).unwrap();
+        let jovian_precompile = precompiles.get(bls12_381::JOVIAN_PAIRING.address()).unwrap();
         let result = jovian_precompile.call(PrecompileInput {
             data: &vec![0; bls12_381::JOVIAN_PAIRING_MAX_INPUT_SIZE + 1],
             gas: u64::MAX,
@@ -299,10 +287,7 @@ mod tests {
             is_static: false,
             target_address: Address::ZERO,
             bytecode_address: Address::ZERO,
-            internals: EvmInternals::new(
-                &mut Journal::<EmptyDB, JournalEntry>::new(EmptyDB::default()),
-                &BlockEnv::default(),
-            ),
+            internals: EvmInternals::from_context(ctx),
         });
 
         assert!(result.is_err());
@@ -311,11 +296,12 @@ mod tests {
 
     #[test]
     fn test_precompiles_jovian() {
-        let evm = OpEvmFactory::default().create_evm(
+        let mut evm = OpEvmFactory::default().create_evm(
             EmptyDB::default(),
             EvmEnv::new(CfgEnv::new_with_spec(OpSpecId::JOVIAN), BlockEnv::default()),
         );
-        let jovian_precompile = evm.precompiles().get(bn254_pair::JOVIAN.address()).unwrap();
+        let (precompiles, ctx) = (&mut evm.inner.0.precompiles, &mut evm.inner.0.ctx);
+        let jovian_precompile = precompiles.get(bn254_pair::JOVIAN.address()).unwrap();
         let result = jovian_precompile.call(PrecompileInput {
             data: &vec![0; bn254_pair::JOVIAN_MAX_INPUT_SIZE],
             gas: u64::MAX,
@@ -324,15 +310,12 @@ mod tests {
             is_static: false,
             target_address: Address::ZERO,
             bytecode_address: Address::ZERO,
-            internals: EvmInternals::new(
-                &mut Journal::<EmptyDB, JournalEntry>::new(EmptyDB::default()),
-                &BlockEnv::default(),
-            ),
+            internals: EvmInternals::from_context(ctx),
         });
 
         assert!(result.is_ok());
 
-        let jovian_precompile = evm.precompiles().get(bls12_381::JOVIAN_G1_MSM.address()).unwrap();
+        let jovian_precompile = precompiles.get(bls12_381::JOVIAN_G1_MSM.address()).unwrap();
         let result = jovian_precompile.call(PrecompileInput {
             data: &vec![0; bls12_381::JOVIAN_G1_MSM_MAX_INPUT_SIZE],
             gas: u64::MAX,
@@ -341,15 +324,12 @@ mod tests {
             is_static: false,
             target_address: Address::ZERO,
             bytecode_address: Address::ZERO,
-            internals: EvmInternals::new(
-                &mut Journal::<EmptyDB, JournalEntry>::new(EmptyDB::default()),
-                &BlockEnv::default(),
-            ),
+            internals: EvmInternals::from_context(ctx),
         });
 
         assert!(result.is_ok());
 
-        let jovian_precompile = evm.precompiles().get(bls12_381::JOVIAN_G2_MSM.address()).unwrap();
+        let jovian_precompile = precompiles.get(bls12_381::JOVIAN_G2_MSM.address()).unwrap();
         let result = jovian_precompile.call(PrecompileInput {
             data: &vec![0; bls12_381::JOVIAN_G2_MSM_MAX_INPUT_SIZE],
             gas: u64::MAX,
@@ -358,15 +338,12 @@ mod tests {
             is_static: false,
             target_address: Address::ZERO,
             bytecode_address: Address::ZERO,
-            internals: EvmInternals::new(
-                &mut Journal::<EmptyDB, JournalEntry>::new(EmptyDB::default()),
-                &BlockEnv::default(),
-            ),
+            internals: EvmInternals::from_context(ctx),
         });
 
         assert!(result.is_ok());
 
-        let jovian_precompile = evm.precompiles().get(bls12_381::JOVIAN_PAIRING.address()).unwrap();
+        let jovian_precompile = precompiles.get(bls12_381::JOVIAN_PAIRING.address()).unwrap();
         let result = jovian_precompile.call(PrecompileInput {
             data: &vec![0; bls12_381::JOVIAN_PAIRING_MAX_INPUT_SIZE],
             gas: u64::MAX,
@@ -375,10 +352,7 @@ mod tests {
             is_static: false,
             target_address: Address::ZERO,
             bytecode_address: Address::ZERO,
-            internals: EvmInternals::new(
-                &mut Journal::<EmptyDB, JournalEntry>::new(EmptyDB::default()),
-                &BlockEnv::default(),
-            ),
+            internals: EvmInternals::from_context(ctx),
         });
 
         assert!(result.is_ok());

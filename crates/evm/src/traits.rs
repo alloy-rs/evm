@@ -5,7 +5,10 @@ use alloc::boxed::Box;
 use alloy_primitives::{Address, Log, B256, U256};
 use core::{error::Error, fmt, fmt::Debug};
 use revm::{
-    context::{journaled_state::TransferError, Block, DBErrorMarker, JournalTr},
+    context::{
+        journaled_state::TransferError, Block, Cfg, ContextTr, DBErrorMarker, JournalTr,
+        Transaction,
+    },
     interpreter::{SStoreResult, StateLoad},
     primitives::{StorageKey, StorageValue},
     state::{Account, AccountInfo, Bytecode},
@@ -220,15 +223,36 @@ where
 pub struct EvmInternals<'a> {
     internals: Box<dyn EvmInternalsTr + 'a>,
     block_env: &'a (dyn Block + 'a),
+    chain_id: u64,
+    tx_origin: Address,
 }
 
 impl<'a> EvmInternals<'a> {
     /// Creates a new [`EvmInternals`] instance.
-    pub fn new<T>(journal: &'a mut T, block_env: &'a dyn Block) -> Self
+    pub fn new<T>(
+        journal: &'a mut T,
+        block_env: &'a dyn Block,
+        cfg_env: &'a impl Cfg,
+        tx_env: &'a impl Transaction,
+    ) -> Self
     where
         T: JournalTr<Database: Database> + Debug,
     {
-        Self { internals: Box::new(EvmInternalsImpl(journal)), block_env }
+        Self {
+            internals: Box::new(EvmInternalsImpl(journal)),
+            block_env,
+            chain_id: cfg_env.chain_id(),
+            tx_origin: tx_env.caller(),
+        }
+    }
+
+    /// Creates a new [`EvmInternals`] instance from a [`Context`].
+    pub fn from_context<CTX>(ctx: &'a mut CTX) -> Self
+    where
+        CTX: ContextTr<Journal: JournalTr<Database: Database> + Debug>,
+    {
+        let (block, tx, cfg, journaled_state, ..) = ctx.all_mut();
+        Self::new(journaled_state, block, cfg, tx)
     }
 
     /// Returns the  evm's block information.
@@ -244,6 +268,18 @@ impl<'a> EvmInternals<'a> {
     /// Returns the current block timestamp.
     pub fn block_timestamp(&self) -> U256 {
         self.block_env.timestamp()
+    }
+
+    /// Returns the chain ID.
+    pub const fn chain_id(&self) -> u64 {
+        self.chain_id
+    }
+
+    /// Returns the caller of the top-level call.
+    ///
+    /// Note that this might be different from the caller of the specific precompile call.
+    pub const fn tx_origin(&self) -> Address {
+        self.tx_origin
     }
 
     /// Returns a mutable reference to [`Database`] implementation with erased error type.
