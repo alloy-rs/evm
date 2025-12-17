@@ -246,7 +246,7 @@ impl<'a> EvmInternals<'a> {
         }
     }
 
-    /// Creates a new [`EvmInternals`] instance from a [`Context`].
+    /// Creates a new [`EvmInternals`] instance from a [`ContextTr`].
     pub fn from_context<CTX>(ctx: &'a mut CTX) -> Self
     where
         CTX: ContextTr<Journal: JournalTr<Database: Database> + Debug>,
