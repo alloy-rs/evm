@@ -9,7 +9,7 @@ use alloy_primitives::{
 };
 use core::fmt::Debug;
 use revm::{
-    context::LocalContextTr,
+    context::{ContextTr, LocalContextTr},
     handler::{EthPrecompiles, PrecompileProvider},
     interpreter::{CallInput, CallInputs, Gas, InstructionResult, InterpreterResult},
     precompile::{PrecompileError, PrecompileFn, PrecompileId, PrecompileResult, Precompiles},
@@ -443,7 +443,7 @@ where
             output: Bytes::new(),
         };
 
-        let (local, journal) = (&context.local, &mut context.journaled_state);
+        let (block, tx, cfg, journaled_state, _, local) = context.all_mut();
 
         // Execute the precompile
         let r;
@@ -467,7 +467,8 @@ where
             gas: inputs.gas_limit,
             caller: inputs.caller,
             value: inputs.call_value(),
-            internals: EvmInternals::new(journal, &context.block),
+            is_static: inputs.is_static,
+            internals: EvmInternals::new(journaled_state, block, cfg, tx),
             target_address: inputs.target_address,
             bytecode_address: inputs.bytecode_address,
         });
@@ -591,6 +592,8 @@ pub struct PrecompileInput<'a> {
     /// Target address of the call. Would be the same as `bytecode_address` unless it's a
     /// DELEGATECALL.
     pub target_address: Address,
+    /// Whether this call is in a STATICCALL context.
+    pub is_static: bool,
     /// Bytecode address of the call.
     pub bytecode_address: Address,
     /// Various hooks for interacting with the EVM state.
@@ -632,6 +635,11 @@ impl<'a> PrecompileInput<'a> {
     /// via a DELEGATECALL/CALLCODE.
     pub fn is_direct_call(&self) -> bool {
         self.target_address == self.bytecode_address
+    }
+
+    /// Returns whether this call is in a STATICCALL context.
+    pub const fn is_static_call(&self) -> bool {
+        self.is_static
     }
 
     /// Returns the [`EvmInternals`].
@@ -868,7 +876,8 @@ mod tests {
                 gas: gas_limit,
                 caller: Address::ZERO,
                 value: U256::ZERO,
-                internals: EvmInternals::new(&mut ctx.journaled_state, &ctx.block),
+                is_static: false,
+                internals: EvmInternals::from_context(&mut ctx),
                 target_address: identity_address,
                 bytecode_address: identity_address,
             })
@@ -902,7 +911,8 @@ mod tests {
                 gas: gas_limit,
                 caller: Address::ZERO,
                 value: U256::ZERO,
-                internals: EvmInternals::new(&mut ctx.journaled_state, &ctx.block),
+                is_static: false,
+                internals: EvmInternals::from_context(&mut ctx),
                 target_address: identity_address,
                 bytecode_address: identity_address,
             })
@@ -937,7 +947,8 @@ mod tests {
                 gas: gas_limit,
                 caller: Address::ZERO,
                 value: U256::ZERO,
-                internals: EvmInternals::new(&mut ctx.journaled_state, &ctx.block),
+                is_static: false,
+                internals: EvmInternals::from_context(&mut ctx),
                 target_address: Address::ZERO,
                 bytecode_address: Address::ZERO,
             })
@@ -1011,7 +1022,8 @@ mod tests {
                 gas: 1000,
                 caller: Address::ZERO,
                 value: U256::ZERO,
-                internals: EvmInternals::new(&mut ctx.journaled_state, &ctx.block),
+                is_static: false,
+                internals: EvmInternals::from_context(&mut ctx),
                 target_address: dynamic_address,
                 bytecode_address: dynamic_address,
             })
@@ -1045,9 +1057,10 @@ mod tests {
                 gas: gas_limit,
                 caller: Address::ZERO,
                 value: U256::ZERO,
+                is_static: false,
                 target_address: identity_address,
                 bytecode_address: identity_address,
-                internals: EvmInternals::new(&mut ctx.journaled_state, &ctx.block),
+                internals: EvmInternals::from_context(&mut ctx),
             })
             .unwrap();
         assert_eq!(result.bytes, test_input, "Identity precompile should return the input data");
@@ -1074,7 +1087,8 @@ mod tests {
                 gas: gas_limit,
                 caller: Address::ZERO,
                 value: U256::ZERO,
-                internals: EvmInternals::new(&mut ctx.journaled_state, &ctx.block),
+                is_static: false,
+                internals: EvmInternals::from_context(&mut ctx),
                 target_address: identity_address,
                 bytecode_address: identity_address,
             })

@@ -55,6 +55,9 @@ std = [
 	"alloy-rpc-types-eth?/std",
 	"alloy-rpc-types-engine?/std"
 ]
+gmp = [
+    "revm/gmp",
+]
 op = ["op-revm", "op-alloy", "alloy-op-hardforks"]
 overrides = ["dep:alloy-rpc-types-eth"]
 call-util = ["overrides"]
