@@ -10,6 +10,8 @@ use alloy_primitives::Bytes;
 use core::fmt::Debug;
 use revm::context_interface::result::{ExecutionResult, ResultAndState};
 
+use super::SYSTEM_ADDRESS;
+
 /// Applies the post-block call to the EIP-7002 withdrawal requests contract.
 ///
 /// If Prague is not active at the given timestamp, then this is a no-op.
@@ -28,7 +30,7 @@ pub(crate) fn transact_withdrawal_requests_contract_call<Halt>(
     // after processing all transactions and after performing the block body withdrawal requests
     // validations), call the contract as `SYSTEM_ADDRESS`.
     let res = match evm.transact_system_call(
-        alloy_eips::eip7002::SYSTEM_ADDRESS,
+        SYSTEM_ADDRESS,
         WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS,
         Bytes::new(),
     ) {
