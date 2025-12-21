@@ -10,6 +10,8 @@ use alloy_hardforks::EthereumHardforks;
 use alloy_primitives::B256;
 use revm::{context::Block, context_interface::result::ResultAndState};
 
+use super::SYSTEM_ADDRESS;
+
 /// Applies the pre-block call to the [EIP-2935] blockhashes contract, using the given block,
 /// chain specification, and EVM.
 ///
