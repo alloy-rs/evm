@@ -10,6 +10,8 @@ use alloy_hardforks::EthereumHardforks;
 use alloy_primitives::B256;
 use revm::{context::Block, context_interface::result::ResultAndState};
 
+use super::SYSTEM_ADDRESS;
+
 /// Applies the pre-block call to the [EIP-4788] beacon block root contract, using the given block,
 /// chain spec, EVM.
 ///
@@ -45,7 +47,7 @@ pub(crate) fn transact_beacon_root_contract_call<Halt>(
     }
 
     let res = match evm.transact_system_call(
-        alloy_eips::eip4788::SYSTEM_ADDRESS,
+        SYSTEM_ADDRESS,
         BEACON_ROOTS_ADDRESS,
         parent_beacon_block_root.0.into(),
     ) {
