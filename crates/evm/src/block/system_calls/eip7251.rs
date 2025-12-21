@@ -10,6 +10,8 @@ use alloy_primitives::Bytes;
 use core::fmt::Debug;
 use revm::context_interface::result::{ExecutionResult, ResultAndState};
 
+use super::SYSTEM_ADDRESS;
+
 /// Applies the post-block call to the EIP-7251 consolidation requests contract.
 ///
 /// If Prague is not active at the given timestamp, then this is a no-op, and an empty vector is
@@ -30,7 +32,7 @@ pub(crate) fn transact_consolidation_requests_contract_call<Halt>(
     // client software MUST call the contract as `SYSTEM_ADDRESS` with empty input data to
     // trigger the system subroutine execution.
     let res = match evm.transact_system_call(
-        alloy_eips::eip7002::SYSTEM_ADDRESS,
+        SYSTEM_ADDRESS,
         CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS,
         Bytes::new(),
     ) {
