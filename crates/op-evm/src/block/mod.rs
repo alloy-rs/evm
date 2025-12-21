@@ -27,7 +27,8 @@ use receipt_builder::OpReceiptBuilder;
 use revm::{
     context::{result::ResultAndState, Block},
     database::State,
-    Database as _, DatabaseCommit, Inspector,
+    state::EvmState,
+    DatabaseCommit, Inspector,
 };
 
 mod canyon;
@@ -80,7 +81,7 @@ pub struct OpBlockExecutor<Evm, R: OpReceiptBuilder, Spec> {
     /// Whether Regolith hardfork is active.
     pub is_regolith: bool,
     /// Utility to call system smart contracts.
-    pub system_caller: SystemCaller<Spec>,
+    pub system_caller: SystemCaller<Spec, EvmState>,
 }
 
 impl<E, R, Spec> OpBlockExecutor<E, R, Spec>
@@ -127,14 +128,17 @@ pub enum OpBlockExecutionError {
     },
 }
 
-impl<E, R, Spec> OpBlockExecutor<E, R, Spec>
+impl<E, R, Spec, DB> OpBlockExecutor<E, R, Spec>
 where
     E: Evm<
-        DB: Database + DatabaseCommit + StateDB,
+        DB = DB,
         Tx: FromRecoveredTx<R::Transaction> + FromTxWithEncoded<R::Transaction> + OpTxEnv,
+        State = EvmState,
     >,
+    DB: Database + DatabaseCommit + StateDB,
     R: OpReceiptBuilder<Transaction: Transaction + Encodable2718, Receipt: TxReceipt>,
     Spec: OpHardforks,
+    BlockExecutionError: From<<DB as revm::Database>::Error>,
 {
     fn jovian_da_footprint_estimation(
         &mut self,
@@ -159,18 +163,22 @@ where
     }
 }
 
-impl<E, R, Spec> BlockExecutor for OpBlockExecutor<E, R, Spec>
+impl<E, R, Spec, DB> BlockExecutor for OpBlockExecutor<E, R, Spec>
 where
     E: Evm<
-        DB: Database + DatabaseCommit + StateDB,
+        DB = DB,
         Tx: FromRecoveredTx<R::Transaction> + FromTxWithEncoded<R::Transaction> + OpTxEnv,
+        State = EvmState,
     >,
+    DB: Database + DatabaseCommit + StateDB,
     R: OpReceiptBuilder<Transaction: Transaction + Encodable2718, Receipt: TxReceipt>,
     Spec: OpHardforks,
+    BlockExecutionError: From<<DB as revm::Database>::Error>,
 {
     type Transaction = R::Transaction;
     type Receipt = R::Receipt;
     type Evm = E;
+    type State = EvmState;
 
     fn apply_pre_execution_changes(&mut self) -> Result<(), BlockExecutionError> {
         // Set state clear flag if the block is after the Spurious Dragon hardfork.
@@ -345,7 +353,7 @@ where
         ))
     }
 
-    fn set_state_hook(&mut self, hook: Option<Box<dyn OnStateHook>>) {
+    fn set_state_hook(&mut self, hook: Option<Box<dyn OnStateHook<Self::State>>>) {
         self.system_caller.with_state_hook(hook);
     }
 
@@ -422,6 +430,7 @@ where
     where
         DB: Database + 'a,
         I: Inspector<EvmF::Context<&'a mut State<DB>>> + 'a,
+        BlockExecutionError: From<<DB as revm::Database>::Error>,
     {
         OpBlockExecutor::new(evm, ctx, &self.spec, &self.receipt_builder)
     }

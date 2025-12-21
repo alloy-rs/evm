@@ -1,3 +1,5 @@
+use core::convert::Infallible;
+
 use crate::{EvmError, InvalidTxError};
 use alloc::{
     boxed::Box,
@@ -166,6 +168,12 @@ pub enum InternalBlockExecutionError {
     /// Arbitrary Block Executor Errors
     #[error(transparent)]
     Other(Box<dyn core::error::Error + Send + Sync + 'static>),
+}
+
+impl From<Infallible> for BlockExecutionError {
+    fn from(_: Infallible) -> Self {
+        unreachable!()
+    }
 }
 
 impl InternalBlockExecutionError {

@@ -121,6 +121,8 @@ pub trait BlockExecutor {
     type Transaction;
     /// Receipt type this executor produces.
     type Receipt;
+    /// State type this executor produces.
+    type State;
     /// EVM used by the executor.
     ///
     /// The EVM's transaction type (`Evm::Tx`) must be able to be constructed from both:
@@ -131,7 +133,10 @@ pub trait BlockExecutor {
     ///
     /// This constraint ensures that the block executor can convert consensus transactions
     /// into the EVM's transaction format for execution.
-    type Evm: Evm<Tx: FromRecoveredTx<Self::Transaction> + FromTxWithEncoded<Self::Transaction>>;
+    type Evm: Evm<
+        Tx: FromRecoveredTx<Self::Transaction> + FromTxWithEncoded<Self::Transaction>,
+        State = Self::State,
+    >;
 
     /// Applies any necessary changes before executing the block's transactions.
     fn apply_pre_execution_changes(&mut self) -> Result<(), BlockExecutionError>;
@@ -267,11 +272,11 @@ pub trait BlockExecutor {
     }
 
     /// Sets a hook to be called after each state change during execution.
-    fn set_state_hook(&mut self, hook: Option<Box<dyn OnStateHook>>);
+    fn set_state_hook(&mut self, hook: Option<Box<dyn OnStateHook<Self::State>>>);
 
     /// A builder-style helper to invoke [`BlockExecutor::set_state_hook`].
     #[must_use]
-    fn with_state_hook(mut self, hook: Option<Box<dyn OnStateHook>>) -> Self
+    fn with_state_hook(mut self, hook: Option<Box<dyn OnStateHook<Self::State>>>) -> Self
     where
         Self: Sized,
     {
@@ -472,5 +477,6 @@ pub trait BlockExecutorFactory: 'static {
     ) -> impl BlockExecutorFor<'a, Self, DB, I>
     where
         DB: Database + 'a,
-        I: Inspector<<Self::EvmFactory as EvmFactory>::Context<&'a mut State<DB>>> + 'a;
+        I: Inspector<<Self::EvmFactory as EvmFactory>::Context<&'a mut State<DB>>> + 'a,
+        BlockExecutionError: From<<DB as revm::Database>::Error>;
 }

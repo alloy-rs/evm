@@ -1,9 +1,7 @@
-use revm::state::EvmState;
-
 /// A hook that is called after each state change.
-pub trait OnStateHook: Send + 'static {
+pub trait OnStateHook<State>: Send + 'static {
     /// Invoked with the source of the change and the state after each system call.
-    fn on_state(&mut self, source: StateChangeSource, state: &EvmState);
+    fn on_state(&mut self, source: StateChangeSource, state: &State);
 }
 
 /// Source of the state change
@@ -39,11 +37,11 @@ pub enum StateChangePostBlockSource {
     ConsolidationRequestsContract,
 }
 
-impl<F> OnStateHook for F
+impl<F, State> OnStateHook<State> for F
 where
-    F: FnMut(StateChangeSource, &EvmState) + Send + 'static,
+    F: FnMut(StateChangeSource, &State) + Send + 'static,
 {
-    fn on_state(&mut self, source: StateChangeSource, state: &EvmState) {
+    fn on_state(&mut self, source: StateChangeSource, state: &State) {
         self(source, state)
     }
 }
@@ -53,6 +51,6 @@ where
 #[non_exhaustive]
 pub struct NoopHook;
 
-impl OnStateHook for NoopHook {
-    fn on_state(&mut self, _source: StateChangeSource, _state: &EvmState) {}
+impl<State> OnStateHook<State> for NoopHook {
+    fn on_state(&mut self, _source: StateChangeSource, _state: &State) {}
 }

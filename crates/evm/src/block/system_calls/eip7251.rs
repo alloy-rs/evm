@@ -17,9 +17,9 @@ use revm::context_interface::result::{ExecutionResult, ResultAndState};
 ///
 /// Note: this does not commit the state changes to the database, it only transacts the call.
 #[inline]
-pub(crate) fn transact_consolidation_requests_contract_call<Halt>(
-    evm: &mut impl Evm<HaltReason = Halt>,
-) -> Result<ResultAndState<Halt>, BlockExecutionError> {
+pub(crate) fn transact_consolidation_requests_contract_call<Halt, State>(
+    evm: &mut impl Evm<HaltReason = Halt, State = State>,
+) -> Result<ResultAndState<Halt, State>, BlockExecutionError> {
     // Execute EIP-7251 consolidation requests contract call.
     //
     // The requirement for the consolidation requests contract call defined by

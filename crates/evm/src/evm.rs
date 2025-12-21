@@ -11,12 +11,27 @@ use revm::{
         ContextTr,
     },
     inspector::{JournalExt, NoOpInspector},
+    state::EvmState,
     DatabaseCommit, Inspector,
 };
 
 /// Helper trait to bound [`revm::Database::Error`] with common requirements.
 pub trait Database: revm::Database<Error: Error + Send + Sync + 'static> + Debug {}
 impl<T> Database for T where T: revm::Database<Error: Error + Send + Sync + 'static> + Debug {}
+
+/// Trait for converting a state into an [`EvmState`]. This is useful for lazy resolution of state
+/// changes. For example, when incrementing the balance of the fee beneficiary, the state may not
+/// be resolved.
+pub trait ResolvableState {
+    /// Converts the state into an [`EvmState`].
+    fn into_evm_state<DB: revm::Database>(self, db: DB) -> Result<EvmState, DB::Error>;
+}
+
+impl ResolvableState for EvmState {
+    fn into_evm_state<DB: revm::Database>(self, _db: DB) -> Result<EvmState, DB::Error> {
+        Ok(self)
+    }
+}
 
 /// An instance of an ethereum virtual machine.
 ///
@@ -26,7 +41,7 @@ impl<T> Database for T where T: revm::Database<Error: Error + Send + Sync + 'sta
 /// Executing a transaction will return the outcome of the transaction.
 pub trait Evm {
     /// Database type held by the EVM.
-    type DB;
+    type DB: revm::Database;
     /// The transaction object that the EVM will execute.
     ///
     /// This type represents the transaction environment that the EVM operates on internally.
@@ -46,7 +61,7 @@ pub trait Evm {
     type Tx: IntoTxEnv<Self::Tx>;
     /// Error type returned by EVM. Contains either errors related to invalid transactions or
     /// internal irrecoverable execution errors.
-    type Error: EvmError;
+    type Error: EvmError + From<<Self::DB as revm::Database>::Error>;
     /// Halt reason. Enum over all possible reasons for halting the execution. When execution halts,
     /// it means that transaction is valid, however, it's execution was interrupted (e.g because of
     /// running out of gas or overflowing stack).
@@ -60,6 +75,8 @@ pub trait Evm {
     type Precompiles;
     /// Evm inspector.
     type Inspector;
+    /// State returned by transaction execution.
+    type State: ResolvableState;
 
     /// Reference to [`Evm::BlockEnv`].
     fn block(&self) -> &Self::BlockEnv;
@@ -71,7 +88,7 @@ pub trait Evm {
     fn transact_raw(
         &mut self,
         tx: Self::Tx,
-    ) -> Result<ResultAndState<Self::HaltReason>, Self::Error>;
+    ) -> Result<ResultAndState<Self::HaltReason, Self::State>, Self::Error>;
 
     /// Same as [`Evm::transact_raw`], but takes any type implementing [`IntoTxEnv`].
     ///
@@ -87,7 +104,7 @@ pub trait Evm {
     fn transact(
         &mut self,
         tx: impl IntoTxEnv<Self::Tx>,
-    ) -> Result<ResultAndState<Self::HaltReason>, Self::Error> {
+    ) -> Result<ResultAndState<Self::HaltReason, Self::State>, Self::Error> {
         self.transact_raw(tx.into_tx_env())
     }
 
@@ -101,7 +118,7 @@ pub trait Evm {
         caller: Address,
         contract: Address,
         data: Bytes,
-    ) -> Result<ResultAndState<Self::HaltReason>, Self::Error>;
+    ) -> Result<ResultAndState<Self::HaltReason, Self::State>, Self::Error>;
 
     /// Returns an immutable reference to the underlying database.
     fn db(&self) -> &Self::DB {
@@ -119,9 +136,12 @@ pub trait Evm {
         tx: impl IntoTxEnv<Self::Tx>,
     ) -> Result<ExecutionResult<Self::HaltReason>, Self::Error>
     where
-        Self::DB: DatabaseCommit,
+        Self::DB: DatabaseCommit + revm::Database,
+        Self::State: ResolvableState,
+        Self::Error: From<<Self::DB as revm::Database>::Error>,
     {
         let ResultAndState { result, state } = self.transact(tx)?;
+        let state = state.into_evm_state(self.db_mut())?;
         self.db_mut().commit(state);
 
         Ok(result)
@@ -207,9 +227,11 @@ pub trait EvmExt: Evm {
         target_tx_hash: B256,
     ) -> Result<usize, Self::Error>
     where
-        Self::DB: DatabaseCommit,
+        Self::DB: DatabaseCommit + revm::Database,
         I: IntoIterator<Item = T>,
         T: IntoTxEnv<Self::Tx> + TxHashRef,
+        Self::State: ResolvableState,
+        Self::Error: From<<Self::DB as revm::Database>::Error>,
     {
         let mut index = 0;
         for tx in transactions {
@@ -227,15 +249,18 @@ pub trait EvmExt: Evm {
     /// transaction.
     ///
     /// Returns `None` if the target transaction was not found.
+    #[expect(clippy::type_complexity)]
     fn replay_transaction<I, T>(
         &mut self,
         transactions: I,
         target_tx_hash: B256,
-    ) -> Result<Option<ResultAndState<Self::HaltReason>>, Self::Error>
+    ) -> Result<Option<ResultAndState<Self::HaltReason, Self::State>>, Self::Error>
     where
-        Self::DB: DatabaseCommit,
+        Self::DB: DatabaseCommit + revm::Database,
         I: IntoIterator<Item = T>,
         T: IntoTxEnv<Self::Tx> + TxHashRef,
+        Self::State: ResolvableState,
+        Self::Error: From<<Self::DB as revm::Database>::Error>,
     {
         for tx in transactions {
             if *tx.tx_hash() == target_tx_hash {
@@ -264,6 +289,7 @@ pub trait EvmFactory {
         BlockEnv = Self::BlockEnv,
         Precompiles = Self::Precompiles,
         Inspector = I,
+        State = EvmState,
     >;
 
     /// The EVM context for inspectors

@@ -21,8 +21,8 @@ use alloy_eips::{eip4895::Withdrawals, eip7685::Requests, Encodable2718};
 use alloy_hardforks::EthereumHardfork;
 use alloy_primitives::{Bytes, Log, B256};
 use revm::{
-    context::Block, context_interface::result::ResultAndState, database::State, DatabaseCommit,
-    Inspector,
+    context::Block, context_interface::result::ResultAndState, database::State, state::EvmState,
+    DatabaseCommit, Inspector,
 };
 
 /// Context for Ethereum block execution.
@@ -51,7 +51,7 @@ pub struct EthBlockExecutor<'a, Evm, Spec, R: ReceiptBuilder> {
     /// Inner EVM.
     pub evm: Evm,
     /// Utility to call system smart contracts.
-    pub system_caller: SystemCaller<Spec>,
+    pub system_caller: SystemCaller<Spec, EvmState>,
     /// Receipt builder.
     pub receipt_builder: R,
 
@@ -90,11 +90,14 @@ where
     DB: Database + 'db,
     E: Evm<
         DB = &'db mut State<DB>,
+        State = EvmState,
         Tx: FromRecoveredTx<R::Transaction> + FromTxWithEncoded<R::Transaction>,
     >,
     Spec: EthExecutorSpec,
     R: ReceiptBuilder<Transaction: Transaction + Encodable2718, Receipt: TxReceipt<Log = Log>>,
+    BlockExecutionError: From<<DB as revm::Database>::Error>,
 {
+    type State = EvmState;
     type Transaction = R::Transaction;
     type Receipt = R::Receipt;
     type Evm = E;
@@ -247,7 +250,7 @@ where
         ))
     }
 
-    fn set_state_hook(&mut self, hook: Option<Box<dyn OnStateHook>>) {
+    fn set_state_hook(&mut self, hook: Option<Box<dyn OnStateHook<Self::State>>>) {
         self.system_caller.with_state_hook(hook);
     }
 
@@ -322,6 +325,7 @@ where
     where
         DB: Database + 'a,
         I: Inspector<EvmF::Context<&'a mut State<DB>>> + 'a,
+        BlockExecutionError: From<<DB as revm::Database>::Error>,
     {
         EthBlockExecutor::new(evm, ctx, &self.spec, &self.receipt_builder)
     }

@@ -1,4 +1,4 @@
-use crate::{Evm, EvmEnv};
+use crate::{evm::ResolvableState, Evm, EvmEnv};
 use alloy_primitives::{Address, Bytes};
 use revm::context::either;
 
@@ -14,11 +14,14 @@ where
         BlockEnv = L::BlockEnv,
         Precompiles = L::Precompiles,
         Inspector = L::Inspector,
+        State = L::State,
     >,
+    L::DB: revm::Database + revm::DatabaseCommit,
 {
     type DB = L::DB;
     type Tx = L::Tx;
     type Error = L::Error;
+    type State = L::State;
     type HaltReason = L::HaltReason;
     type Spec = L::Spec;
     type BlockEnv = L::BlockEnv;
@@ -36,14 +39,16 @@ where
     fn transact_raw(
         &mut self,
         tx: Self::Tx,
-    ) -> Result<revm::context::result::ResultAndState<Self::HaltReason>, Self::Error> {
+    ) -> Result<revm::context::result::ResultAndState<Self::HaltReason, Self::State>, Self::Error>
+    {
         either::for_both!(self, evm => evm.transact_raw(tx))
     }
 
     fn transact(
         &mut self,
         tx: impl crate::IntoTxEnv<Self::Tx>,
-    ) -> Result<revm::context::result::ResultAndState<Self::HaltReason>, Self::Error> {
+    ) -> Result<revm::context::result::ResultAndState<Self::HaltReason, Self::State>, Self::Error>
+    {
         either::for_both!(self, evm => evm.transact(tx))
     }
 
@@ -52,7 +57,8 @@ where
         caller: Address,
         contract: Address,
         data: Bytes,
-    ) -> Result<revm::context::result::ResultAndState<Self::HaltReason>, Self::Error> {
+    ) -> Result<revm::context::result::ResultAndState<Self::HaltReason, Self::State>, Self::Error>
+    {
         either::for_both!(self, evm => evm.transact_system_call(caller, contract, data))
     }
 
@@ -61,7 +67,8 @@ where
         tx: impl crate::IntoTxEnv<Self::Tx>,
     ) -> Result<revm::context::result::ExecutionResult<Self::HaltReason>, Self::Error>
     where
-        Self::DB: revm::DatabaseCommit,
+        L::State: ResolvableState,
+        L::Error: From<<L::DB as revm::Database>::Error>,
     {
         either::for_both!(self, evm => evm.transact_commit(tx))
     }

@@ -42,7 +42,7 @@ impl<'a, T, E: Evm<Inspector: Clone>> TracingCtx<'a, T, E> {
     }
 }
 
-impl<E: Evm<Inspector: Clone, DB: DatabaseCommit>> TxTracer<E> {
+impl<E: Evm<Inspector: Clone, DB: DatabaseCommit + revm::Database, State = EvmState>> TxTracer<E> {
     /// Creates a new [`TxTracer`] instance.
     pub fn new(mut evm: E) -> Self {
         Self { fused_inspector: evm.inspector_mut().clone(), evm }
@@ -139,7 +139,7 @@ impl<E: Evm, Txs: Iterator, F> TracerIter<'_, E, Txs, F> {
 
 impl<E, T, Txs, F, O, Err> Iterator for TracerIter<'_, E, Txs, F>
 where
-    E: Evm<DB: DatabaseCommit, Inspector: Clone>,
+    E: Evm<DB: DatabaseCommit, Inspector: Clone, State = EvmState>,
     T: IntoTxEnv<E::Tx> + Clone,
     Txs: Iterator<Item = T>,
     Err: From<E::Error>,
