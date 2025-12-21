@@ -41,7 +41,7 @@ pub(crate) fn transact_blockhashes_contract_call<Halt>(
     }
 
     let res = match evm.transact_system_call(
-        alloy_eips::eip4788::SYSTEM_ADDRESS,
+        SYSTEM_ADDRESS,
         HISTORY_STORAGE_ADDRESS,
         parent_block_hash.0.into(),
     ) {
