@@ -15,6 +15,9 @@ use revm::{state::EvmState, DatabaseCommit};
 
 use super::{StateChangePostBlockSource, StateChangePreBlockSource, StateChangeSource};
 
+/// Re-exported from [`alloy_eips::eip4788`] as all EIPs use the same system address value.
+pub(crate) use alloy_eips::eip4788::SYSTEM_ADDRESS;
+
 mod eip2935;
 mod eip4788;
 mod eip7002;
