@@ -127,9 +127,9 @@ where
             *address,
             Account {
                 info: account.clone(),
-                storage: Default::default(),
+                original_info: Box::new(account.clone()),
                 status: AccountStatus::Touched,
-                transaction_id: 0,
+                ..Default::default()
             },
         ))
     };

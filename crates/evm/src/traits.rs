@@ -6,8 +6,8 @@ use alloy_primitives::{Address, Log, B256, U256};
 use core::{error::Error, fmt, fmt::Debug};
 use revm::{
     context::{
-        journaled_state::{TransferError, account::JournaledAccountTr}, Block, Cfg, ContextTr, DBErrorMarker, JournalTr,
-        Transaction,
+        journaled_state::{account::JournaledAccountTr, TransferError},
+        Block, Cfg, ContextTr, DBErrorMarker, JournalTr, Transaction,
     },
     interpreter::{SStoreResult, StateLoad},
     primitives::{StorageKey, StorageValue},

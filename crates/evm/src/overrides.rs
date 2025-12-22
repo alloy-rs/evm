@@ -144,7 +144,8 @@ where
 
     // Create a new account marked as touched
     let mut acc = revm::state::Account {
-        info,
+        info: info.clone(),
+        original_info: Box::new(info),
         status: AccountStatus::Touched,
         storage: Default::default(),
         transaction_id: 0,
