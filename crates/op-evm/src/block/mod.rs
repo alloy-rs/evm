@@ -420,7 +420,7 @@ where
         ctx: Self::ExecutionCtx<'a>,
     ) -> impl BlockExecutorFor<'a, Self, DB, I>
     where
-        DB: Database + 'a,
+        DB: Database + DatabaseCommit + 'a,
         I: Inspector<EvmF::Context<&'a mut State<DB>>> + 'a,
     {
         OpBlockExecutor::new(evm, ctx, &self.spec, &self.receipt_builder)
