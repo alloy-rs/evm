@@ -310,6 +310,14 @@ impl<'a> EvmInternals<'a> {
         self.internals.load_account(address)
     }
 
+    /// Loads an account.
+    pub fn load_account_mut<'b>(
+        &'b mut self,
+        address: Address,
+    ) -> Result<StateLoad<Box<dyn JournaledAccountTr + 'b>>, EvmInternalsError> {
+        self.internals.load_account_mut(address)
+    }
+
     /// Loads an account AND it's code.
     pub fn load_account_code<'b>(
         &'b mut self,
