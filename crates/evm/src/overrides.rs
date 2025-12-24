@@ -3,7 +3,7 @@
 //! This module provides helper functions for RPC implementations, including:
 //! - Block and state overrides
 
-use alloc::collections::BTreeMap;
+use alloc::{boxed::Box, collections::BTreeMap};
 use alloy_primitives::{keccak256, map::HashMap, Address, B256, U256};
 use alloy_rpc_types_eth::{
     state::{AccountOverride, StateOverride},
