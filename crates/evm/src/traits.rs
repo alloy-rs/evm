@@ -375,7 +375,7 @@ impl<'a> EvmInternals<'a> {
         self.internals.touch_account(address)
     }
 
-    /// Sets bytecode to the account. Internally calls [`EvmInternalsTr::set_code_with_hash`].
+    /// Sets bytecode to the account.
     ///
     /// This will load the account, mark it as touched and set the code and code hash.
     /// It will return an error if database error occurs.
