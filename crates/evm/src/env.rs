@@ -9,12 +9,18 @@ use revm::{
 };
 
 /// Container type that holds both the configuration and block environment for EVM execution.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EvmEnv<Spec = SpecId, BlockEnv = revm::context::BlockEnv> {
     /// The configuration environment with handler settings
     pub cfg_env: CfgEnv<Spec>,
     /// The block environment containing block-specific data
     pub block_env: BlockEnv,
+}
+
+impl<Spec: Default + Into<SpecId> + Clone, B: Default> Default for EvmEnv<Spec, B> {
+    fn default() -> Self {
+        Self { cfg_env: CfgEnv::new_with_spec(Spec::default()), block_env: B::default() }
+    }
 }
 
 impl<Spec, BlockEnv> EvmEnv<Spec, BlockEnv> {
