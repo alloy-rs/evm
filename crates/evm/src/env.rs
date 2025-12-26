@@ -17,9 +17,9 @@ pub struct EvmEnv<Spec = SpecId, BlockEnv = revm::context::BlockEnv> {
     pub block_env: BlockEnv,
 }
 
-impl<Spec: Default + Into<SpecId> + Clone> Default for EvmEnv<Spec> {
+impl<Spec: Default + Into<SpecId> + Clone, B: Default> Default for EvmEnv<Spec, B> {
     fn default() -> Self {
-        Self { cfg_env: CfgEnv::new_with_spec(Spec::default()), block_env: BlockEnv::default() }
+        Self { cfg_env: CfgEnv::new_with_spec(Spec::default()), block_env: B::default() }
     }
 }
 
