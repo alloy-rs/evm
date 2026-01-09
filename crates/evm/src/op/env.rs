@@ -54,7 +54,7 @@ impl EvmEnv<OpSpecId> {
 
     fn for_op(input: EvmEnvInput, chain_spec: impl OpHardforks, chain_id: ChainId) -> Self {
         let spec = crate::op::spec_by_timestamp_after_bedrock(&chain_spec, input.timestamp);
-        let cfg_env = CfgEnv::new().with_chain_id(chain_id).with_spec(spec);
+        let cfg_env = CfgEnv::new().with_chain_id(chain_id).with_spec_and_mainnet_gas_params(spec);
 
         let blob_excess_gas_and_price = spec
             .into_eth_spec()

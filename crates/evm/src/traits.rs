@@ -6,8 +6,8 @@ use alloy_primitives::{Address, Log, B256, U256};
 use core::{error::Error, fmt, fmt::Debug};
 use revm::{
     context::{
-        journaled_state::TransferError, Block, Cfg, ContextTr, DBErrorMarker, JournalTr,
-        Transaction,
+        journaled_state::{account::JournaledAccountTr, TransferError},
+        Block, Cfg, ContextTr, DBErrorMarker, JournalTr, Transaction,
     },
     interpreter::{SStoreResult, StateLoad},
     primitives::{StorageKey, StorageValue},
@@ -50,20 +50,44 @@ impl EvmInternalsError {
 trait EvmInternalsTr: Database<Error = ErasedError> + Debug {
     fn load_account(&mut self, address: Address) -> Result<StateLoad<&Account>, EvmInternalsError>;
 
-    fn load_account_code(
-        &mut self,
+    fn load_account_mut_skip_cold_load<'a>(
+        &'a mut self,
         address: Address,
-    ) -> Result<StateLoad<&Account>, EvmInternalsError>;
+        skip_cold_load: bool,
+    ) -> Result<StateLoad<Box<dyn JournaledAccountTr + 'a>>, EvmInternalsError>;
+
+    /// Loads an account mutably.
+    fn load_account_mut<'a>(
+        &'a mut self,
+        address: Address,
+    ) -> Result<StateLoad<Box<dyn JournaledAccountTr + 'a>>, EvmInternalsError> {
+        self.load_account_mut_skip_cold_load(address, false)
+    }
+
+    fn load_account_code<'a>(
+        &'a mut self,
+        address: Address,
+    ) -> Result<StateLoad<Box<dyn JournaledAccountTr + 'a>>, EvmInternalsError> {
+        let mut account = self.load_account_mut(address)?;
+        account.load_code().map_err(|e| EvmInternalsError::database(e.unwrap_db_error()))?;
+        Ok(account)
+    }
 
     /// Increments the balance of the account.
-    fn balance_incr(&mut self, address: Address, balance: U256) -> Result<(), EvmInternalsError>;
+    fn balance_incr(&mut self, address: Address, balance: U256) -> Result<(), EvmInternalsError> {
+        self.load_account_mut(address)?.incr_balance(balance);
+        Ok(())
+    }
 
     /// Sets the balance of the the account
     ///
     /// Touches the account in all cases.
     ///
     /// If the given `balance` is the same as the account's, no journal entry is created.
-    fn set_balance(&mut self, address: Address, balance: U256) -> Result<(), EvmInternalsError>;
+    fn set_balance(&mut self, address: Address, balance: U256) -> Result<(), EvmInternalsError> {
+        self.load_account_mut(address)?.set_balance(balance);
+        Ok(())
+    }
 
     /// Transfers the balance from one account to another.
     ///
@@ -78,27 +102,60 @@ trait EvmInternalsTr: Database<Error = ErasedError> + Debug {
     /// Increments the nonce of the account.
     ///
     /// This creates a new journal entry with this change.
-    fn bump_nonce(&mut self, address: Address) -> Result<(), EvmInternalsError>;
+    fn bump_nonce(&mut self, address: Address) -> Result<(), EvmInternalsError> {
+        self.load_account_mut(address)?.bump_nonce();
+        Ok(())
+    }
 
     fn sload(
         &mut self,
         address: Address,
         key: StorageKey,
-    ) -> Result<StateLoad<StorageValue>, EvmInternalsError>;
+    ) -> Result<StateLoad<StorageValue>, EvmInternalsError> {
+        self.load_account_mut(address)?
+            .sload(key, false)
+            .map(|i| i.map(|i| i.present_value()))
+            .map_err(|e| EvmInternalsError::database(e.unwrap_db_error()))
+    }
 
-    fn touch_account(&mut self, address: Address);
+    fn touch_account(&mut self, address: Address) -> Result<(), EvmInternalsError> {
+        self.load_account_mut(address)?.touch();
+        Ok(())
+    }
 
-    fn set_code(&mut self, address: Address, code: Bytecode);
+    /// Sets bytecode to the account. Internally calls [`EvmInternalsTr::set_code_with_hash`].
+    ///
+    /// This will load the account, mark it as touched and set the code and code hash.
+    /// It will return an error if database error occurs.
+    fn set_code(&mut self, address: Address, code: Bytecode) -> Result<(), EvmInternalsError> {
+        let hash = code.hash_slow();
+        self.set_code_with_hash(address, code, hash)
+    }
 
-    /// Sets bytecode with hash. Assume that account is warm.
-    fn set_code_with_hash(&mut self, address: Address, code: Bytecode, hash: B256);
+    /// Sets bytecode with hash to the account.
+    ///
+    /// This will load the account, mark it as touched and set the code and code hash.
+    /// It will return an error if database error occurs.
+    fn set_code_with_hash(
+        &mut self,
+        address: Address,
+        code: Bytecode,
+        hash: B256,
+    ) -> Result<(), EvmInternalsError> {
+        self.load_account_mut(address)?.set_code(hash, code);
+        Ok(())
+    }
 
     fn sstore(
         &mut self,
         address: Address,
         key: StorageKey,
         value: StorageValue,
-    ) -> Result<StateLoad<SStoreResult>, EvmInternalsError>;
+    ) -> Result<StateLoad<SStoreResult>, EvmInternalsError> {
+        self.load_account_mut(address)?
+            .sstore(key, value, false)
+            .map_err(|e| EvmInternalsError::database(e.unwrap_db_error()))
+    }
 
     fn log(&mut self, log: Log);
 
@@ -146,21 +203,19 @@ where
         self.0.load_account(address).map_err(EvmInternalsError::database)
     }
 
-    fn load_account_code(
-        &mut self,
+    fn load_account_mut_skip_cold_load<'a>(
+        &'a mut self,
         address: Address,
-    ) -> Result<StateLoad<&Account>, EvmInternalsError> {
-        self.0.load_account_with_code(address).map_err(EvmInternalsError::database)
-    }
-
-    fn balance_incr(&mut self, address: Address, balance: U256) -> Result<(), EvmInternalsError> {
-        self.0.balance_incr(address, balance).map_err(EvmInternalsError::database)
-    }
-
-    fn set_balance(&mut self, address: Address, balance: U256) -> Result<(), EvmInternalsError> {
-        let mut account = self.0.load_account_mut(address).map_err(EvmInternalsError::database)?;
-        account.set_balance(balance);
-        Ok(())
+        skip_cold_load: bool,
+    ) -> Result<StateLoad<Box<dyn JournaledAccountTr + 'a>>, EvmInternalsError> {
+        self.0
+            .load_account_mut_skip_cold_load(address, skip_cold_load)
+            .map(|state_load| {
+                state_load.map(|journaled_account| {
+                    Box::new(journaled_account) as Box<dyn JournaledAccountTr + 'a>
+                })
+            })
+            .map_err(EvmInternalsError::database)
     }
 
     fn transfer(
@@ -170,40 +225,6 @@ where
         balance: U256,
     ) -> Result<Option<TransferError>, EvmInternalsError> {
         self.0.transfer(from, to, balance).map_err(EvmInternalsError::database)
-    }
-
-    fn bump_nonce(&mut self, address: Address) -> Result<(), EvmInternalsError> {
-        self.0.load_account_mut(address).map_err(EvmInternalsError::database)?.bump_nonce();
-        Ok(())
-    }
-
-    fn sload(
-        &mut self,
-        address: Address,
-        key: StorageKey,
-    ) -> Result<StateLoad<StorageValue>, EvmInternalsError> {
-        self.0.sload(address, key).map_err(EvmInternalsError::database)
-    }
-
-    fn touch_account(&mut self, address: Address) {
-        self.0.touch_account(address);
-    }
-
-    fn set_code(&mut self, address: Address, code: Bytecode) {
-        self.0.set_code(address, code);
-    }
-
-    fn set_code_with_hash(&mut self, address: Address, code: Bytecode, hash: B256) {
-        self.0.set_code_with_hash(address, code, hash);
-    }
-
-    fn sstore(
-        &mut self,
-        address: Address,
-        key: StorageKey,
-        value: StorageValue,
-    ) -> Result<StateLoad<SStoreResult>, EvmInternalsError> {
-        self.0.sstore(address, key, value).map_err(EvmInternalsError::database)
     }
 
     fn log(&mut self, log: Log) {
@@ -298,11 +319,28 @@ impl<'a> EvmInternals<'a> {
         self.internals.load_account(address)
     }
 
-    /// Loads an account AND it's code.
-    pub fn load_account_code(
-        &mut self,
+    /// Loads an account.
+    pub fn load_account_mut<'b>(
+        &'b mut self,
         address: Address,
-    ) -> Result<StateLoad<&Account>, EvmInternalsError> {
+    ) -> Result<StateLoad<Box<dyn JournaledAccountTr + 'b>>, EvmInternalsError> {
+        self.internals.load_account_mut(address)
+    }
+
+    /// Loads an account mutably, skipping cold load if specified.
+    pub fn load_account_mut_skip_cold_load<'b>(
+        &'b mut self,
+        address: Address,
+        skip_cold_load: bool,
+    ) -> Result<StateLoad<Box<dyn JournaledAccountTr + 'b>>, EvmInternalsError> {
+        self.internals.load_account_mut_skip_cold_load(address, skip_cold_load)
+    }
+
+    /// Loads an account AND it's code.
+    pub fn load_account_code<'b>(
+        &'b mut self,
+        address: Address,
+    ) -> Result<StateLoad<Box<dyn JournaledAccountTr + 'b>>, EvmInternalsError> {
         self.internals.load_account_code(address)
     }
 
@@ -357,23 +395,36 @@ impl<'a> EvmInternals<'a> {
     }
 
     /// Touches the account.
-    pub fn touch_account(&mut self, address: Address) {
-        self.internals.touch_account(address);
+    ///
+    /// This will load the account and return an error if database error occurs.
+    pub fn touch_account(&mut self, address: Address) -> Result<(), EvmInternalsError> {
+        self.internals.touch_account(address)
     }
 
     /// Sets bytecode to the account.
-    pub fn set_code(&mut self, address: Address, code: Bytecode) {
-        self.internals.set_code(address, code);
+    ///
+    /// This will load the account, mark it as touched and set the code and code hash.
+    /// It will return an error if database error occurs.
+    pub fn set_code(&mut self, address: Address, code: Bytecode) -> Result<(), EvmInternalsError> {
+        self.internals.set_code(address, code)
     }
 
     /// Sets bytecode with hash to the account.
     ///
-    /// Assumes that the account is warm.
-    pub fn set_code_with_hash(&mut self, address: Address, code: Bytecode, hash: B256) {
-        self.internals.set_code_with_hash(address, code, hash);
+    /// This will load the account, mark it as touched and set the code and code hash.
+    /// It will return an error if database error occurs.
+    pub fn set_code_with_hash(
+        &mut self,
+        address: Address,
+        code: Bytecode,
+        hash: B256,
+    ) -> Result<(), EvmInternalsError> {
+        self.internals.set_code_with_hash(address, code, hash)
     }
 
     /// Stores the storage value in Journal state.
+    ///
+    /// This will load the account and storage value and return an error if database error occurs.
     pub fn sstore(
         &mut self,
         address: Address,

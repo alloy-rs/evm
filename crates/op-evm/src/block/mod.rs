@@ -26,7 +26,7 @@ pub use receipt_builder::OpAlloyReceiptBuilder;
 use receipt_builder::OpReceiptBuilder;
 use revm::{
     context::{result::ResultAndState, Block},
-    database::State,
+    database::{DatabaseCommitExt, State},
     Database as _, DatabaseCommit, Inspector,
 };
 
