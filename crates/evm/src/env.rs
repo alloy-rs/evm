@@ -205,6 +205,7 @@ impl EvmLimitParams {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use revm::context::Cfg;
 
     #[test]
     fn test_evm_env_with_limits() {
@@ -216,24 +217,54 @@ mod tests {
 
         let evm_env: EvmEnv<SpecId> = EvmEnv::default().with_limits(limits);
 
-        assert_eq!(evm_env.cfg_env.limit_contract_code_size, Some(1234));
-        assert_eq!(evm_env.cfg_env.limit_contract_initcode_size, Some(5678));
-        assert_eq!(evm_env.cfg_env.tx_gas_limit_cap, Some(999_999));
+        assert_eq!(evm_env.cfg_env.max_code_size(), 1234);
+        assert_eq!(evm_env.cfg_env.max_initcode_size(), 5678);
+        assert_eq!(evm_env.cfg_env.tx_gas_limit_cap(), 999_999);
     }
 
     #[test]
     fn test_evm_env_with_limits_no_gas_cap() {
+        // When tx_gas_limit_cap is None, the Cfg trait returns the fork-aware default.
+        // Default SpecId is pre-Osaka, so this should return u64::MAX (no limit).
         let limits = EvmLimitParams::ethereum();
         let evm_env: EvmEnv<SpecId> = EvmEnv::default().with_limits(limits);
 
         assert_eq!(
-            evm_env.cfg_env.limit_contract_code_size,
-            Some(revm::primitives::eip170::MAX_CODE_SIZE)
+            evm_env.cfg_env.max_code_size(),
+            revm::primitives::eip170::MAX_CODE_SIZE
         );
         assert_eq!(
-            evm_env.cfg_env.limit_contract_initcode_size,
-            Some(revm::primitives::eip3860::MAX_INITCODE_SIZE)
+            evm_env.cfg_env.max_initcode_size(),
+            revm::primitives::eip3860::MAX_INITCODE_SIZE
         );
-        assert_eq!(evm_env.cfg_env.tx_gas_limit_cap, None);
+        assert_eq!(evm_env.cfg_env.tx_gas_limit_cap(), u64::MAX);
+    }
+
+    #[test]
+    fn test_evm_env_with_limits_osaka_gas_cap() {
+        // When tx_gas_limit_cap is None and spec is Osaka, the Cfg trait
+        // returns EIP-7825's TX_GAS_LIMIT_CAP.
+        use revm::context::{BlockEnv, CfgEnv};
+
+        let limits = EvmLimitParams::ethereum();
+        let cfg_env = CfgEnv::new_with_spec(SpecId::OSAKA);
+        let evm_env = EvmEnv::new(cfg_env, BlockEnv::default()).with_limits(limits);
+
+        assert_eq!(
+            evm_env.cfg_env.tx_gas_limit_cap(),
+            revm::primitives::eip7825::TX_GAS_LIMIT_CAP
+        );
+    }
+
+    #[test]
+    fn test_evm_env_with_limits_pre_osaka_no_cap() {
+        // Pre-Osaka, tx_gas_limit_cap should be u64::MAX (no limit).
+        use revm::context::{BlockEnv, CfgEnv};
+
+        let limits = EvmLimitParams::ethereum();
+        let cfg_env = CfgEnv::new_with_spec(SpecId::CANCUN);
+        let evm_env = EvmEnv::new(cfg_env, BlockEnv::default()).with_limits(limits);
+
+        assert_eq!(evm_env.cfg_env.tx_gas_limit_cap(), u64::MAX);
     }
 }
