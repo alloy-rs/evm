@@ -3,7 +3,6 @@ use crate::{
     rpc::{EthTxEnvError, TryIntoTxEnv},
     EvmEnv,
 };
-use alloy_primitives::Bytes;
 use op_alloy::rpc_types::OpTransactionRequest;
 use op_revm::OpTransaction;
 use revm::context::TxEnv;
@@ -17,7 +16,10 @@ impl<Block: BlockEnvironment> TryIntoTxEnv<OpTransaction<TxEnv>, Block> for OpTr
     ) -> Result<OpTransaction<TxEnv>, Self::Err> {
         Ok(OpTransaction {
             base: self.as_ref().clone().try_into_tx_env(evm_env)?,
-            enveloped_tx: Some(Bytes::new()),
+            // `OpTransactionRequest` does not contain the original EIP-2718 encoded bytes of the
+            // transaction envelope. Using `Some(Bytes::new())` would incorrectly signal "encoded
+            // bytes available" and can silently skew size/DA-footprint estimations.
+            enveloped_tx: None,
             deposit: Default::default(),
         })
     }
@@ -40,6 +42,6 @@ mod tests {
         let tx_env = req.try_into_tx_env(&evm_env).unwrap();
         assert_eq!(tx_env.gas_limit(), evm_env.block_env().gas_limit);
         assert_eq!(tx_env.gas_price(), 0);
-        assert!(tx_env.enveloped_tx().unwrap().is_empty());
+        assert!(tx_env.enveloped_tx().is_none());
     }
 }
