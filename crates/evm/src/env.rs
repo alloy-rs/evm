@@ -27,6 +27,19 @@ impl<Spec, BlockEnv> EvmEnv<Spec, BlockEnv> {
     pub const fn new(cfg_env: CfgEnv<Spec>, block_env: BlockEnv) -> Self {
         Self { cfg_env, block_env }
     }
+
+    /// Configures the EVM execution limits.
+    ///
+    /// Sets `limit_contract_code_size`, `limit_contract_initcode_size`,
+    /// and optionally `tx_gas_limit_cap` from the provided [`EvmLimitParams`].
+    pub fn with_limits(mut self, limits: EvmLimitParams) -> Self {
+        self.cfg_env.limit_contract_code_size = Some(limits.max_code_size);
+        self.cfg_env.limit_contract_initcode_size = Some(limits.max_initcode_size);
+        if let Some(cap) = limits.tx_gas_limit_cap {
+            self.cfg_env.tx_gas_limit_cap = Some(cap);
+        }
+        self
+    }
 }
 
 impl<Spec, BlockEnv: BlockEnvironment> EvmEnv<Spec, BlockEnv> {
@@ -152,5 +165,75 @@ pub trait BlockEnvironment: revm::context::Block + Clone + Debug + Send + Sync +
 impl BlockEnvironment for BlockEnv {
     fn inner_mut(&mut self) -> &mut revm::context::BlockEnv {
         self
+    }
+}
+
+/// Parameters for EVM execution limits.
+///
+/// These parameters control configurable limits in the EVM that can be
+/// overridden from their spec defaults (EIP-170, EIP-3860, EIP-7825).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EvmLimitParams {
+    /// Maximum bytecode size for deployed contracts.
+    /// EIP-170 default: 24576 bytes (24KB)
+    pub max_code_size: usize,
+    /// Maximum initcode size for CREATE transactions.
+    /// EIP-3860 default: 49152 bytes (48KB, 2x `max_code_size`)
+    pub max_initcode_size: usize,
+    /// Transaction gas limit cap override.
+    /// If `None`, uses spec defaults (2^24 post-Osaka per EIP-7825, no limit pre-Osaka).
+    pub tx_gas_limit_cap: Option<u64>,
+}
+
+impl Default for EvmLimitParams {
+    fn default() -> Self {
+        Self::ethereum()
+    }
+}
+
+impl EvmLimitParams {
+    /// Returns the Ethereum default EVM limit params.
+    pub const fn ethereum() -> Self {
+        Self {
+            max_code_size: revm::primitives::eip170::MAX_CODE_SIZE,
+            max_initcode_size: revm::primitives::eip3860::MAX_INITCODE_SIZE,
+            tx_gas_limit_cap: None,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_evm_env_with_limits() {
+        let limits = EvmLimitParams {
+            max_code_size: 1234,
+            max_initcode_size: 5678,
+            tx_gas_limit_cap: Some(999_999),
+        };
+
+        let evm_env: EvmEnv<SpecId> = EvmEnv::default().with_limits(limits);
+
+        assert_eq!(evm_env.cfg_env.limit_contract_code_size, Some(1234));
+        assert_eq!(evm_env.cfg_env.limit_contract_initcode_size, Some(5678));
+        assert_eq!(evm_env.cfg_env.tx_gas_limit_cap, Some(999_999));
+    }
+
+    #[test]
+    fn test_evm_env_with_limits_no_gas_cap() {
+        let limits = EvmLimitParams::ethereum();
+        let evm_env: EvmEnv<SpecId> = EvmEnv::default().with_limits(limits);
+
+        assert_eq!(
+            evm_env.cfg_env.limit_contract_code_size,
+            Some(revm::primitives::eip170::MAX_CODE_SIZE)
+        );
+        assert_eq!(
+            evm_env.cfg_env.limit_contract_initcode_size,
+            Some(revm::primitives::eip3860::MAX_INITCODE_SIZE)
+        );
+        assert_eq!(evm_env.cfg_env.tx_gas_limit_cap, None);
     }
 }
