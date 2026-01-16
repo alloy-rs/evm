@@ -285,6 +285,9 @@ pub trait BlockExecutor {
     /// Exposes immutable reference to EVM.
     fn evm(&self) -> &Self::Evm;
 
+    /// Returns a reference to all recorded receipts.
+    fn receipts(&self) -> &[Self::Receipt];
+
     /// Executes all transactions in a block, applying pre and post execution changes.
     ///
     /// This is a convenience method that orchestrates the complete block execution flow:
