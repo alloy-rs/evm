@@ -198,10 +198,6 @@ impl Default for EvmLimitParams {
 
 impl EvmLimitParams {
     /// Returns the Osaka EVM limit params.
-    ///
-    /// - `max_code_size`: EIP-170 default (24KB)
-    /// - `max_initcode_size`: EIP-3860 default (48KB)
-    /// - `tx_gas_limit_cap`: EIP-7825 cap (2^24)
     pub const fn osaka() -> Self {
         Self {
             max_code_size: revm::primitives::eip170::MAX_CODE_SIZE,
