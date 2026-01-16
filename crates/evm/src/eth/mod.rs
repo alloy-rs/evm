@@ -49,7 +49,7 @@ pub struct EthEvmBuilder<DB: Database, I = NoOpInspector> {
 
 impl<DB: Database> EthEvmBuilder<DB, NoOpInspector> {
     /// Creates a builder from the provided `EvmEnv` and database.
-    pub const fn new(db: DB, env: EvmEnv) -> Self {
+    pub fn new(db: DB, env: EvmEnv) -> Self {
         Self {
             db,
             block_env: env.block_env,

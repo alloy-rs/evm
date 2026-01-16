@@ -3,7 +3,7 @@ members = ["crates/*"]
 resolver = "2"
 
 [workspace.package]
-version = "0.25.2"
+version = "0.26.3"
 edition = "2021"
 rust-version = "1.88"
 authors = ["Alloy Contributors"]
@@ -35,8 +35,8 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [workspace.dependencies]
-alloy-evm = { version = "0.25.2", path = "crates/evm", default-features = false }
-alloy-op-evm = { version = "0.25.2", path = "crates/op-evm", default-features = false }
+alloy-evm = { version = "0.26.3", path = "crates/evm", default-features = false }
+alloy-op-evm = { version = "0.26.3", path = "crates/op-evm", default-features = false }
 
 # alloy
 alloy-eip2124 = { version = "0.2", default-features = false }
@@ -45,19 +45,19 @@ alloy-eips = { version = "1.0.34", default-features = false }
 alloy-consensus = { version = "1.0.27", default-features = false }
 alloy-primitives = { version = "1.0.0", default-features = false }
 alloy-sol-types = { version = "1.0.0", default-features = false }
-alloy-hardforks = { version = "0.4.2" }
+alloy-hardforks = { version = "0.4.7" }
 alloy-rpc-types-eth = { version = "1.0.27", default-features = false }
 alloy-rpc-types-engine = { version = "1.0.27", default-features = false }
 
 # op-alloy
-alloy-op-hardforks = { version = "0.4.2" }
+alloy-op-hardforks = { version = "0.4.7" }
 op-alloy = { version = "0.23", default-features = false, features = [
     "consensus",
 ] }
 
 # revm
-revm = { version = "33.0.0", default-features = false }
-op-revm = { version = "14.0.0", default-features = false }
+revm = { version = "34.0.0", default-features = false }
+op-revm = { version = "15.0.0", default-features = false }
 
 # misc
 auto_impl = "1"
@@ -66,10 +66,3 @@ serde = { version = "1", default-features = false, features = ["derive"] }
 thiserror = { version = "2.0.0", default-features = false }
 serde_json = "1"
 test-case = "3"
-
-[patch.crates-io]
-# revm = { git = "https://github.com/bluealloy/revm", rev = "11b16259" }
-# op-revm = { git = "https://github.com/bluealloy/revm", rev = "11b16259" }
-
-#alloy-hardforks = { git = "https://github.com/alloy-rs/hardforks", rev = "0fd230f5aa24c4f6a8c593918b7449df0c20f60a" }
-#alloy-op-hardforks = { git = "https://github.com/alloy-rs/hardforks", rev = "0fd230f5aa24c4f6a8c593918b7449df0c20f60a" }
