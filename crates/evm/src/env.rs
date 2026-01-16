@@ -233,10 +233,7 @@ mod tests {
         let limits = EvmLimitParams::default();
         let evm_env: EvmEnv<SpecId> = EvmEnv::default().with_limits(limits);
 
-        assert_eq!(
-            evm_env.cfg_env.max_code_size(),
-            revm::primitives::eip170::MAX_CODE_SIZE
-        );
+        assert_eq!(evm_env.cfg_env.max_code_size(), revm::primitives::eip170::MAX_CODE_SIZE);
         assert_eq!(
             evm_env.cfg_env.max_initcode_size(),
             revm::primitives::eip3860::MAX_INITCODE_SIZE
@@ -254,10 +251,7 @@ mod tests {
         let cfg_env = CfgEnv::new_with_spec(SpecId::OSAKA);
         let evm_env = EvmEnv::new(cfg_env, BlockEnv::default()).with_limits(limits);
 
-        assert_eq!(
-            evm_env.cfg_env.tx_gas_limit_cap(),
-            revm::primitives::eip7825::TX_GAS_LIMIT_CAP
-        );
+        assert_eq!(evm_env.cfg_env.tx_gas_limit_cap(), revm::primitives::eip7825::TX_GAS_LIMIT_CAP);
     }
 
     #[test]
