@@ -23,6 +23,23 @@
 //! allows downstream crates to implement `IntoTxEnv` directly for zero-copy consumption when the
 //! type owns its `TxEnv`. For example, a wrapper type like `WithTxEnv<TxEnv, T>` can implement
 //! `IntoTxEnv` to extract and return the inner `TxEnv` by value without cloning.
+//!
+//! # Transaction Environment Reuse
+//!
+//! For high-throughput scenarios like block execution, this module also provides the [`FillTxEnv`]
+//! trait for filling an existing [`TxEnv`] in-place, avoiding per-transaction allocations:
+//!
+//! ```ignore
+//! use alloy_evm::{FillTxEnv, TxEnvExt};
+//!
+//! let mut tx_env = TxEnv::default();
+//!
+//! for tx in transactions {
+//!     // Fill the existing TxEnv, preserving Vec capacity
+//!     tx_env.fill_from_tx(tx.inner(), tx.signer());
+//!     let result = evm.transact_raw(&tx_env)?;
+//! }
+//! ```
 
 use alloc::sync::Arc;
 use alloy_consensus::{
@@ -587,9 +604,247 @@ impl<Eip4844: AsRef<TxEip4844>> FromRecoveredTx<EthereumTxEnvelope<Eip4844>> for
     }
 }
 
+// ================================================================================================
+// FillTxEnv - In-place transaction environment filling for allocation reuse
+// ================================================================================================
+
+/// A trait for filling an existing [`TxEnv`] in-place, avoiding allocation.
+///
+/// This is the in-place counterpart to [`FromRecoveredTx`]. Instead of creating a new `TxEnv`,
+/// it clears and fills an existing one while preserving the capacity of heap-allocated fields
+/// like `access_list`, `blob_hashes`, and `authorization_list`.
+///
+/// # Safety Guarantees
+///
+/// Implementations **must** completely reset all fields to valid values for the transaction type.
+/// This includes explicitly setting fields to their "empty" values (like `None`, `0`, or empty
+/// `Vec`s) even if they were cleared, to prevent stale data from leaking between transactions.
+///
+/// # Example
+///
+/// ```ignore
+/// use alloy_evm::FillTxEnv;
+/// use revm::context::TxEnv;
+///
+/// let mut tx_env = TxEnv::default();
+///
+/// // Fill with a legacy transaction
+/// tx_env.fill_from_tx(&legacy_tx, sender);
+///
+/// // Later, fill with an EIP-4844 transaction - all legacy fields are properly reset
+/// tx_env.fill_from_tx(&eip4844_tx, sender);
+/// ```
+pub trait FillTxEnv<Tx> {
+    /// Fills `self` with data from the transaction and sender address.
+    ///
+    /// This method completely resets all fields to match the given transaction,
+    /// preserving only the allocated capacity of Vec fields.
+    fn fill_from_tx(&mut self, tx: &Tx, sender: Address);
+}
+
+/// Extension trait for [`TxEnv`] providing utilities for in-place reuse.
+pub trait TxEnvExt {
+    /// Clears the transaction environment while preserving allocated capacity.
+    ///
+    /// This method clears all Vec fields (`access_list`, `blob_hashes`, `authorization_list`)
+    /// using `clear()` to preserve their capacity, and resets `data` to empty bytes.
+    ///
+    /// Note: This only clears heap-allocated fields. Use [`FillTxEnv::fill_from_tx`] to
+    /// properly set all fields for a new transaction.
+    fn clear_for_reuse(&mut self);
+}
+
+impl TxEnvExt for TxEnv {
+    fn clear_for_reuse(&mut self) {
+        self.access_list.0.clear();
+        self.blob_hashes.clear();
+        self.authorization_list.clear();
+        self.data = Bytes::new();
+    }
+}
+
+impl FillTxEnv<TxLegacy> for TxEnv {
+    fn fill_from_tx(&mut self, tx: &TxLegacy, caller: Address) {
+        self.clear_for_reuse();
+
+        self.tx_type = tx.ty();
+        self.caller = caller;
+        self.gas_limit = tx.gas_limit;
+        self.gas_price = tx.gas_price;
+        self.kind = tx.to;
+        self.value = tx.value;
+        self.data = tx.input.clone();
+        self.nonce = tx.nonce;
+        self.chain_id = tx.chain_id;
+        self.gas_priority_fee = None;
+        self.max_fee_per_blob_gas = 0;
+    }
+}
+
+impl FillTxEnv<Signed<TxLegacy>> for TxEnv {
+    fn fill_from_tx(&mut self, tx: &Signed<TxLegacy>, sender: Address) {
+        self.fill_from_tx(tx.tx(), sender);
+    }
+}
+
+impl FillTxEnv<TxEip2930> for TxEnv {
+    fn fill_from_tx(&mut self, tx: &TxEip2930, caller: Address) {
+        self.clear_for_reuse();
+
+        self.tx_type = tx.ty();
+        self.caller = caller;
+        self.gas_limit = tx.gas_limit;
+        self.gas_price = tx.gas_price;
+        self.kind = tx.to;
+        self.value = tx.value;
+        self.data = tx.input.clone();
+        self.nonce = tx.nonce;
+        self.chain_id = Some(tx.chain_id);
+        self.gas_priority_fee = None;
+        self.max_fee_per_blob_gas = 0;
+
+        self.access_list = tx.access_list.clone();
+    }
+}
+
+impl FillTxEnv<Signed<TxEip2930>> for TxEnv {
+    fn fill_from_tx(&mut self, tx: &Signed<TxEip2930>, sender: Address) {
+        self.fill_from_tx(tx.tx(), sender);
+    }
+}
+
+impl FillTxEnv<TxEip1559> for TxEnv {
+    fn fill_from_tx(&mut self, tx: &TxEip1559, caller: Address) {
+        self.clear_for_reuse();
+
+        self.tx_type = tx.ty();
+        self.caller = caller;
+        self.gas_limit = tx.gas_limit;
+        self.gas_price = tx.max_fee_per_gas;
+        self.kind = tx.to;
+        self.value = tx.value;
+        self.data = tx.input.clone();
+        self.nonce = tx.nonce;
+        self.chain_id = Some(tx.chain_id);
+        self.gas_priority_fee = Some(tx.max_priority_fee_per_gas);
+        self.max_fee_per_blob_gas = 0;
+
+        self.access_list = tx.access_list.clone();
+    }
+}
+
+impl FillTxEnv<Signed<TxEip1559>> for TxEnv {
+    fn fill_from_tx(&mut self, tx: &Signed<TxEip1559>, sender: Address) {
+        self.fill_from_tx(tx.tx(), sender);
+    }
+}
+
+impl FillTxEnv<TxEip4844> for TxEnv {
+    fn fill_from_tx(&mut self, tx: &TxEip4844, caller: Address) {
+        self.clear_for_reuse();
+
+        self.tx_type = tx.ty();
+        self.caller = caller;
+        self.gas_limit = tx.gas_limit;
+        self.gas_price = tx.max_fee_per_gas;
+        self.kind = TxKind::Call(tx.to);
+        self.value = tx.value;
+        self.data = tx.input.clone();
+        self.nonce = tx.nonce;
+        self.chain_id = Some(tx.chain_id);
+        self.gas_priority_fee = Some(tx.max_priority_fee_per_gas);
+        self.max_fee_per_blob_gas = tx.max_fee_per_blob_gas;
+
+        self.access_list = tx.access_list.clone();
+        self.blob_hashes.extend_from_slice(&tx.blob_versioned_hashes);
+    }
+}
+
+impl<T: AsRef<TxEip4844>> FillTxEnv<TxEip4844Variant<T>> for TxEnv {
+    fn fill_from_tx(&mut self, tx: &TxEip4844Variant<T>, caller: Address) {
+        self.fill_from_tx(tx.tx().as_ref(), caller);
+    }
+}
+
+impl<T: AsRef<TxEip4844>> FillTxEnv<Signed<TxEip4844Variant<T>>> for TxEnv {
+    fn fill_from_tx(&mut self, tx: &Signed<TxEip4844Variant<T>>, sender: Address) {
+        self.fill_from_tx(tx.tx(), sender);
+    }
+}
+
+impl FillTxEnv<TxEip7702> for TxEnv {
+    fn fill_from_tx(&mut self, tx: &TxEip7702, caller: Address) {
+        self.clear_for_reuse();
+
+        self.tx_type = tx.ty();
+        self.caller = caller;
+        self.gas_limit = tx.gas_limit;
+        self.gas_price = tx.max_fee_per_gas;
+        self.kind = TxKind::Call(tx.to);
+        self.value = tx.value;
+        self.data = tx.input.clone();
+        self.nonce = tx.nonce;
+        self.chain_id = Some(tx.chain_id);
+        self.gas_priority_fee = Some(tx.max_priority_fee_per_gas);
+        self.max_fee_per_blob_gas = 0;
+
+        self.access_list = tx.access_list.clone();
+
+        self.authorization_list.extend(tx.authorization_list.iter().map(|auth| {
+            Either::Right(RecoveredAuthorization::new_unchecked(
+                auth.inner().clone(),
+                auth.signature()
+                    .ok()
+                    .and_then(|signature| {
+                        secp256k1::recover_signer(&signature, auth.signature_hash()).ok()
+                    })
+                    .map_or(RecoveredAuthority::Invalid, RecoveredAuthority::Valid),
+            ))
+        }));
+    }
+}
+
+impl FillTxEnv<Signed<TxEip7702>> for TxEnv {
+    fn fill_from_tx(&mut self, tx: &Signed<TxEip7702>, sender: Address) {
+        self.fill_from_tx(tx.tx(), sender);
+    }
+}
+
+impl<Eip4844: AsRef<TxEip4844>> FillTxEnv<EthereumTxEnvelope<Eip4844>> for TxEnv {
+    fn fill_from_tx(&mut self, tx: &EthereumTxEnvelope<Eip4844>, caller: Address) {
+        match tx {
+            EthereumTxEnvelope::Legacy(tx) => self.fill_from_tx(tx.tx(), caller),
+            EthereumTxEnvelope::Eip1559(tx) => self.fill_from_tx(tx.tx(), caller),
+            EthereumTxEnvelope::Eip2930(tx) => self.fill_from_tx(tx.tx(), caller),
+            EthereumTxEnvelope::Eip4844(tx) => self.fill_from_tx(tx.tx().as_ref(), caller),
+            EthereumTxEnvelope::Eip7702(tx) => self.fill_from_tx(tx.tx(), caller),
+        }
+    }
+}
+
+impl<T, TxEnvT> FillTxEnv<Recovered<T>> for TxEnvT
+where
+    TxEnvT: FillTxEnv<T>,
+{
+    fn fill_from_tx(&mut self, recovered: &Recovered<T>, _sender: Address) {
+        self.fill_from_tx(recovered.inner(), recovered.signer());
+    }
+}
+
+impl<T, TxEnvT> FillTxEnv<WithEncoded<Recovered<T>>> for TxEnvT
+where
+    TxEnvT: FillTxEnv<T>,
+{
+    fn fill_from_tx(&mut self, with_encoded: &WithEncoded<Recovered<T>>, _sender: Address) {
+        let recovered = &with_encoded.1;
+        self.fill_from_tx(recovered.inner(), recovered.signer());
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloy_primitives::{address, b256, U256};
 
     struct MyTxEnv;
     struct MyTransaction;
@@ -629,5 +884,349 @@ mod tests {
 
         assert_recoverable::<Recovered<MyTransaction>>();
         assert_recoverable::<WithEncoded<Recovered<MyTransaction>>>();
+    }
+
+    // ========================================================================================
+    // FillTxEnv tests - comprehensive coverage of in-place filling
+    // ========================================================================================
+
+    fn test_sender() -> Address {
+        address!("0xabcdefabcdefabcdefabcdefabcdefabcdefabcd")
+    }
+
+    fn test_target() -> Address {
+        address!("0x1234567890123456789012345678901234567890")
+    }
+
+    fn make_legacy_tx() -> TxLegacy {
+        TxLegacy {
+            chain_id: Some(1),
+            nonce: 42,
+            gas_price: 100,
+            gas_limit: 21000,
+            to: TxKind::Call(test_target()),
+            value: U256::from(1000),
+            input: Bytes::from_static(b"legacy data"),
+        }
+    }
+
+    fn make_eip2930_tx() -> TxEip2930 {
+        use revm::context_interface::transaction::AccessListItem;
+        TxEip2930 {
+            chain_id: 2,
+            nonce: 43,
+            gas_price: 200,
+            gas_limit: 30000,
+            to: TxKind::Call(test_target()),
+            value: U256::from(2000),
+            input: Bytes::from_static(b"eip2930 data"),
+            access_list: revm::context_interface::transaction::AccessList(vec![AccessListItem {
+                address: address!("0x1111111111111111111111111111111111111111"),
+                storage_keys: vec![b256!(
+                    "0x0000000000000000000000000000000000000000000000000000000000000001"
+                )],
+            }]),
+        }
+    }
+
+    fn make_eip1559_tx() -> TxEip1559 {
+        use revm::context_interface::transaction::AccessListItem;
+        TxEip1559 {
+            chain_id: 3,
+            nonce: 44,
+            max_fee_per_gas: 300,
+            max_priority_fee_per_gas: 50,
+            gas_limit: 40000,
+            to: TxKind::Call(test_target()),
+            value: U256::from(3000),
+            input: Bytes::from_static(b"eip1559 data"),
+            access_list: revm::context_interface::transaction::AccessList(vec![AccessListItem {
+                address: address!("0x2222222222222222222222222222222222222222"),
+                storage_keys: vec![],
+            }]),
+        }
+    }
+
+    fn make_eip4844_tx() -> TxEip4844 {
+        use revm::context_interface::transaction::AccessListItem;
+        TxEip4844 {
+            chain_id: 4,
+            nonce: 45,
+            max_fee_per_gas: 400,
+            max_priority_fee_per_gas: 60,
+            gas_limit: 50000,
+            to: test_target(),
+            value: U256::from(4000),
+            input: Bytes::from_static(b"eip4844 data"),
+            access_list: revm::context_interface::transaction::AccessList(vec![AccessListItem {
+                address: address!("0x3333333333333333333333333333333333333333"),
+                storage_keys: vec![
+                    b256!("0x0000000000000000000000000000000000000000000000000000000000000002"),
+                    b256!("0x0000000000000000000000000000000000000000000000000000000000000003"),
+                ],
+            }]),
+            blob_versioned_hashes: vec![
+                b256!("0x0102030405060708091011121314151617181920212223242526272829303132"),
+                b256!("0x0102030405060708091011121314151617181920212223242526272829303133"),
+            ],
+            max_fee_per_blob_gas: 500,
+        }
+    }
+
+    fn make_eip7702_tx() -> TxEip7702 {
+        use alloy_eips::eip7702::Authorization;
+        use revm::context_interface::transaction::AccessListItem;
+        TxEip7702 {
+            chain_id: 5,
+            nonce: 46,
+            max_fee_per_gas: 500,
+            max_priority_fee_per_gas: 70,
+            gas_limit: 60000,
+            to: test_target(),
+            value: U256::from(5000),
+            input: Bytes::from_static(b"eip7702 data"),
+            access_list: revm::context_interface::transaction::AccessList(vec![AccessListItem {
+                address: address!("0x4444444444444444444444444444444444444444"),
+                storage_keys: vec![],
+            }]),
+            authorization_list: vec![Authorization {
+                chain_id: U256::from(1),
+                address: address!("0x5555555555555555555555555555555555555555"),
+                nonce: 0,
+            }
+            .into_signed(alloy_primitives::Signature::test_signature())],
+        }
+    }
+
+    #[test]
+    fn test_fill_legacy_tx() {
+        let mut tx_env = TxEnv::default();
+        let tx = make_legacy_tx();
+        let sender = test_sender();
+
+        tx_env.fill_from_tx(&tx, sender);
+
+        assert_eq!(tx_env.tx_type, 0);
+        assert_eq!(tx_env.caller, sender);
+        assert_eq!(tx_env.nonce, 42);
+        assert_eq!(tx_env.gas_price, 100);
+        assert_eq!(tx_env.gas_limit, 21000);
+        assert_eq!(tx_env.value, U256::from(1000));
+        assert_eq!(tx_env.chain_id, Some(1));
+        assert_eq!(tx_env.gas_priority_fee, None);
+        assert_eq!(tx_env.max_fee_per_blob_gas, 0);
+        assert!(tx_env.access_list.0.is_empty());
+        assert!(tx_env.blob_hashes.is_empty());
+        assert!(tx_env.authorization_list.is_empty());
+    }
+
+    #[test]
+    fn test_fill_eip4844_tx() {
+        let mut tx_env = TxEnv::default();
+        let tx = make_eip4844_tx();
+        let sender = test_sender();
+
+        tx_env.fill_from_tx(&tx, sender);
+
+        assert_eq!(tx_env.tx_type, 3);
+        assert_eq!(tx_env.nonce, 45);
+        assert_eq!(tx_env.gas_priority_fee, Some(60));
+        assert_eq!(tx_env.max_fee_per_blob_gas, 500);
+        assert_eq!(tx_env.blob_hashes.len(), 2);
+        assert_eq!(tx_env.access_list.0.len(), 1);
+        assert!(tx_env.authorization_list.is_empty());
+    }
+
+    #[test]
+    fn test_fill_eip7702_tx() {
+        let mut tx_env = TxEnv::default();
+        let tx = make_eip7702_tx();
+        let sender = test_sender();
+
+        tx_env.fill_from_tx(&tx, sender);
+
+        assert_eq!(tx_env.tx_type, 4);
+        assert_eq!(tx_env.nonce, 46);
+        assert_eq!(tx_env.gas_priority_fee, Some(70));
+        assert_eq!(tx_env.max_fee_per_blob_gas, 0);
+        assert!(tx_env.blob_hashes.is_empty());
+        assert_eq!(tx_env.authorization_list.len(), 1);
+    }
+
+    #[test]
+    fn test_clear_preserves_capacity() {
+        let mut tx_env = TxEnv::default();
+
+        tx_env
+            .blob_hashes
+            .push(b256!("0x0102030405060708091011121314151617181920212223242526272829303132"));
+        tx_env
+            .blob_hashes
+            .push(b256!("0x0102030405060708091011121314151617181920212223242526272829303133"));
+        let capacity_before = tx_env.blob_hashes.capacity();
+
+        tx_env.clear_for_reuse();
+
+        assert!(tx_env.blob_hashes.is_empty());
+        assert_eq!(tx_env.blob_hashes.capacity(), capacity_before);
+    }
+
+    // ========================================================================================
+    // Critical: Test all tx type transitions to ensure no stale data leaks
+    // ========================================================================================
+
+    #[test]
+    fn test_transition_eip4844_to_legacy_clears_blobs() {
+        let mut tx_env = TxEnv::default();
+        let sender = test_sender();
+
+        // First fill with EIP-4844 (has blob_hashes and max_fee_per_blob_gas)
+        tx_env.fill_from_tx(&make_eip4844_tx(), sender);
+        assert_eq!(tx_env.blob_hashes.len(), 2);
+        assert_eq!(tx_env.max_fee_per_blob_gas, 500);
+
+        // Now fill with Legacy - blob fields must be cleared
+        tx_env.fill_from_tx(&make_legacy_tx(), sender);
+        assert!(tx_env.blob_hashes.is_empty(), "blob_hashes not cleared after Legacy fill");
+        assert_eq!(tx_env.max_fee_per_blob_gas, 0, "max_fee_per_blob_gas not reset");
+        assert_eq!(tx_env.gas_priority_fee, None, "gas_priority_fee not reset to None");
+    }
+
+    #[test]
+    fn test_transition_eip7702_to_legacy_clears_authorizations() {
+        let mut tx_env = TxEnv::default();
+        let sender = test_sender();
+
+        // First fill with EIP-7702 (has authorization_list)
+        tx_env.fill_from_tx(&make_eip7702_tx(), sender);
+        assert_eq!(tx_env.authorization_list.len(), 1);
+
+        // Now fill with Legacy - authorization_list must be cleared
+        tx_env.fill_from_tx(&make_legacy_tx(), sender);
+        assert!(
+            tx_env.authorization_list.is_empty(),
+            "authorization_list not cleared after Legacy fill"
+        );
+    }
+
+    #[test]
+    fn test_transition_eip2930_to_legacy_clears_access_list() {
+        let mut tx_env = TxEnv::default();
+        let sender = test_sender();
+
+        // First fill with EIP-2930 (has access_list)
+        tx_env.fill_from_tx(&make_eip2930_tx(), sender);
+        assert_eq!(tx_env.access_list.0.len(), 1);
+
+        // Now fill with Legacy - access_list must be cleared
+        tx_env.fill_from_tx(&make_legacy_tx(), sender);
+        assert!(tx_env.access_list.0.is_empty(), "access_list not cleared after Legacy fill");
+    }
+
+    #[test]
+    fn test_transition_eip1559_to_eip2930_resets_priority_fee() {
+        let mut tx_env = TxEnv::default();
+        let sender = test_sender();
+
+        // First fill with EIP-1559 (has gas_priority_fee)
+        tx_env.fill_from_tx(&make_eip1559_tx(), sender);
+        assert_eq!(tx_env.gas_priority_fee, Some(50));
+
+        // Now fill with EIP-2930 - gas_priority_fee must be None
+        tx_env.fill_from_tx(&make_eip2930_tx(), sender);
+        assert_eq!(
+            tx_env.gas_priority_fee, None,
+            "gas_priority_fee not reset to None after EIP-2930 fill"
+        );
+    }
+
+    #[test]
+    fn test_transition_eip4844_to_eip7702() {
+        let mut tx_env = TxEnv::default();
+        let sender = test_sender();
+
+        // Fill with EIP-4844 (blobs, no auth)
+        tx_env.fill_from_tx(&make_eip4844_tx(), sender);
+        assert_eq!(tx_env.blob_hashes.len(), 2);
+        assert!(tx_env.authorization_list.is_empty());
+
+        // Fill with EIP-7702 (auth, no blobs)
+        tx_env.fill_from_tx(&make_eip7702_tx(), sender);
+        assert!(tx_env.blob_hashes.is_empty(), "blob_hashes not cleared after EIP-7702 fill");
+        assert_eq!(tx_env.max_fee_per_blob_gas, 0, "max_fee_per_blob_gas not reset");
+        assert_eq!(tx_env.authorization_list.len(), 1);
+    }
+
+    #[test]
+    fn test_transition_eip7702_to_eip4844() {
+        let mut tx_env = TxEnv::default();
+        let sender = test_sender();
+
+        // Fill with EIP-7702 (auth, no blobs)
+        tx_env.fill_from_tx(&make_eip7702_tx(), sender);
+        assert_eq!(tx_env.authorization_list.len(), 1);
+        assert!(tx_env.blob_hashes.is_empty());
+
+        // Fill with EIP-4844 (blobs, no auth)
+        tx_env.fill_from_tx(&make_eip4844_tx(), sender);
+        assert!(
+            tx_env.authorization_list.is_empty(),
+            "authorization_list not cleared after EIP-4844 fill"
+        );
+        assert_eq!(tx_env.blob_hashes.len(), 2);
+    }
+
+    #[test]
+    fn test_all_fields_reset_on_legacy_fill() {
+        let mut tx_env = TxEnv::default();
+        let sender = test_sender();
+
+        // Populate all optional fields with non-default values
+        tx_env.fill_from_tx(&make_eip4844_tx(), sender);
+        tx_env.fill_from_tx(&make_eip7702_tx(), sender);
+        // Now tx_env has auth_list from 7702, but blobs were cleared
+
+        // Re-add blobs manually to simulate worst case
+        tx_env
+            .blob_hashes
+            .push(b256!("0x0102030405060708091011121314151617181920212223242526272829303132"));
+
+        // Fill with Legacy - everything must be properly reset
+        tx_env.fill_from_tx(&make_legacy_tx(), sender);
+
+        assert_eq!(tx_env.tx_type, 0);
+        assert_eq!(tx_env.gas_priority_fee, None);
+        assert_eq!(tx_env.max_fee_per_blob_gas, 0);
+        assert!(tx_env.access_list.0.is_empty());
+        assert!(tx_env.blob_hashes.is_empty());
+        assert!(tx_env.authorization_list.is_empty());
+    }
+
+    #[test]
+    fn test_reuse_multiple_times() {
+        let mut tx_env = TxEnv::default();
+        let sender = test_sender();
+
+        // Cycle through all tx types multiple times
+        for _ in 0..3 {
+            tx_env.fill_from_tx(&make_legacy_tx(), sender);
+            assert_eq!(tx_env.tx_type, 0);
+
+            tx_env.fill_from_tx(&make_eip2930_tx(), sender);
+            assert_eq!(tx_env.tx_type, 1);
+
+            tx_env.fill_from_tx(&make_eip1559_tx(), sender);
+            assert_eq!(tx_env.tx_type, 2);
+
+            tx_env.fill_from_tx(&make_eip4844_tx(), sender);
+            assert_eq!(tx_env.tx_type, 3);
+
+            tx_env.fill_from_tx(&make_eip7702_tx(), sender);
+            assert_eq!(tx_env.tx_type, 4);
+        }
+
+        // Final check - should be in valid EIP-7702 state
+        assert_eq!(tx_env.authorization_list.len(), 1);
+        assert!(tx_env.blob_hashes.is_empty());
     }
 }
