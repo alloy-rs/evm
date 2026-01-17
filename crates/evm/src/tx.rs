@@ -3,6 +3,26 @@
 //! This module provides traits and implementations for converting various transaction formats
 //! into a unified transaction environment ([`TxEnv`]) that the EVM can execute. The main purpose
 //! of these traits is to enable flexible transaction input while maintaining type safety.
+//!
+//! # Trait Hierarchy
+//!
+//! There are two conversion traits:
+//!
+//! - [`IntoTxEnv`]: Consumes `self` to produce a `TxEnv`. Types that already contain a `TxEnv` (or
+//!   can produce one without cloning) should implement this directly for zero-copy consumption.
+//!
+//! - [`ToTxEnv`]: Builds a `TxEnv` by borrowing from `&self`, typically requiring clones. This is
+//!   useful for types that don't own their transaction data.
+//!
+//! # Blanket Implementations
+//!
+//! There is a blanket impl `IntoTxEnv<Env> for &T where T: ToTxEnv<Env>` which allows references
+//! to types implementing `ToTxEnv` to be used where `IntoTxEnv` is required.
+//!
+//! However, there is intentionally **no blanket impl** for owned `T: ToTxEnv -> IntoTxEnv`. This
+//! allows downstream crates to implement `IntoTxEnv` directly for zero-copy consumption when the
+//! type owns its `TxEnv`. For example, a wrapper type like `WithTxEnv<TxEnv, T>` can implement
+//! `IntoTxEnv` to extract and return the inner `TxEnv` by value without cloning.
 
 use alloc::sync::Arc;
 use alloy_consensus::{
@@ -17,16 +37,23 @@ use alloy_eips::{
 use alloy_primitives::{Address, Bytes, TxKind};
 use revm::{context::TxEnv, context_interface::either::Either};
 
-/// Trait marking types that can be converted into a transaction environment.
+/// Trait for types that can be consumed to produce a transaction environment.
 ///
 /// This is the primary trait that enables flexible transaction input for the EVM. The EVM's
 /// associated type `Evm::Tx` must implement this trait, and the `transact` method accepts
 /// any type implementing [`IntoTxEnv<Evm::Tx>`](IntoTxEnv).
 ///
+/// # Zero-Copy Optimization
+///
+/// Unlike typical `Into`/`From` patterns, there is **no blanket impl** from [`ToTxEnv`] to
+/// `IntoTxEnv`. This design allows types that own a `TxEnv` to implement `IntoTxEnv` directly
+/// and return it without cloning. For example, a wrapper type like `WithTxEnv<TxEnv, T>` can
+/// implement `IntoTxEnv` to extract and return the inner `TxEnv` by value.
+///
 /// # Example
 ///
 /// ```ignore
-/// // Direct TxEnv usage
+/// // Direct TxEnv usage (no conversion needed)
 /// let tx_env = TxEnv { caller: address, gas_limit: 100_000, ... };
 /// evm.transact(tx_env)?;
 ///
@@ -39,7 +66,7 @@ use revm::{context::TxEnv, context_interface::either::Either};
 /// evm.transact(with_encoded)?;
 /// ```
 pub trait IntoTxEnv<TxEnv> {
-    /// Converts `self` into [`TxEnv`].
+    /// Converts `self` into a [`TxEnv`].
     fn into_tx_env(self) -> TxEnv;
 }
 
@@ -49,19 +76,41 @@ impl IntoTxEnv<Self> for TxEnv {
     }
 }
 
-/// A helper trait to allow implementing [`IntoTxEnv`] for types that build transaction environment
-/// by cloning data.
+/// A helper trait for building a transaction environment by borrowing from `&self`.
+///
+/// This trait is useful for types that need to clone data to produce a `TxEnv`. It is
+/// automatically implemented for references via `#[auto_impl(&)]`.
+///
+/// # Relationship with IntoTxEnv
+///
+/// There is a blanket impl `IntoTxEnv for &T where T: ToTxEnv` which allows references to
+/// types implementing `ToTxEnv` to be used where `IntoTxEnv` is required. However, there is
+/// intentionally **no blanket impl** for owned `T: ToTxEnv`. This allows:
+///
+/// - References to use `ToTxEnv` (which clones) automatically via `IntoTxEnv`
+/// - Owned types to implement `IntoTxEnv` directly for zero-copy consumption
+///
+/// For owned types that implement `ToTxEnv`, you should also implement `IntoTxEnv`:
+///
+/// ```ignore
+/// impl IntoTxEnv<TxEnv> for MyType {
+///     fn into_tx_env(self) -> TxEnv {
+///         // Either delegate to to_tx_env() or provide zero-copy implementation
+///         self.to_tx_env()
+///     }
+/// }
+/// ```
 #[auto_impl::auto_impl(&)]
 pub trait ToTxEnv<TxEnv> {
     /// Builds a [`TxEnv`] from `self`.
     fn to_tx_env(&self) -> TxEnv;
 }
 
-impl<T, TxEnv> IntoTxEnv<TxEnv> for T
+impl<T, Env> IntoTxEnv<Env> for &T
 where
-    T: ToTxEnv<TxEnv>,
+    T: ToTxEnv<Env> + ?Sized,
 {
-    fn into_tx_env(self) -> TxEnv {
+    fn into_tx_env(self) -> Env {
         self.to_tx_env()
     }
 }
@@ -75,6 +124,19 @@ where
         match self {
             Self::Left(l) => l.to_tx_env(),
             Self::Right(r) => r.to_tx_env(),
+        }
+    }
+}
+
+impl<L, R, TxEnv> IntoTxEnv<TxEnv> for Either<L, R>
+where
+    L: IntoTxEnv<TxEnv>,
+    R: IntoTxEnv<TxEnv>,
+{
+    fn into_tx_env(self) -> TxEnv {
+        match self {
+            Self::Left(l) => l.into_tx_env(),
+            Self::Right(r) => r.into_tx_env(),
         }
     }
 }
@@ -131,6 +193,12 @@ where
 impl<T, TxEnv: FromRecoveredTx<T>> ToTxEnv<TxEnv> for Recovered<T> {
     fn to_tx_env(&self) -> TxEnv {
         TxEnv::from_recovered_tx(self.inner(), self.signer())
+    }
+}
+
+impl<T, TxEnv: FromRecoveredTx<T>> IntoTxEnv<TxEnv> for Recovered<T> {
+    fn into_tx_env(self) -> TxEnv {
+        self.to_tx_env()
     }
 }
 
@@ -478,6 +546,12 @@ impl<T, TxEnv: FromTxWithEncoded<T>> ToTxEnv<TxEnv> for WithEncoded<Recovered<T>
     fn to_tx_env(&self) -> TxEnv {
         let recovered = &self.1;
         TxEnv::from_encoded_tx(recovered.inner(), recovered.signer(), self.encoded_bytes().clone())
+    }
+}
+
+impl<T, TxEnv: FromTxWithEncoded<T>> IntoTxEnv<TxEnv> for WithEncoded<Recovered<T>> {
+    fn into_tx_env(self) -> TxEnv {
+        self.to_tx_env()
     }
 }
 
