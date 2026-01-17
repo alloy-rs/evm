@@ -38,12 +38,10 @@ impl<Spec, BlockEnv> EvmEnv<Spec, BlockEnv> {
     ///
     /// Sets `limit_contract_code_size`, `limit_contract_initcode_size`,
     /// and `tx_gas_limit_cap` from the provided [`EvmLimitParams`].
-    ///
-    /// When `tx_gas_limit_cap` is `None`, it is translated to `u64::MAX` (no limit).
     pub fn with_limits(mut self, limits: EvmLimitParams) -> Self {
         self.cfg_env.limit_contract_code_size = Some(limits.max_code_size);
         self.cfg_env.limit_contract_initcode_size = Some(limits.max_initcode_size);
-        self.cfg_env.tx_gas_limit_cap = Some(limits.tx_gas_limit_cap.unwrap_or(u64::MAX));
+        self.cfg_env.tx_gas_limit_cap = limits.tx_gas_limit_cap;
         self
     }
 }
@@ -187,7 +185,7 @@ pub struct EvmLimitParams {
     /// EIP-3860 default: 49152 bytes (48KB, 2x `max_code_size`)
     pub max_initcode_size: usize,
     /// Transaction gas limit cap.
-    /// - `None` = no limit enforced (translated to `u64::MAX` in EVM)
+    /// - `None` = use spec default (respects fork-aware defaults like EIP-7825)
     /// - `Some(cap)` = transactions with `gas_limit > cap` are rejected
     pub tx_gas_limit_cap: Option<u64>,
 }
@@ -235,7 +233,7 @@ mod tests {
 
     #[test]
     fn test_evm_env_with_default_limits() {
-        // default() has tx_gas_limit_cap: None, which translates to u64::MAX.
+        // default() has tx_gas_limit_cap: None, which respects the spec default.
         let limits = EvmLimitParams::default();
         let evm_env: EvmEnv<SpecId> = EvmEnv::default().with_limits(limits);
 
@@ -244,7 +242,7 @@ mod tests {
             evm_env.cfg_env.max_initcode_size(),
             revm::primitives::eip3860::MAX_INITCODE_SIZE
         );
-        // None is translated to u64::MAX (no limit)
+        // None respects the spec's default (u64::MAX for pre-Osaka specs)
         assert_eq!(evm_env.cfg_env.tx_gas_limit_cap(), u64::MAX);
     }
 
@@ -261,16 +259,16 @@ mod tests {
     }
 
     #[test]
-    fn test_default_overrides_osaka_fork_default() {
-        // Even with Osaka spec, default() means "no limit",
-        // which overrides revm's fork-aware default.
+    fn test_default_respects_osaka_fork_default() {
+        // With Osaka spec and default() limits (tx_gas_limit_cap: None),
+        // the spec's fork-aware default is respected.
         use revm::context::{BlockEnv, CfgEnv};
 
         let limits = EvmLimitParams::default(); // tx_gas_limit_cap: None
         let cfg_env = CfgEnv::new_with_spec(SpecId::OSAKA);
         let evm_env = EvmEnv::new(cfg_env, BlockEnv::default()).with_limits(limits);
 
-        // None is translated to u64::MAX, overriding Osaka's default
-        assert_eq!(evm_env.cfg_env.tx_gas_limit_cap(), u64::MAX);
+        // None respects Osaka's default (EIP-7825 cap)
+        assert_eq!(evm_env.cfg_env.tx_gas_limit_cap(), revm::primitives::eip7825::TX_GAS_LIMIT_CAP);
     }
 }
