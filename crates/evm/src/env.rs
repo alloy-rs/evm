@@ -38,7 +38,7 @@ impl<Spec, BlockEnv> EvmEnv<Spec, BlockEnv> {
     ///
     /// Sets `limit_contract_code_size`, `limit_contract_initcode_size`,
     /// and `tx_gas_limit_cap` from the provided [`EvmLimitParams`].
-    pub fn with_limits(mut self, limits: EvmLimitParams) -> Self {
+    pub const fn with_limits(mut self, limits: EvmLimitParams) -> Self {
         self.cfg_env.limit_contract_code_size = Some(limits.max_code_size);
         self.cfg_env.limit_contract_initcode_size = Some(limits.max_initcode_size);
         self.cfg_env.tx_gas_limit_cap = limits.tx_gas_limit_cap;
