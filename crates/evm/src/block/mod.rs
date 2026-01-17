@@ -1,6 +1,8 @@
 //! Block execution abstraction.
 
-use crate::{Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, IntoTxParts};
+use crate::{
+    Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, IntoTxParts, RecoveredTx,
+};
 use alloc::{boxed::Box, vec::Vec};
 use alloy_eips::eip7685::Requests;
 use revm::{
@@ -261,11 +263,11 @@ pub trait BlockExecutor {
     ///
     /// # Parameters
     /// - `output`: The transaction output containing execution result and state changes
-    /// - `tx`: The original transaction (needed for receipt generation)
+    /// - `tx`: The original transaction (needed for receipt generation via [`RecoveredTx`])
     fn commit_transaction(
         &mut self,
         output: ResultAndState<<Self::Evm as Evm>::HaltReason>,
-        tx: impl ExecutableTx<Self>,
+        tx: impl RecoveredTx<Self::Transaction>,
     ) -> Result<u64, BlockExecutionError>;
 
     /// Applies any necessary changes after executing the block's transactions, completes execution

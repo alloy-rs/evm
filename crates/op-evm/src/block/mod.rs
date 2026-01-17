@@ -12,7 +12,7 @@ use alloy_evm::{
         StateChangePostBlockSource, StateChangeSource, StateDB, SystemCaller,
     },
     eth::receipt_builder::ReceiptBuilderCtx,
-    Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded,
+    Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, RecoveredTx, ToTxEnv,
 };
 use alloy_op_hardforks::{OpChainHardforks, OpHardforks};
 use alloy_primitives::{Bytes, B256};
@@ -72,11 +72,14 @@ pub struct OpBlockExecutor<Evm, R: OpReceiptBuilder, Spec> {
     pub receipts: Vec<R::Receipt>,
     /// Total gas used by executed transactions.
     pub gas_used: u64,
-    /// Da footprint.
+    /// DA footprint used by block.
     ///
     /// This is only set for blocks post-Jovian activation.
     /// See [DA footprint block limit spec](https://github.com/ethereum-optimism/specs/blob/main/specs/protocol/jovian/exec-engine.md#da-footprint-block-limit)
     pub da_footprint_used: u64,
+    /// Pending DA footprint for the current transaction (computed during execution, applied on
+    /// commit).
+    pending_tx_da_footprint: u64,
     /// Whether Regolith hardfork is active.
     pub is_regolith: bool,
     /// Utility to call system smart contracts.
@@ -101,6 +104,7 @@ where
             receipts: Vec::new(),
             gas_used: 0,
             da_footprint_used: 0,
+            pending_tx_da_footprint: 0,
             ctx,
         }
     }
@@ -136,10 +140,13 @@ where
     R: OpReceiptBuilder<Transaction: Transaction + Encodable2718, Receipt: TxReceipt>,
     Spec: OpHardforks,
 {
-    fn jovian_da_footprint_estimation(
+    fn jovian_da_footprint_estimation<T>(
         &mut self,
-        tx: &impl ExecutableTx<Self>,
-    ) -> Result<u64, BlockExecutionError> {
+        tx: &T,
+    ) -> Result<u64, BlockExecutionError>
+    where
+        T: RecoveredTx<R::Transaction> + ToTxEnv<E::Tx>,
+    {
         // Try to use the enveloped tx if it exists, otherwise use the encoded 2718 bytes
         let encoded = match tx.to_tx_env().encoded_bytes() {
             Some(encoded) => estimate_tx_compressed_size(encoded),
@@ -213,6 +220,9 @@ where
             .into());
         }
 
+        // Reset pending DA footprint
+        self.pending_tx_da_footprint = 0;
+
         if self.spec.is_jovian_active_at_timestamp(self.evm.block().timestamp().saturating_to())
             && !is_deposit
         {
@@ -228,11 +238,17 @@ where
                     }),
                 )));
             }
+
+            // Store for commit phase
+            self.pending_tx_da_footprint = tx_da_footprint;
         }
 
+        // Split into TxEnv and remainder for zero-copy optimization
+        let (tx_env, remainder) = tx.into_tx_parts();
+
         // Execute transaction and return the result
-        self.evm.transact(&tx).map_err(|err| {
-            let hash = tx.tx().trie_hash();
+        self.evm.transact(tx_env).map_err(|err| {
+            let hash = remainder.tx().trie_hash();
             BlockExecutionError::evm(err, hash)
         })
     }
@@ -240,7 +256,7 @@ where
     fn commit_transaction(
         &mut self,
         output: ResultAndState<<Self::Evm as Evm>::HaltReason>,
-        tx: impl ExecutableTx<Self>,
+        tx: impl RecoveredTx<R::Transaction>,
     ) -> Result<u64, BlockExecutionError> {
         let ResultAndState { result, state } = output;
         let is_deposit = tx.tx().ty() == DEPOSIT_TRANSACTION_TYPE;
@@ -261,14 +277,10 @@ where
         // append gas used
         self.gas_used += gas_used;
 
-        // Update DA footprint if Jovian is active
-        if self.spec.is_jovian_active_at_timestamp(self.evm.block().timestamp().saturating_to())
-            && !is_deposit
-        {
-            let tx_da_footprint = self.jovian_da_footprint_estimation(&tx)?;
-            // Add to DA footprint used
-            self.da_footprint_used = self.da_footprint_used.saturating_add(tx_da_footprint);
-        }
+        // Apply pending DA footprint (computed during execute_transaction_without_commit)
+        self.da_footprint_used =
+            self.da_footprint_used.saturating_add(self.pending_tx_da_footprint);
+        self.pending_tx_da_footprint = 0;
 
         self.receipts.push(
             match self.receipt_builder.build_receipt(ReceiptBuilderCtx {

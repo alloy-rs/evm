@@ -146,7 +146,7 @@ where
     fn commit_transaction(
         &mut self,
         output: ResultAndState<<Self::Evm as Evm>::HaltReason>,
-        tx: impl ExecutableTx<Self>,
+        tx: impl RecoveredTx<R::Transaction>,
     ) -> Result<u64, BlockExecutionError> {
         let ResultAndState { result, state } = output;
 
