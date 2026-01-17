@@ -13,7 +13,7 @@ use crate::{
         BlockExecutorFor, BlockValidationError, ExecutableTx, OnStateHook,
         StateChangePostBlockSource, StateChangeSource, SystemCaller,
     },
-    Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded,
+    Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, RecoveredTx,
 };
 use alloc::{borrow::Cow, boxed::Box, vec::Vec};
 use alloy_consensus::{Header, Transaction, TxReceipt};
@@ -133,9 +133,12 @@ where
             .into());
         }
 
+        // Split into TxEnv and remainder for zero-copy optimization
+        let (tx_env, remainder) = tx.into_tx_parts();
+
         // Execute transaction and return the result
-        self.evm.transact(&tx).map_err(|err| {
-            let hash = tx.tx().trie_hash();
+        self.evm.transact(tx_env).map_err(|err| {
+            let hash = remainder.tx().trie_hash();
             BlockExecutionError::evm(err, hash)
         })
     }

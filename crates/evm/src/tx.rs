@@ -530,6 +530,12 @@ impl<Eip4844: AsRef<TxEip4844>> FromRecoveredTx<EthereumTxEnvelope<Eip4844>> for
 /// 1. The EVM needs to consume the `TxEnv` for execution
 /// 2. The executor needs access to the original transaction for receipt generation
 ///
+/// # Supertraits
+///
+/// This trait requires [`ToTxEnv`] and [`RecoveredTx`] as supertraits, ensuring that types
+/// implementing this trait can be used interchangeably with the traditional approach of
+/// borrowing for `TxEnv` conversion and transaction access.
+///
 /// # Example
 ///
 /// ```ignore
@@ -547,7 +553,7 @@ impl<Eip4844: AsRef<TxEip4844>> FromRecoveredTx<EthereumTxEnvelope<Eip4844>> for
 ///     }
 /// }
 /// ```
-pub trait IntoTxParts<TxEnv, Tx> {
+pub trait IntoTxParts<TxEnv, Tx>: ToTxEnv<TxEnv> + RecoveredTx<Tx> {
     /// The remainder type that still provides access to the original transaction.
     type Remainder: RecoveredTx<Tx>;
 

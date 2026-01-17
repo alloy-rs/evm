@@ -1,9 +1,6 @@
 //! Block execution abstraction.
 
-use crate::{
-    Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, IntoTxParts, RecoveredTx,
-    ToTxEnv,
-};
+use crate::{Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, IntoTxParts};
 use alloc::{boxed::Box, vec::Vec};
 use alloy_eips::eip7685::Requests;
 use revm::{
@@ -55,12 +52,13 @@ impl<T> Default for BlockExecutionResult<T> {
 
 /// Helper trait to encapsulate requirements for a type to be used as input for [`BlockExecutor`].
 ///
-/// This trait combines the requirements for a transaction to be executable by a block executor:
-/// - Must be convertible to the EVM's transaction environment via [`ToTxEnv`]
-/// - Must be decomposable into transaction environment and remainder via [`IntoTxParts`]
-/// - Must provide access to the transaction and signer via [`RecoveredTx`]
+/// This trait combines the requirements for a transaction to be executable by a block executor
+/// via [`IntoTxParts`], which provides:
+/// - Conversion to the EVM's transaction environment via [`ToTxEnv`]
+/// - Access to the transaction and signer via [`RecoveredTx`]
+/// - Zero-copy decomposition into `(TxEnv, Remainder)` for efficient execution
 ///
-/// This trait is automatically implemented for any type that meets these requirements.
+/// This trait is automatically implemented for any type that implements [`IntoTxParts`].
 /// Common implementations include:
 /// - [`Recovered<T>`](alloy_consensus::transaction::Recovered) where `T` is a transaction type
 /// - [`WithEncoded<Recovered<T>>`](alloy_eips::eip2718::WithEncoded) for transactions with encoded
@@ -72,19 +70,15 @@ impl<T> Default for BlockExecutionResult<T> {
 ///
 /// # Zero-Copy Optimization
 ///
-/// Through [`IntoTxParts`], types that own a pre-built `TxEnv` can provide it without cloning,
-/// while the remainder is used for receipt building. This enables efficient block execution
-/// for scenarios where transactions are pre-processed.
+/// Through [`IntoTxParts::into_tx_parts`], types that own a pre-built `TxEnv` can provide it
+/// without cloning, while the remainder is used for receipt building. This enables efficient
+/// block execution for scenarios where transactions are pre-processed.
 pub trait ExecutableTx<E: BlockExecutor + ?Sized>:
-    ToTxEnv<<E::Evm as Evm>::Tx>
-    + IntoTxParts<<E::Evm as Evm>::Tx, E::Transaction>
-    + RecoveredTx<E::Transaction>
+    IntoTxParts<<E::Evm as Evm>::Tx, E::Transaction>
 {
 }
 impl<E: BlockExecutor + ?Sized, T> ExecutableTx<E> for T where
-    T: ToTxEnv<<E::Evm as Evm>::Tx>
-        + IntoTxParts<<E::Evm as Evm>::Tx, E::Transaction>
-        + RecoveredTx<E::Transaction>
+    T: IntoTxParts<<E::Evm as Evm>::Tx, E::Transaction>
 {
 }
 
