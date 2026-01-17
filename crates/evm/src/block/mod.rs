@@ -1,6 +1,9 @@
 //! Block execution abstraction.
 
-use crate::{Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, RecoveredTx, ToTxEnv};
+use crate::{
+    Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, IntoTxParts, RecoveredTx,
+    ToTxEnv,
+};
 use alloc::{boxed::Box, vec::Vec};
 use alloy_eips::eip7685::Requests;
 use revm::{
@@ -54,24 +57,34 @@ impl<T> Default for BlockExecutionResult<T> {
 ///
 /// This trait combines the requirements for a transaction to be executable by a block executor:
 /// - Must be convertible to the EVM's transaction environment via [`ToTxEnv`]
+/// - Must be decomposable into transaction environment and remainder via [`IntoTxParts`]
 /// - Must provide access to the transaction and signer via [`RecoveredTx`]
-/// - Must be [`Copy`] for efficient handling during block execution (the expectation here is that
-///   this always passed as & reference)
 ///
 /// This trait is automatically implemented for any type that meets these requirements.
 /// Common implementations include:
 /// - [`Recovered<T>`](alloy_consensus::transaction::Recovered) where `T` is a transaction type
 /// - [`WithEncoded<Recovered<T>>`](alloy_eips::eip2718::WithEncoded) for transactions with encoded
 ///   bytes
+/// - References to the above types
 ///
 /// The trait ensures that the block executor can both execute the transaction in the EVM
 /// and access the original transaction data for receipt generation.
+///
+/// # Zero-Copy Optimization
+///
+/// Through [`IntoTxParts`], types that own a pre-built `TxEnv` can provide it without cloning,
+/// while the remainder is used for receipt building. This enables efficient block execution
+/// for scenarios where transactions are pre-processed.
 pub trait ExecutableTx<E: BlockExecutor + ?Sized>:
-    ToTxEnv<<E::Evm as Evm>::Tx> + RecoveredTx<E::Transaction>
+    ToTxEnv<<E::Evm as Evm>::Tx>
+    + IntoTxParts<<E::Evm as Evm>::Tx, E::Transaction>
+    + RecoveredTx<E::Transaction>
 {
 }
 impl<E: BlockExecutor + ?Sized, T> ExecutableTx<E> for T where
-    T: ToTxEnv<<E::Evm as Evm>::Tx> + RecoveredTx<E::Transaction>
+    T: ToTxEnv<<E::Evm as Evm>::Tx>
+        + IntoTxParts<<E::Evm as Evm>::Tx, E::Transaction>
+        + RecoveredTx<E::Transaction>
 {
 }
 

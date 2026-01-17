@@ -513,6 +513,94 @@ impl<Eip4844: AsRef<TxEip4844>> FromRecoveredTx<EthereumTxEnvelope<Eip4844>> for
     }
 }
 
+/// Trait for types that can be decomposed into a transaction environment and a remainder.
+///
+/// This trait enables zero-copy consumption of the transaction environment while retaining
+/// access to the original transaction data needed for receipt building. It follows the
+/// [`into_parts()`](https://doc.rust-lang.org/std/io/struct.BufWriter.html#method.into_parts)
+/// pattern common in the Rust ecosystem.
+///
+/// # Design
+///
+/// The trait splits a transaction into two parts:
+/// - `TxEnv`: The transaction environment consumed by the EVM (can be zero-copy for owned types)
+/// - `Remainder`: Retains access to the original transaction via [`RecoveredTx`]
+///
+/// This is particularly useful in block execution where:
+/// 1. The EVM needs to consume the `TxEnv` for execution
+/// 2. The executor needs access to the original transaction for receipt generation
+///
+/// # Example
+///
+/// ```ignore
+/// // A wrapper type that owns both TxEnv and the original transaction
+/// struct WithTxEnv<E, T> {
+///     tx_env: E,
+///     tx: T,
+/// }
+///
+/// impl<E, T: RecoveredTx<Tx>, Tx> IntoTxParts<E, Tx> for WithTxEnv<E, Recovered<T>> {
+///     type Remainder = Recovered<T>;
+///
+///     fn into_tx_parts(self) -> (E, Self::Remainder) {
+///         (self.tx_env, self.tx)  // Zero-copy extraction
+///     }
+/// }
+/// ```
+pub trait IntoTxParts<TxEnv, Tx> {
+    /// The remainder type that still provides access to the original transaction.
+    type Remainder: RecoveredTx<Tx>;
+
+    /// Decomposes `self` into a transaction environment and remainder.
+    ///
+    /// The `TxEnv` can be consumed by the EVM, while the remainder provides
+    /// access to the original transaction data via [`RecoveredTx`].
+    fn into_tx_parts(self) -> (TxEnv, Self::Remainder);
+}
+
+/// Blanket implementation for references - clones the TxEnv, borrows the remainder.
+impl<'a, T, TxEnv, Tx> IntoTxParts<TxEnv, Tx> for &'a T
+where
+    T: ToTxEnv<TxEnv> + RecoveredTx<Tx>,
+    &'a T: RecoveredTx<Tx>,
+{
+    type Remainder = &'a T;
+
+    fn into_tx_parts(self) -> (TxEnv, Self::Remainder) {
+        (self.to_tx_env(), self)
+    }
+}
+
+/// Implementation for `Recovered<T>` - clones TxEnv but allows owned remainder.
+impl<T, TxEnv> IntoTxParts<TxEnv, T> for Recovered<T>
+where
+    TxEnv: FromRecoveredTx<T>,
+{
+    type Remainder = Self;
+
+    fn into_tx_parts(self) -> (TxEnv, Self::Remainder) {
+        let tx_env = TxEnv::from_recovered_tx(self.inner(), self.signer());
+        (tx_env, self)
+    }
+}
+
+/// Implementation for `WithEncoded<Recovered<T>>`.
+impl<T, TxEnv> IntoTxParts<TxEnv, T> for WithEncoded<Recovered<T>>
+where
+    TxEnv: FromTxWithEncoded<T>,
+{
+    type Remainder = Self;
+
+    fn into_tx_parts(self) -> (TxEnv, Self::Remainder) {
+        let tx_env = TxEnv::from_encoded_tx(
+            self.value().inner(),
+            self.value().signer(),
+            self.encoded_bytes().clone(),
+        );
+        (tx_env, self)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -540,6 +628,7 @@ mod tests {
 
     const fn assert_env<T: IntoTxEnv<MyTxEnv>>() {}
     const fn assert_recoverable<T: RecoveredTx<MyTransaction>>() {}
+    const fn assert_into_tx_parts<T: IntoTxParts<MyTxEnv, MyTransaction>>() {}
 
     #[test]
     const fn test_into_tx_env() {
@@ -555,5 +644,31 @@ mod tests {
 
         assert_recoverable::<Recovered<MyTransaction>>();
         assert_recoverable::<WithEncoded<Recovered<MyTransaction>>>();
+    }
+
+    #[test]
+    const fn test_into_tx_parts() {
+        // Owned types
+        assert_into_tx_parts::<Recovered<MyTransaction>>();
+        assert_into_tx_parts::<WithEncoded<Recovered<MyTransaction>>>();
+
+        // References (via blanket impl)
+        assert_into_tx_parts::<&Recovered<MyTransaction>>();
+        assert_into_tx_parts::<&WithEncoded<Recovered<MyTransaction>>>();
+    }
+
+    #[test]
+    fn test_into_tx_parts_split() {
+        let recovered = Recovered::new_unchecked(MyTransaction, Address::ZERO);
+
+        // Split into parts
+        let (tx_env, remainder): (MyTxEnv, _) = recovered.into_tx_parts();
+
+        // Remainder still provides RecoveredTx access
+        let _ = remainder.inner();
+        let _ = remainder.signer();
+
+        // Suppress unused warning
+        let _ = tx_env;
     }
 }
