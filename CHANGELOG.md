@@ -5,12 +5,274 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.26.3](https://github.com/alloy-rs/evm/releases/tag/v0.26.3) - 2026-01-16
+
+### Bug Fixes
+
+- `Default` for `BlockExecutionResult` ([#255](https://github.com/alloy-rs/evm/issues/255))
+
+## [0.26.1](https://github.com/alloy-rs/evm/releases/tag/v0.26.1) - 2026-01-16
+
+### Features
+
+- [block] Add receipts() helper to BlockExecutor trait ([#254](https://github.com/alloy-rs/evm/issues/254))
+
+### Miscellaneous Tasks
+
+- Release 0.26.1
+
+## [0.26.0](https://github.com/alloy-rs/evm/releases/tag/v0.26.0) - 2026-01-16
+
+### Features
+
+- Staging revm v34.0.0 ([#242](https://github.com/alloy-rs/evm/issues/242))
+- Add tx_count_hint to EthBlockExecutionCtx ([#251](https://github.com/alloy-rs/evm/issues/251))
+- Expose more helpers on EvmInternals ([#246](https://github.com/alloy-rs/evm/issues/246))
+- Add `gmp` feature to revm ([#115](https://github.com/alloy-rs/evm/issues/115))
+
+### Miscellaneous Tasks
+
+- Release 0.26.0
+
+## [0.25.2](https://github.com/alloy-rs/evm/releases/tag/v0.25.2) - 2025-12-12
+
+### Features
+
+- Add `is_static` to PrecompileInput ([#245](https://github.com/alloy-rs/evm/issues/245))
+
+### Miscellaneous Tasks
+
+- Release 0.25.2
+
+## [0.25.1](https://github.com/alloy-rs/evm/releases/tag/v0.25.1) - 2025-12-11
+
+### Features
+
+- Add extra_data to EthBlockExecutionCtx ([#244](https://github.com/alloy-rs/evm/issues/244))
+- [error] Add gas limit fns to `InvalidTxError` trait ([#235](https://github.com/alloy-rs/evm/issues/235))
+- Impl `RecoveredTx` for `Recovered<Arc<T>>` ([#243](https://github.com/alloy-rs/evm/issues/243))
+
+### Miscellaneous Tasks
+
+- Release 0.25.1
+
+## [0.25.0](https://github.com/alloy-rs/evm/releases/tag/v0.25.0) - 2025-12-10
+
+### Dependencies
+
+- Bump op-alloy to 0.23 ([#241](https://github.com/alloy-rs/evm/issues/241))
+
+### Features
+
+- [evm] `FromRecoveredTx` `FromTxWithEncoded` traits impl w/ `TxEip4844Variant` ([#230](https://github.com/alloy-rs/evm/issues/230))
+
+### Miscellaneous Tasks
+
+- Release 0.25.0
+- Fix typo in comment ([#239](https://github.com/alloy-rs/evm/issues/239))
+- Fix minor grammar mistakes in EVM system call docs ([#200](https://github.com/alloy-rs/evm/issues/200))
+
+### Other
+
+- [Feature] Relax trait bound `EVM::DB = &'db mut State<DB>` for `BlockExecutor` impls ([#234](https://github.com/alloy-rs/evm/issues/234))
+
+## [0.24.2](https://github.com/alloy-rs/evm/releases/tag/v0.24.2) - 2025-11-14
+
+### Documentation
+
+- Minor improvement for docs ([#215](https://github.com/alloy-rs/evm/issues/215))
+
+### Features
+
+- Add set_balance ([#228](https://github.com/alloy-rs/evm/issues/228))
+
+### Miscellaneous Tasks
+
+- Release 0.24.2
+- Relax bounds ([#231](https://github.com/alloy-rs/evm/issues/231))
+
+## [0.24.1](https://github.com/alloy-rs/evm/releases/tag/v0.24.1) - 2025-11-12
+
+### Dependencies
+
+- Bump to revm 33 ([#226](https://github.com/alloy-rs/evm/issues/226))
+
+### Miscellaneous Tasks
+
+- Release 0.24.1
+
+## [0.24.0](https://github.com/alloy-rs/evm/releases/tag/v0.24.0) - 2025-11-12
+
+### Bug Fixes
+
+- Cleanup op features ([#224](https://github.com/alloy-rs/evm/issues/224))
+
+### Dependencies
+
+- Bump revm v32.0.0 ([#223](https://github.com/alloy-rs/evm/issues/223))
+- Bump revm v30.0.2 ([#222](https://github.com/alloy-rs/evm/issues/222))
+
+### Features
+
+- Bumps nonce of account ([#221](https://github.com/alloy-rs/evm/issues/221))
+- [evm] Moving rpc conversion traits from Reth ([#220](https://github.com/alloy-rs/evm/issues/220))
+- [evm] Add specializations for `Signed` types for `TxEnv`  ([#218](https://github.com/alloy-rs/evm/issues/218))
+
+### Miscellaneous Tasks
+
+- Release 0.24.0
+
+## [0.23.2](https://github.com/alloy-rs/evm/releases/tag/v0.23.2) - 2025-11-06
+
+### Features
+
+- [evm] Add specializations for `Signed` types for `OpTransaction<TxEnv>` ([#209](https://github.com/alloy-rs/evm/issues/209))
+- Add transient storage helpers to `EvmInternals` ([#216](https://github.com/alloy-rs/evm/issues/216))
+
+### Miscellaneous Tasks
+
+- Release 0.23.2
+
+## [0.23.1](https://github.com/alloy-rs/evm/releases/tag/v0.23.1) - 2025-11-05
+
+### Features
+
+- Add additional internals fns ([#214](https://github.com/alloy-rs/evm/issues/214))
+
+### Miscellaneous Tasks
+
+- Release 0.23.1
+
+## [0.23.0](https://github.com/alloy-rs/evm/releases/tag/v0.23.0) - 2025-11-03
+
+### Dependencies
+
+- Bump revm ([#211](https://github.com/alloy-rs/evm/issues/211))
+
+### Features
+
+- Add extend_precompiles helper methods ([#208](https://github.com/alloy-rs/evm/issues/208))
+
+### Miscellaneous Tasks
+
+- Release 0.23.0
+- Make `clippy::precedence` happy ([#210](https://github.com/alloy-rs/evm/issues/210))
+
+## [0.22.6](https://github.com/alloy-rs/evm/releases/tag/v0.22.6) - 2025-10-29
+
+### Dependencies
+
+- Bump op-alloy 0.22 ([#206](https://github.com/alloy-rs/evm/issues/206))
+- [deps] Update `alloy-hardforks` deps with the new Jovian timestamps ([#205](https://github.com/alloy-rs/evm/issues/205))
+- [jovian/timestamps] Update `alloy-hardforks` dep ([#203](https://github.com/alloy-rs/evm/issues/203))
+
+### Features
+
+- [precompiles/jovian] Add jovian precompiles to `alloy-evm` ([#204](https://github.com/alloy-rs/evm/issues/204))
+
+### Miscellaneous Tasks
+
+- Release 0.22.6
+
+## [0.22.5](https://github.com/alloy-rs/evm/releases/tag/v0.22.5) - 2025-10-23
+
+### Bug Fixes
+
+- Blob fee calc ([#202](https://github.com/alloy-rs/evm/issues/202))
+
+### Miscellaneous Tasks
+
+- Release 0.22.5
+
+## [0.22.4](https://github.com/alloy-rs/evm/releases/tag/v0.22.4) - 2025-10-22
+
+### Bug Fixes
+
+- [jovian] Fix fork activation timestamp and query the da footprint from the database cache if available ([#201](https://github.com/alloy-rs/evm/issues/201))
+
+### Miscellaneous Tasks
+
+- Release 0.22.4
+- Fix typo in crates/evm/src/block/system_calls/eip7251.rs ([#199](https://github.com/alloy-rs/evm/issues/199))
+
+## [0.22.3](https://github.com/alloy-rs/evm/releases/tag/v0.22.3) - 2025-10-14
+
+### Dependencies
+
+- Bump op-alloy 0.21 ([#198](https://github.com/alloy-rs/evm/issues/198))
+
+### Miscellaneous Tasks
+
+- Release 0.22.3
+
+## [0.22.2](https://github.com/alloy-rs/evm/releases/tag/v0.22.2) - 2025-10-14
+
+### Bug Fixes
+
+- Correctly fetch precompiles ([#197](https://github.com/alloy-rs/evm/issues/197))
+
+### Miscellaneous Tasks
+
+- Release 0.22.2
+
+## [0.22.1](https://github.com/alloy-rs/evm/releases/tag/v0.22.1) - 2025-10-14
+
+### Bug Fixes
+
+- Propagate BlockEnv AT ([#195](https://github.com/alloy-rs/evm/issues/195))
+
+### Dependencies
+
+- Bump alloy-hardforks ([#196](https://github.com/alloy-rs/evm/issues/196))
+
+### Miscellaneous Tasks
+
+- Release 0.22.1
+
+## [0.22.0](https://github.com/alloy-rs/evm/releases/tag/v0.22.0) - 2025-10-14
+
+### Features
+
+- Extensions for `EvmEnv` ([#193](https://github.com/alloy-rs/evm/issues/193))
+- [jovian] Add da footprint block limit. ([#183](https://github.com/alloy-rs/evm/issues/183))
+
+### Miscellaneous Tasks
+
+- Release 0.22.0
+- Make `EthBlockExecutor` fields public ([#191](https://github.com/alloy-rs/evm/issues/191))
+- Expose asm-keccak revm feature ([#188](https://github.com/alloy-rs/evm/issues/188))
+
+## [0.21.2](https://github.com/alloy-rs/evm/releases/tag/v0.21.2) - 2025-10-01
+
+### Features
+
+- Add next block constructors for `EvmEnv` ([#182](https://github.com/alloy-rs/evm/issues/182))
+- Add payload constructors for `EvmEnv` ([#177](https://github.com/alloy-rs/evm/issues/177))
+- Add constructor of `EvmEnv` for a block ([#173](https://github.com/alloy-rs/evm/issues/173))
+
+### Miscellaneous Tasks
+
+- Release 0.21.2
+- Restore exports of spec helpers ([#189](https://github.com/alloy-rs/evm/issues/189))
+- Remove doc_auto_cfg ([#186](https://github.com/alloy-rs/evm/issues/186))
+- Add precompileid helper ([#185](https://github.com/alloy-rs/evm/issues/185))
+- Remove unused script/clippy.toml ([#181](https://github.com/alloy-rs/evm/issues/181))
+- Make OpBlockExecutor fields pub ([#178](https://github.com/alloy-rs/evm/issues/178))
+
+### Refactor
+
+- Remove London boundary hardfork branch in `EvmEnv` constructor for next block ([#184](https://github.com/alloy-rs/evm/issues/184))
+
 ## [0.21.1](https://github.com/alloy-rs/evm/releases/tag/v0.21.1) - 2025-09-17
 
 ### Features
 
 - Add `EthereumHardforks` => `SpecId` and `OpHardforks` => `OpSpecId` mapping ([#174](https://github.com/alloy-rs/evm/issues/174))
 - Add `BlockValidationError::Other` ([#176](https://github.com/alloy-rs/evm/issues/176))
+
+### Miscellaneous Tasks
+
+- Release 0.21.1
 
 ## [0.21.0](https://github.com/alloy-rs/evm/releases/tag/v0.21.0) - 2025-09-12
 

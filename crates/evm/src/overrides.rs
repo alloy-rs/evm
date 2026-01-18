@@ -3,7 +3,7 @@
 //! This module provides helper functions for RPC implementations, including:
 //! - Block and state overrides
 
-use alloc::collections::BTreeMap;
+use alloc::{boxed::Box, collections::BTreeMap};
 use alloy_primitives::{keccak256, map::HashMap, Address, B256, U256};
 use alloy_rpc_types_eth::{
     state::{AccountOverride, StateOverride},
@@ -144,7 +144,8 @@ where
 
     // Create a new account marked as touched
     let mut acc = revm::state::Account {
-        info,
+        info: info.clone(),
+        original_info: Box::new(info),
         status: AccountStatus::Touched,
         storage: Default::default(),
         transaction_id: 0,

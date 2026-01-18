@@ -21,10 +21,12 @@ alloy-consensus.workspace = true
 alloy-primitives.workspace = true
 
 alloy-op-hardforks.workspace = true
-op-alloy-consensus.workspace = true
+op-alloy.workspace = true
 
 revm.workspace = true
 op-revm.workspace = true
+
+thiserror.workspace = true
 
 auto_impl.workspace = true
 
@@ -35,11 +37,14 @@ test-case.workspace = true
 [features]
 default = ["std"]
 std = [
-    "alloy-primitives/std",
-    "revm/std",
-    "alloy-evm/std",
-    "op-revm/std",
-    "alloy-consensus/std",
-    "alloy-eips/std",
-    "op-alloy-consensus/std"
+	"alloy-primitives/std",
+	"revm/std",
+	"alloy-evm/std",
+	"op-revm/std",
+	"alloy-consensus/std",
+	"alloy-eips/std",
+	"op-alloy/std",
+	"thiserror/std"
 ]
+gmp = ["alloy-evm/gmp"]
+asm-keccak = ["alloy-evm/asm-keccak", "alloy-primitives/asm-keccak", "revm/asm-keccak"]

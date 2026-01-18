@@ -1,7 +1,8 @@
 //! Ethereum EVM implementation.
 
-pub use spec_id::{spec, spec_by_timestamp_and_block_number};
+pub use env::NextEvmEnvAttributes;
 
+#[cfg(feature = "op")]
 pub(crate) use env::EvmEnvInput;
 
 use crate::{env::EvmEnv, evm::EvmFactory, precompiles::PrecompilesMap, Database, Evm};
@@ -30,7 +31,7 @@ pub mod receipt_builder;
 pub mod spec;
 
 mod env;
-mod spec_id;
+pub(crate) mod spec_id;
 
 /// The Ethereum EVM context type.
 pub type EthEvmContext<DB> = Context<BlockEnv, TxEnv, CfgEnv, DB>;
@@ -48,7 +49,7 @@ pub struct EthEvmBuilder<DB: Database, I = NoOpInspector> {
 
 impl<DB: Database> EthEvmBuilder<DB, NoOpInspector> {
     /// Creates a builder from the provided `EvmEnv` and database.
-    pub const fn new(db: DB, env: EvmEnv) -> Self {
+    pub fn new(db: DB, env: EvmEnv) -> Self {
         Self {
             db,
             block_env: env.block_env,
@@ -205,6 +206,7 @@ where
     type Error = EVMError<DB::Error>;
     type HaltReason = HaltReason;
     type Spec = SpecId;
+    type BlockEnv = BlockEnv;
     type Precompiles = PRECOMPILE;
     type Inspector = I;
 
@@ -271,6 +273,7 @@ impl EvmFactory for EthEvmFactory {
     type Error<DBError: core::error::Error + Send + Sync + 'static> = EVMError<DBError>;
     type HaltReason = HaltReason;
     type Spec = SpecId;
+    type BlockEnv = BlockEnv;
     type Precompiles = PrecompilesMap;
 
     fn create_evm<DB: Database>(&self, db: DB, input: EvmEnv) -> Self::Evm<DB, NoOpInspector> {

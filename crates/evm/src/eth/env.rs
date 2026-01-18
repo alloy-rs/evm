@@ -28,17 +28,40 @@ impl EvmEnv<SpecId> {
         Self::for_eth(EvmEnvInput::from_block_header(header), chain_spec, chain_id, blob_params)
     }
 
+    /// Create a new `EvmEnv` with [`SpecId`] from a parent block `header`, `chain_id`, `chain_spec`
+    /// and optional `blob_params`.
+    ///
+    /// # Arguments
+    ///
+    /// * `header` - The parent block to make the env out of.
+    /// * `base_fee_per_gas` - Base fee per gas for the next block.
+    /// * `chain_spec` - The chain hardfork description, must implement [`EthereumHardforks`].
+    /// * `chain_id` - The chain identifier.
+    /// * `blob_params` - Optional parameters that sets limits on gas and count for blobs.
+    pub fn for_eth_next_block(
+        header: impl BlockHeader,
+        attributes: NextEvmEnvAttributes,
+        base_fee_per_gas: u64,
+        chain_spec: impl EthereumHardforks,
+        chain_id: ChainId,
+        blob_params: Option<BlobParams>,
+    ) -> Self {
+        Self::for_eth(
+            EvmEnvInput::for_next(header, attributes, base_fee_per_gas, blob_params),
+            chain_spec,
+            chain_id,
+            blob_params,
+        )
+    }
+
     fn for_eth(
         input: EvmEnvInput,
         chain_spec: impl EthereumHardforks,
         chain_id: ChainId,
         blob_params: Option<BlobParams>,
     ) -> Self {
-        let spec = crate::eth::spec_by_timestamp_and_block_number(
-            &chain_spec,
-            input.timestamp,
-            input.height,
-        );
+        let spec =
+            crate::spec_by_timestamp_and_block_number(&chain_spec, input.timestamp, input.number);
         let mut cfg_env = CfgEnv::new_with_spec(spec).with_chain_id(chain_id);
 
         if let Some(blob_params) = &blob_params {
@@ -57,10 +80,10 @@ impl EvmEnv<SpecId> {
                 BlobExcessGasAndPrice { excess_blob_gas, blob_gasprice }
             });
 
-        let is_merge_active = chain_spec.is_paris_active_at_block(input.height);
+        let is_merge_active = chain_spec.is_paris_active_at_block(input.number);
 
         let block_env = BlockEnv {
-            number: U256::from(input.height),
+            number: U256::from(input.number),
             beneficiary: input.beneficiary,
             timestamp: U256::from(input.timestamp),
             difficulty: if is_merge_active { U256::ZERO } else { input.difficulty },
@@ -76,7 +99,7 @@ impl EvmEnv<SpecId> {
 
 pub(crate) struct EvmEnvInput {
     pub(crate) timestamp: BlockTimestamp,
-    pub(crate) height: BlockNumber,
+    pub(crate) number: BlockNumber,
     pub(crate) beneficiary: Address,
     pub(crate) mix_hash: Option<B256>,
     pub(crate) difficulty: U256,
@@ -89,7 +112,7 @@ impl EvmEnvInput {
     pub(crate) fn from_block_header(header: impl BlockHeader) -> Self {
         Self {
             timestamp: header.timestamp(),
-            height: header.number(),
+            number: header.number(),
             beneficiary: header.beneficiary(),
             mix_hash: header.mix_hash(),
             difficulty: header.difficulty(),
@@ -98,6 +121,45 @@ impl EvmEnvInput {
             base_fee_per_gas: header.base_fee_per_gas().unwrap_or_default(),
         }
     }
+
+    pub(crate) fn for_next(
+        parent: impl BlockHeader,
+        attributes: NextEvmEnvAttributes,
+        base_fee_per_gas: u64,
+        blob_params: Option<BlobParams>,
+    ) -> Self {
+        Self {
+            timestamp: attributes.timestamp,
+            number: parent.number() + 1,
+            beneficiary: attributes.suggested_fee_recipient,
+            mix_hash: Some(attributes.prev_randao),
+            difficulty: U256::ZERO,
+            gas_limit: attributes.gas_limit,
+            // If header does not have blob fields, but we have blob params, assume that excess blob
+            // gas is 0.
+            excess_blob_gas: parent
+                .maybe_next_block_excess_blob_gas(blob_params)
+                .or_else(|| blob_params.map(|_| 0)),
+            base_fee_per_gas,
+        }
+    }
+}
+
+/// Represents additional attributes required to configure the next block.
+///
+/// This struct contains all the information needed to build a new block that cannot be
+/// derived from the parent block header alone. These attributes are typically provided
+/// by the consensus layer (CL) through the Engine API during payload building.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NextEvmEnvAttributes {
+    /// The timestamp of the next block.
+    pub timestamp: u64,
+    /// The suggested fee recipient for the next block.
+    pub suggested_fee_recipient: Address,
+    /// The randomness value for the next block.
+    pub prev_randao: B256,
+    /// Block gas limit.
+    pub gas_limit: u64,
 }
 
 #[cfg(feature = "engine")]
@@ -129,7 +191,7 @@ mod payload {
         pub(crate) fn from_payload(payload: &ExecutionPayload) -> Self {
             Self {
                 timestamp: payload.timestamp(),
-                height: payload.block_number(),
+                number: payload.block_number(),
                 beneficiary: payload.fee_recipient(),
                 mix_hash: Some(payload.as_v1().prev_randao),
                 difficulty: payload.as_v1().prev_randao.into(),
