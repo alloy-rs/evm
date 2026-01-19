@@ -120,7 +120,7 @@ where
     fn execute_transaction_without_commit_with_parts(
         &mut self,
         tx_env: <Self::Evm as Evm>::Tx,
-        tx: &impl RecoveredTx<R::Transaction>,
+        tx: impl RecoveredTx<R::Transaction>,
     ) -> Result<ResultAndState<<Self::Evm as Evm>::HaltReason>, BlockExecutionError> {
         // The sum of the transaction's gas limit, Tg, and the gas utilized in this block prior,
         // must be no greater than the block's gasLimit.

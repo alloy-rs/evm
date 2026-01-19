@@ -142,7 +142,7 @@ where
     fn jovian_da_footprint_estimation(
         &mut self,
         tx_env: &E::Tx,
-        tx: &impl RecoveredTx<R::Transaction>,
+        tx: impl RecoveredTx<R::Transaction>,
     ) -> Result<u64, BlockExecutionError> {
         // Try to use the enveloped tx if it exists, otherwise use the encoded 2718 bytes
         let encoded = match tx_env.encoded_bytes() {
@@ -203,7 +203,7 @@ where
     fn execute_transaction_without_commit_with_parts(
         &mut self,
         tx_env: <Self::Evm as Evm>::Tx,
-        tx: &impl RecoveredTx<R::Transaction>,
+        tx: impl RecoveredTx<R::Transaction>,
     ) -> Result<ResultAndState<<Self::Evm as Evm>::HaltReason>, BlockExecutionError> {
         let is_deposit = tx.tx().ty() == DEPOSIT_TRANSACTION_TYPE;
 
@@ -226,7 +226,7 @@ where
         {
             let da_footprint_available = self.evm.block().gas_limit() - self.da_footprint_used;
 
-            let tx_da_footprint = self.jovian_da_footprint_estimation(&tx_env, tx)?;
+            let tx_da_footprint = self.jovian_da_footprint_estimation(&tx_env, &tx)?;
 
             if tx_da_footprint > da_footprint_available {
                 return Err(BlockExecutionError::Validation(BlockValidationError::Other(
@@ -443,7 +443,7 @@ mod tests {
     use alloc::{string::ToString, vec};
     use alloy_consensus::{transaction::Recovered, SignableTransaction, TxLegacy};
     use alloy_eips::eip2718::WithEncoded;
-    use alloy_evm::EvmEnv;
+    use alloy_evm::{EvmEnv, ToTxEnv};
     use alloy_hardforks::ForkCondition;
     use alloy_op_hardforks::OpHardfork;
     use alloy_primitives::{uint, Address, Signature, U256};

@@ -242,11 +242,11 @@ pub trait BlockExecutor {
     ///
     /// # Parameters
     /// - `tx_env`: The transaction environment to execute (consumed)
-    /// - `tx`: Reference to recovered transaction for validation (gas limit checks)
+    /// - `tx`: Recovered transaction for validation (gas limit checks)
     fn execute_transaction_without_commit_with_parts(
         &mut self,
         tx_env: <Self::Evm as Evm>::Tx,
-        tx: &impl RecoveredTx<Self::Transaction>,
+        tx: impl RecoveredTx<Self::Transaction>,
     ) -> Result<ResultAndState<<Self::Evm as Evm>::HaltReason>, BlockExecutionError>;
 
     /// Executes a single transaction without committing state changes.
