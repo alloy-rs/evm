@@ -10,10 +10,10 @@ use crate::{
     block::{
         state_changes::{balance_increment_state, post_block_balance_increments},
         BlockExecutionError, BlockExecutionResult, BlockExecutor, BlockExecutorFactory,
-        BlockExecutorFor, BlockValidationError, ExecutableTx, OnStateHook,
+        BlockExecutorFor, BlockValidationError, OnStateHook,
         StateChangePostBlockSource, StateChangeSource, SystemCaller,
     },
-    Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded,
+    Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, RecoveredTx,
 };
 use alloc::{borrow::Cow, boxed::Box, vec::Vec};
 use alloy_consensus::{Header, Transaction, TxReceipt};
@@ -117,9 +117,10 @@ where
         Ok(())
     }
 
-    fn execute_transaction_without_commit(
+    fn execute_transaction_without_commit_with_parts(
         &mut self,
-        tx: impl ExecutableTx<Self>,
+        tx_env: <Self::Evm as Evm>::Tx,
+        tx: &impl RecoveredTx<R::Transaction>,
     ) -> Result<ResultAndState<<Self::Evm as Evm>::HaltReason>, BlockExecutionError> {
         // The sum of the transaction's gas limit, Tg, and the gas utilized in this block prior,
         // must be no greater than the block's gasLimit.
@@ -133,8 +134,8 @@ where
             .into());
         }
 
-        // Execute transaction and return the result
-        self.evm.transact(&tx).map_err(|err| {
+        // Execute transaction with the consumed tx_env (zero-copy)
+        self.evm.transact(tx_env).map_err(|err| {
             let hash = tx.tx().trie_hash();
             BlockExecutionError::evm(err, hash)
         })
@@ -143,7 +144,7 @@ where
     fn commit_transaction(
         &mut self,
         output: ResultAndState<<Self::Evm as Evm>::HaltReason>,
-        tx: impl ExecutableTx<Self>,
+        tx: impl RecoveredTx<R::Transaction>,
     ) -> Result<u64, BlockExecutionError> {
         let ResultAndState { result, state } = output;
 

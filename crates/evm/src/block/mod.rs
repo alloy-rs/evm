@@ -1,6 +1,6 @@
 //! Block execution abstraction.
 
-use crate::{Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, RecoveredTx, ToTxEnv};
+use crate::{Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, IntoTxParts, RecoveredTx};
 use alloc::{boxed::Box, vec::Vec};
 use alloy_eips::eip7685::Requests;
 use revm::{
@@ -55,23 +55,29 @@ impl<T> Default for BlockExecutionResult<T> {
 /// This trait combines the requirements for a transaction to be executable by a block executor:
 /// - Must be convertible to the EVM's transaction environment via [`ToTxEnv`]
 /// - Must provide access to the transaction and signer via [`RecoveredTx`]
-/// - Must be [`Copy`] for efficient handling during block execution (the expectation here is that
-///   this always passed as & reference)
+/// - Must be decomposable into [`TxParts`] via [`IntoTxParts`] for zero-copy optimization
 ///
 /// This trait is automatically implemented for any type that meets these requirements.
 /// Common implementations include:
 /// - [`Recovered<T>`](alloy_consensus::transaction::Recovered) where `T` is a transaction type
 /// - [`WithEncoded<Recovered<T>>`](alloy_eips::eip2718::WithEncoded) for transactions with encoded
 ///   bytes
+/// - [`TxParts`] for pre-split transactions
 ///
-/// The trait ensures that the block executor can both execute the transaction in the EVM
-/// and access the original transaction data for receipt generation.
+/// # Zero-Copy Optimization
+///
+/// Through [`IntoTxParts::into_tx_parts`], transactions can be split into [`TxParts`] where:
+/// - `tx_env` can be consumed by the EVM without cloning
+/// - `recovered` retains access to the original transaction for receipt generation
+///
+/// This is particularly useful for types like `WithTxEnv<TxEnv, Arc<T>>` that pre-compute
+/// the transaction environment.
 pub trait ExecutableTx<E: BlockExecutor + ?Sized>:
-    ToTxEnv<<E::Evm as Evm>::Tx> + RecoveredTx<E::Transaction>
+    IntoTxParts<<E::Evm as Evm>::Tx, E::Transaction>
 {
 }
 impl<E: BlockExecutor + ?Sized, T> ExecutableTx<E> for T where
-    T: ToTxEnv<<E::Evm as Evm>::Tx> + RecoveredTx<E::Transaction>
+    T: IntoTxParts<<E::Evm as Evm>::Tx, E::Transaction>
 {
 }
 
@@ -204,27 +210,44 @@ pub trait BlockExecutor {
     /// - Custom validation logic before committing
     ///
     /// The [`ExecutableTx`] constraint ensures that:
-    /// 1. The transaction can be converted to `TxEnv` via [`ToTxEnv`] for EVM execution
-    /// 2. The original transaction and signer can be accessed via [`RecoveredTx`] for receipt
-    ///    generation
+    /// 1. The transaction can be split into [`TxParts`] via [`IntoTxParts`]
+    /// 2. The `TxParts::tx_env` can be consumed by the EVM (zero-copy for pre-built types)
+    /// 3. The `TxParts::recovered` provides [`RecoveredTx`] access for receipt generation
     ///
     /// Returns [`None`] if committing changes from the transaction should be skipped via
     /// [`CommitChanges::No`], otherwise returns the gas used by the transaction.
-    fn execute_transaction_with_commit_condition(
+    fn execute_transaction_with_commit_condition<Tx: ExecutableTx<Self>>(
         &mut self,
-        tx: impl ExecutableTx<Self>,
+        tx: Tx,
         f: impl FnOnce(&ExecutionResult<<Self::Evm as Evm>::HaltReason>) -> CommitChanges,
     ) -> Result<Option<u64>, BlockExecutionError> {
-        // Execute transaction without committing
-        let output = self.execute_transaction_without_commit(&tx)?;
+        // Split transaction into TxParts - enables zero-copy tx_env consumption
+        let parts = tx.into_tx_parts();
+
+        // Execute transaction without committing - consumes tx_env
+        let output = self.execute_transaction_without_commit_with_parts(parts.tx_env, &parts.recovered)?;
 
         if !f(&output.result).should_commit() {
             return Ok(None);
         }
 
-        let gas_used = self.commit_transaction(output, tx)?;
+        // Commit using the recovered transaction data
+        let gas_used = self.commit_transaction(output, parts.recovered)?;
         Ok(Some(gas_used))
     }
+
+    /// Executes a single transaction without committing state changes.
+    ///
+    /// This is the zero-copy execution path that consumes the `tx_env` directly.
+    ///
+    /// # Parameters
+    /// - `tx_env`: The transaction environment to execute (consumed)
+    /// - `tx`: Reference to recovered transaction for validation (gas limit checks)
+    fn execute_transaction_without_commit_with_parts(
+        &mut self,
+        tx_env: <Self::Evm as Evm>::Tx,
+        tx: &impl RecoveredTx<Self::Transaction>,
+    ) -> Result<ResultAndState<<Self::Evm as Evm>::HaltReason>, BlockExecutionError>;
 
     /// Executes a single transaction without committing state changes.
     ///
@@ -242,7 +265,10 @@ pub trait BlockExecutor {
     fn execute_transaction_without_commit(
         &mut self,
         tx: impl ExecutableTx<Self>,
-    ) -> Result<ResultAndState<<Self::Evm as Evm>::HaltReason>, BlockExecutionError>;
+    ) -> Result<ResultAndState<<Self::Evm as Evm>::HaltReason>, BlockExecutionError> {
+        let parts = tx.into_tx_parts();
+        self.execute_transaction_without_commit_with_parts(parts.tx_env, &parts.recovered)
+    }
 
     /// Commits a previously executed transaction's state changes.
     ///
@@ -254,11 +280,11 @@ pub trait BlockExecutor {
     ///
     /// # Parameters
     /// - `output`: The transaction output containing execution result and state changes
-    /// - `tx`: The original transaction (needed for receipt generation)
+    /// - `tx`: The original transaction via [`RecoveredTx`] (needed for receipt generation)
     fn commit_transaction(
         &mut self,
         output: ResultAndState<<Self::Evm as Evm>::HaltReason>,
-        tx: impl ExecutableTx<Self>,
+        tx: impl RecoveredTx<Self::Transaction>,
     ) -> Result<u64, BlockExecutionError>;
 
     /// Applies any necessary changes after executing the block's transactions, completes execution

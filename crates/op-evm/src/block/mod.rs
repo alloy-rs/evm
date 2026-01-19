@@ -8,11 +8,11 @@ use alloy_evm::{
     block::{
         state_changes::{balance_increment_state, post_block_balance_increments},
         BlockExecutionError, BlockExecutionResult, BlockExecutor, BlockExecutorFactory,
-        BlockExecutorFor, BlockValidationError, ExecutableTx, OnStateHook,
+        BlockExecutorFor, BlockValidationError, OnStateHook,
         StateChangePostBlockSource, StateChangeSource, StateDB, SystemCaller,
     },
     eth::receipt_builder::ReceiptBuilderCtx,
-    Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded,
+    Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, RecoveredTx,
 };
 use alloy_op_hardforks::{OpChainHardforks, OpHardforks};
 use alloy_primitives::{Bytes, B256};
@@ -72,11 +72,13 @@ pub struct OpBlockExecutor<Evm, R: OpReceiptBuilder, Spec> {
     pub receipts: Vec<R::Receipt>,
     /// Total gas used by executed transactions.
     pub gas_used: u64,
-    /// Da footprint.
+    /// DA footprint used by block.
     ///
     /// This is only set for blocks post-Jovian activation.
     /// See [DA footprint block limit spec](https://github.com/ethereum-optimism/specs/blob/main/specs/protocol/jovian/exec-engine.md#da-footprint-block-limit)
     pub da_footprint_used: u64,
+    /// Pending DA footprint for current transaction (computed in execution, applied in commit).
+    pending_tx_da_footprint: u64,
     /// Whether Regolith hardfork is active.
     pub is_regolith: bool,
     /// Utility to call system smart contracts.
@@ -101,6 +103,7 @@ where
             receipts: Vec::new(),
             gas_used: 0,
             da_footprint_used: 0,
+            pending_tx_da_footprint: 0,
             ctx,
         }
     }
@@ -138,10 +141,11 @@ where
 {
     fn jovian_da_footprint_estimation(
         &mut self,
-        tx: &impl ExecutableTx<Self>,
+        tx_env: &E::Tx,
+        tx: &impl RecoveredTx<R::Transaction>,
     ) -> Result<u64, BlockExecutionError> {
         // Try to use the enveloped tx if it exists, otherwise use the encoded 2718 bytes
-        let encoded = match tx.to_tx_env().encoded_bytes() {
+        let encoded = match tx_env.encoded_bytes() {
             Some(encoded) => estimate_tx_compressed_size(encoded),
             None => estimate_tx_compressed_size(tx.tx().encoded_2718().as_ref()),
         }
@@ -196,11 +200,15 @@ where
         Ok(())
     }
 
-    fn execute_transaction_without_commit(
+    fn execute_transaction_without_commit_with_parts(
         &mut self,
-        tx: impl ExecutableTx<Self>,
+        tx_env: <Self::Evm as Evm>::Tx,
+        tx: &impl RecoveredTx<R::Transaction>,
     ) -> Result<ResultAndState<<Self::Evm as Evm>::HaltReason>, BlockExecutionError> {
         let is_deposit = tx.tx().ty() == DEPOSIT_TRANSACTION_TYPE;
+
+        // Reset pending DA footprint
+        self.pending_tx_da_footprint = 0;
 
         // The sum of the transaction's gas limit, Tg, and the gas utilized in this block prior,
         // must be no greater than the block's gasLimit.
@@ -218,7 +226,7 @@ where
         {
             let da_footprint_available = self.evm.block().gas_limit() - self.da_footprint_used;
 
-            let tx_da_footprint = self.jovian_da_footprint_estimation(&tx)?;
+            let tx_da_footprint = self.jovian_da_footprint_estimation(&tx_env, tx)?;
 
             if tx_da_footprint > da_footprint_available {
                 return Err(BlockExecutionError::Validation(BlockValidationError::Other(
@@ -228,10 +236,13 @@ where
                     }),
                 )));
             }
+
+            // Store for commit phase
+            self.pending_tx_da_footprint = tx_da_footprint;
         }
 
-        // Execute transaction and return the result
-        self.evm.transact(&tx).map_err(|err| {
+        // Execute transaction with consumed tx_env (zero-copy)
+        self.evm.transact(tx_env).map_err(|err| {
             let hash = tx.tx().trie_hash();
             BlockExecutionError::evm(err, hash)
         })
@@ -240,7 +251,7 @@ where
     fn commit_transaction(
         &mut self,
         output: ResultAndState<<Self::Evm as Evm>::HaltReason>,
-        tx: impl ExecutableTx<Self>,
+        tx: impl RecoveredTx<R::Transaction>,
     ) -> Result<u64, BlockExecutionError> {
         let ResultAndState { result, state } = output;
         let is_deposit = tx.tx().ty() == DEPOSIT_TRANSACTION_TYPE;
@@ -261,14 +272,10 @@ where
         // append gas used
         self.gas_used += gas_used;
 
-        // Update DA footprint if Jovian is active
-        if self.spec.is_jovian_active_at_timestamp(self.evm.block().timestamp().saturating_to())
-            && !is_deposit
-        {
-            let tx_da_footprint = self.jovian_da_footprint_estimation(&tx)?;
-            // Add to DA footprint used
-            self.da_footprint_used = self.da_footprint_used.saturating_add(tx_da_footprint);
-        }
+        // Apply pending DA footprint (computed during execute_transaction_without_commit_with_parts)
+        self.da_footprint_used =
+            self.da_footprint_used.saturating_add(self.pending_tx_da_footprint);
+        self.pending_tx_da_footprint = 0;
 
         self.receipts.push(
             match self.receipt_builder.build_receipt(ReceiptBuilderCtx {
@@ -598,7 +605,8 @@ mod tests {
 
         assert!(executor.da_footprint_used == 0);
 
-        let expected_da_footprint = executor.jovian_da_footprint_estimation(&tx).unwrap();
+        let tx_env = tx.to_tx_env();
+        let expected_da_footprint = executor.jovian_da_footprint_estimation(&tx_env, &tx).unwrap();
 
         // make sure we can use both `WithEncoded` and transaction itself as inputs.
         let res = executor.execute_transaction(&tx);
@@ -642,7 +650,8 @@ mod tests {
 
         assert!(executor.da_footprint_used == 0);
 
-        let expected_da_footprint = executor.jovian_da_footprint_estimation(&tx).unwrap();
+        let tx_env = tx.to_tx_env();
+        let expected_da_footprint = executor.jovian_da_footprint_estimation(&tx_env, &tx).unwrap();
 
         // make sure we can use both `WithEncoded` and transaction itself as inputs.
         let res = executor.execute_transaction(&tx);
@@ -698,7 +707,8 @@ mod tests {
 
         assert!(executor.da_footprint_used == 0);
 
-        let expected_da_footprint = executor.jovian_da_footprint_estimation(&tx).unwrap();
+        let tx_env = tx.to_tx_env();
+        let expected_da_footprint = executor.jovian_da_footprint_estimation(&tx_env, &tx).unwrap();
 
         // make sure we can use both `WithEncoded` and transaction itself as inputs.
         let gas_used_tx = executor.execute_transaction(&tx).expect("failed to execute transaction");

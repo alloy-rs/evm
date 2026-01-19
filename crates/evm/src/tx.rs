@@ -513,6 +513,163 @@ impl<Eip4844: AsRef<TxEip4844>> FromRecoveredTx<EthereumTxEnvelope<Eip4844>> for
     }
 }
 
+/// Container for a split transaction: holds both the EVM transaction environment
+/// and the recovered transaction data separately.
+///
+/// This struct enables zero-copy transaction execution by allowing the `tx_env` to be
+/// consumed by the EVM while retaining access to the original transaction data via
+/// `recovered` for receipt generation.
+///
+/// # Example
+///
+/// ```ignore
+/// // Split a transaction into parts
+/// let parts: TxParts<TxEnv, Recovered<T>> = tx.into_tx_parts();
+///
+/// // Execute using the tx_env (zero-copy consumption)
+/// let result = evm.transact(parts.tx_env)?;
+///
+/// // Use recovered for receipt building
+/// let receipt = build_receipt(parts.recovered.tx());
+/// ```
+#[derive(Debug, Clone)]
+pub struct TxParts<E, R> {
+    /// The transaction environment for EVM execution.
+    pub tx_env: E,
+    /// The recovered transaction data (provides access to original tx and signer).
+    pub recovered: R,
+}
+
+impl<E, R> TxParts<E, R> {
+    /// Creates a new `TxParts` from its components.
+    pub const fn new(tx_env: E, recovered: R) -> Self {
+        Self { tx_env, recovered }
+    }
+
+    /// Consumes self and returns the inner tx_env.
+    pub fn into_tx_env(self) -> E {
+        self.tx_env
+    }
+
+    /// Returns a reference to the recovered transaction.
+    pub const fn recovered(&self) -> &R {
+        &self.recovered
+    }
+
+    /// Consumes self and returns the recovered transaction.
+    pub fn into_recovered(self) -> R {
+        self.recovered
+    }
+}
+
+impl<E, R, Tx> RecoveredTx<Tx> for TxParts<E, R>
+where
+    R: RecoveredTx<Tx>,
+{
+    fn tx(&self) -> &Tx {
+        self.recovered.tx()
+    }
+
+    fn signer(&self) -> &Address {
+        self.recovered.signer()
+    }
+}
+
+impl<E: Clone, R> ToTxEnv<E> for TxParts<E, R> {
+    fn to_tx_env(&self) -> E {
+        self.tx_env.clone()
+    }
+}
+
+/// `TxParts` can be split again - just moves the fields.
+impl<E, R, Tx> IntoTxParts<E, Tx> for TxParts<E, R>
+where
+    E: Clone,
+    R: RecoveredTx<Tx>,
+{
+    type Recovered = R;
+
+    fn into_tx_parts(self) -> TxParts<E, Self::Recovered> {
+        self
+    }
+}
+
+/// Trait for types that can be decomposed into [`TxParts`].
+///
+/// This trait enables zero-copy consumption of the transaction environment while
+/// retaining access to the original transaction data for receipt building.
+///
+/// # Design
+///
+/// When a type implements this trait, it can be split into:
+/// - `TxEnv`: The transaction environment consumed by the EVM
+/// - `Recovered`: The remainder that provides [`RecoveredTx`] access
+///
+/// For types like `WithTxEnv<TxEnv, Arc<T>>` that pre-compute the `TxEnv`,
+/// this allows zero-copy extraction of the `TxEnv`.
+///
+/// # Example
+///
+/// ```ignore
+/// // Split a recovered transaction
+/// let parts = recovered_tx.into_tx_parts();
+///
+/// // parts.tx_env is ready for EVM consumption
+/// // parts.recovered still provides tx() and signer() access
+/// ```
+pub trait IntoTxParts<TxEnv, Tx>: ToTxEnv<TxEnv> + RecoveredTx<Tx> {
+    /// The recovered transaction type after splitting.
+    type Recovered: RecoveredTx<Tx>;
+
+    /// Splits self into [`TxParts`] containing the transaction environment and recovered data.
+    fn into_tx_parts(self) -> TxParts<TxEnv, Self::Recovered>;
+}
+
+/// Implementation for references - clones the TxEnv, borrows for RecoveredTx.
+impl<'a, T, TxEnv, Tx> IntoTxParts<TxEnv, Tx> for &'a T
+where
+    T: ToTxEnv<TxEnv> + RecoveredTx<Tx>,
+    &'a T: RecoveredTx<Tx>,
+{
+    type Recovered = &'a T;
+
+    fn into_tx_parts(self) -> TxParts<TxEnv, Self::Recovered> {
+        TxParts::new(self.to_tx_env(), self)
+    }
+}
+
+/// Implementation for `Recovered<T>`.
+impl<T, TxEnv> IntoTxParts<TxEnv, T> for Recovered<T>
+where
+    TxEnv: FromRecoveredTx<T>,
+{
+    type Recovered = Self;
+
+    fn into_tx_parts(self) -> TxParts<TxEnv, Self::Recovered> {
+        let tx_env = TxEnv::from_recovered_tx(self.inner(), self.signer());
+        TxParts::new(tx_env, self)
+    }
+}
+
+
+
+/// Implementation for `WithEncoded<Recovered<T>>`.
+impl<T, TxEnv> IntoTxParts<TxEnv, T> for WithEncoded<Recovered<T>>
+where
+    TxEnv: FromTxWithEncoded<T>,
+{
+    type Recovered = Self;
+
+    fn into_tx_parts(self) -> TxParts<TxEnv, Self::Recovered> {
+        let tx_env = TxEnv::from_encoded_tx(
+            self.value().inner(),
+            self.value().signer(),
+            self.encoded_bytes().clone(),
+        );
+        TxParts::new(tx_env, self)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
