@@ -336,7 +336,10 @@ impl PrecompilesMap {
             };
 
             for (&addr, pc) in static_precompiles.inner().iter() {
-                dynamic.inner.insert(addr, DynPrecompile::from(*pc.precompile()));
+                dynamic.inner.insert(
+                    addr,
+                    DynPrecompile::from((pc.precompile_id().clone(), *pc.precompile())),
+                );
                 dynamic.addresses.insert(addr);
             }
 
