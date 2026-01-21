@@ -68,7 +68,6 @@ impl<T> Default for BlockExecutionResult<T> {
 /// - `WithEncoded<Recovered<T>>` and `WithEncoded<&Recovered<T>>` - encoded transactions
 /// - `Either<L, R>` where both `L` and `R` implement this trait
 /// - `&S` where `S: ToTxEnv + RecoveredTx` - covers `&Recovered<T>`, `&WithEncoded<...>`, etc.
-/// - [`WithTxEnv<TxEnv, T>`] - zero-copy path with pre-built `TxEnv` (no cloning)
 pub trait ExecutableTxParts<TxEnv, T> {
     /// The recovered transaction accessor type.
     type Recovered: RecoveredTx<T>;
@@ -95,7 +94,6 @@ where
     }
 }
 
-/// Implementation for owned [`Recovered<T>`].
 impl<T, TxEnv: FromRecoveredTx<T>> ExecutableTxParts<TxEnv, T> for Recovered<T> {
     type Recovered = Self;
 
@@ -104,8 +102,7 @@ impl<T, TxEnv: FromRecoveredTx<T>> ExecutableTxParts<TxEnv, T> for Recovered<T> 
     }
 }
 
-/// Implementation for [`Recovered<&T>`].
-impl<'a, T, TxEnv: FromRecoveredTx<T>> ExecutableTxParts<TxEnv, T> for Recovered<&'a T> {
+impl<T, TxEnv: FromRecoveredTx<T>> ExecutableTxParts<TxEnv, T> for Recovered<&T> {
     type Recovered = Self;
 
     fn into_parts(self) -> (TxEnv, Self) {
@@ -113,7 +110,6 @@ impl<'a, T, TxEnv: FromRecoveredTx<T>> ExecutableTxParts<TxEnv, T> for Recovered
     }
 }
 
-/// Implementation for [`WithEncoded<Recovered<T>>`].
 impl<T, TxEnv: FromTxWithEncoded<T>> ExecutableTxParts<TxEnv, T> for WithEncoded<Recovered<T>> {
     type Recovered = Self;
 
@@ -122,9 +118,8 @@ impl<T, TxEnv: FromTxWithEncoded<T>> ExecutableTxParts<TxEnv, T> for WithEncoded
     }
 }
 
-/// Implementation for [`WithEncoded<&Recovered<T>>`].
-impl<'a, T, TxEnv: FromTxWithEncoded<T>> ExecutableTxParts<TxEnv, T>
-    for WithEncoded<&'a Recovered<T>>
+impl<T, TxEnv: FromTxWithEncoded<T>> ExecutableTxParts<TxEnv, T>
+    for WithEncoded<&Recovered<T>>
 {
     type Recovered = Self;
 
@@ -133,7 +128,6 @@ impl<'a, T, TxEnv: FromTxWithEncoded<T>> ExecutableTxParts<TxEnv, T>
     }
 }
 
-/// Implementation for [`Either<L, R>`] where both variants implement [`ExecutableTxParts`].
 impl<L, R, TxEnv, T> ExecutableTxParts<TxEnv, T> for Either<L, R>
 where
     L: ExecutableTxParts<TxEnv, T>,
@@ -152,45 +146,6 @@ where
                 (env, Either::Right(rec))
             }
         }
-    }
-}
-
-/// A wrapper containing a pre-computed transaction environment alongside a recovered transaction.
-///
-/// This is useful for zero-copy scenarios where the `TxEnv` has already been built and you want
-/// to avoid the cloning that [`ToTxEnv`] would require.
-///
-/// # Example
-///
-/// ```ignore
-/// // Build environment once, move it into the wrapper
-/// let tx_env = TxEnv::from_recovered_tx(tx.inner(), tx.signer());
-/// let with_env = WithTxEnv::new(tx_env, &tx);
-/// executor.execute_transaction(with_env)?;
-/// ```
-#[derive(Debug, Clone)]
-pub struct WithTxEnv<E, T> {
-    /// The pre-computed transaction environment.
-    pub tx_env: E,
-    /// The recovered transaction.
-    pub tx: T,
-}
-
-impl<E, T> WithTxEnv<E, T> {
-    /// Creates a new `WithTxEnv` from a pre-computed environment and transaction.
-    pub const fn new(tx_env: E, tx: T) -> Self {
-        Self { tx_env, tx }
-    }
-}
-
-impl<TxEnv, T, Tx> ExecutableTxParts<TxEnv, Tx> for WithTxEnv<TxEnv, T>
-where
-    T: RecoveredTx<Tx>,
-{
-    type Recovered = T;
-
-    fn into_parts(self) -> (TxEnv, T) {
-        (self.tx_env, self.tx)
     }
 }
 
