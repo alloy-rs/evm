@@ -94,6 +94,14 @@ where
     }
 }
 
+impl<TxEnv, T: RecoveredTx<Tx>, Tx> ExecutableTxParts<TxEnv, Tx> for (TxEnv, T) {
+    type Recovered = T;
+
+    fn into_parts(self) -> (TxEnv, T) {
+        (self.0, self.1)
+    }
+}
+
 impl<T, TxEnv: FromRecoveredTx<T>> ExecutableTxParts<TxEnv, T> for Recovered<T> {
     type Recovered = Self;
 
@@ -118,9 +126,7 @@ impl<T, TxEnv: FromTxWithEncoded<T>> ExecutableTxParts<TxEnv, T> for WithEncoded
     }
 }
 
-impl<T, TxEnv: FromTxWithEncoded<T>> ExecutableTxParts<TxEnv, T>
-    for WithEncoded<&Recovered<T>>
-{
+impl<T, TxEnv: FromTxWithEncoded<T>> ExecutableTxParts<TxEnv, T> for WithEncoded<&Recovered<T>> {
     type Recovered = Self;
 
     fn into_parts(self) -> (TxEnv, Self) {
