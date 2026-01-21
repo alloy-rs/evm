@@ -66,18 +66,30 @@ impl<T> Default for BlockExecutionResult<T> {
 ///
 /// The trait ensures that the block executor can both execute the transaction in the EVM
 /// and access the original transaction data for receipt generation.
-pub trait ExecutableTx<E: BlockExecutor + ?Sized> {
+pub trait ExecutableTxParts<TxEnv, T> {
     /// Converts the transaction to an executable environment and a recovered transaction itself.
-    fn into_parts(self) -> (<E::Evm as Evm>::Tx, impl RecoveredTx<E::Transaction>);
+    fn into_parts(self) -> (TxEnv, impl RecoveredTx<T>);
 }
 
-impl<E: BlockExecutor + ?Sized, T> ExecutableTx<E> for T
+impl<T, TxEnv, Tx> ExecutableTxParts<TxEnv, Tx> for T
 where
-    T: ToTxEnv<<E::Evm as Evm>::Tx> + RecoveredTx<E::Transaction>,
+    T: ToTxEnv<TxEnv> + RecoveredTx<Tx>,
 {
-    fn into_parts(self) -> (<E::Evm as Evm>::Tx, impl RecoveredTx<E::Transaction>) {
+    fn into_parts(self) -> (TxEnv, impl RecoveredTx<Tx>) {
         (self.to_tx_env(), self)
     }
+}
+
+/// Alias for the [`ExecutableTxParts`] trait with types associated with the given
+/// [`BlockExecutor`].
+pub trait ExecutableTx<E: BlockExecutor + ?Sized>:
+    ExecutableTxParts<<E::Evm as Evm>::Tx, E::Transaction>
+{
+}
+
+impl<E: BlockExecutor + ?Sized, T> ExecutableTx<E> for T where
+    T: ExecutableTxParts<<E::Evm as Evm>::Tx, E::Transaction>
+{
 }
 
 /// Marks whether transaction should be committed into block executor's state.
