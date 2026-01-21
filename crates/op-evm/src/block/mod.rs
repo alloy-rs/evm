@@ -12,7 +12,7 @@ use alloy_evm::{
         StateChangePostBlockSource, StateChangeSource, StateDB, SystemCaller, TxResult,
     },
     eth::{receipt_builder::ReceiptBuilderCtx, EthTxResult},
-    Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded,
+    Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, RecoveredTx,
 };
 use alloy_op_hardforks::{OpChainHardforks, OpHardforks};
 use alloy_primitives::{Address, Bytes, B256};
@@ -157,10 +157,11 @@ where
 {
     fn jovian_da_footprint_estimation(
         &mut self,
-        tx: &impl ExecutableTx<Self>,
+        tx_env: &E::Tx,
+        tx: impl RecoveredTx<R::Transaction>,
     ) -> Result<u64, BlockExecutionError> {
         // Try to use the enveloped tx if it exists, otherwise use the encoded 2718 bytes
-        let encoded = match tx.to_tx_env().encoded_bytes() {
+        let encoded = match tx_env.encoded_bytes() {
             Some(encoded) => estimate_tx_compressed_size(encoded),
             None => estimate_tx_compressed_size(tx.tx().encoded_2718().as_ref()),
         }
@@ -220,6 +221,7 @@ where
         &mut self,
         tx: impl ExecutableTx<Self>,
     ) -> Result<Self::Result, BlockExecutionError> {
+        let (tx_env, tx) = tx.into_parts();
         let is_deposit = tx.tx().ty() == DEPOSIT_TRANSACTION_TYPE;
 
         // The sum of the transaction's gas limit, Tg, and the gas utilized in this block prior,
@@ -240,7 +242,7 @@ where
         {
             let da_footprint_available = self.evm.block().gas_limit() - self.da_footprint_used;
 
-            let tx_da_footprint = self.jovian_da_footprint_estimation(&tx)?;
+            let tx_da_footprint = self.jovian_da_footprint_estimation(&tx_env, &tx)?;
 
             if tx_da_footprint > da_footprint_available {
                 return Err(BlockExecutionError::Validation(BlockValidationError::Other(
@@ -257,7 +259,7 @@ where
         };
 
         // Execute transaction and return the result
-        let result = self.evm.transact(&tx).map_err(|err| {
+        let result = self.evm.transact(tx_env).map_err(|err| {
             let hash = tx.tx().trie_hash();
             BlockExecutionError::evm(err, hash)
         })?;
@@ -470,7 +472,7 @@ mod tests {
     use alloc::{string::ToString, vec};
     use alloy_consensus::{transaction::Recovered, SignableTransaction, TxLegacy};
     use alloy_eips::eip2718::WithEncoded;
-    use alloy_evm::EvmEnv;
+    use alloy_evm::{EvmEnv, ToTxEnv};
     use alloy_hardforks::ForkCondition;
     use alloy_op_hardforks::OpHardfork;
     use alloy_primitives::{uint, Address, Signature, U256};
@@ -629,10 +631,11 @@ mod tests {
             ))),
             Address::ZERO,
         );
+        let tx_env = tx.to_tx_env();
 
         assert!(executor.da_footprint_used == 0);
 
-        let expected_da_footprint = executor.jovian_da_footprint_estimation(&tx).unwrap();
+        let expected_da_footprint = executor.jovian_da_footprint_estimation(&tx_env, &tx).unwrap();
 
         // make sure we can use both `WithEncoded` and transaction itself as inputs.
         let res = executor.execute_transaction(&tx);
@@ -673,10 +676,11 @@ mod tests {
             ))),
             Address::ZERO,
         );
+        let tx_env = tx.to_tx_env();
 
         assert!(executor.da_footprint_used == 0);
 
-        let expected_da_footprint = executor.jovian_da_footprint_estimation(&tx).unwrap();
+        let expected_da_footprint = executor.jovian_da_footprint_estimation(&tx_env, &tx).unwrap();
 
         // make sure we can use both `WithEncoded` and transaction itself as inputs.
         let res = executor.execute_transaction(&tx);
@@ -729,10 +733,11 @@ mod tests {
             ))),
             Address::ZERO,
         );
+        let tx_env = tx.to_tx_env();
 
         assert!(executor.da_footprint_used == 0);
 
-        let expected_da_footprint = executor.jovian_da_footprint_estimation(&tx).unwrap();
+        let expected_da_footprint = executor.jovian_da_footprint_estimation(&tx_env, &tx).unwrap();
 
         // make sure we can use both `WithEncoded` and transaction itself as inputs.
         let gas_used_tx = executor.execute_transaction(&tx).expect("failed to execute transaction");

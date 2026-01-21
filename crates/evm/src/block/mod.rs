@@ -53,10 +53,8 @@ impl<T> Default for BlockExecutionResult<T> {
 /// Helper trait to encapsulate requirements for a type to be used as input for [`BlockExecutor`].
 ///
 /// This trait combines the requirements for a transaction to be executable by a block executor:
-/// - Must be convertible to the EVM's transaction environment via [`ToTxEnv`]
+/// - Must be convertible to the EVM's transaction environment
 /// - Must provide access to the transaction and signer via [`RecoveredTx`]
-/// - Must be [`Copy`] for efficient handling during block execution (the expectation here is that
-///   this always passed as & reference)
 ///
 /// This trait is automatically implemented for any type that meets these requirements.
 /// Common implementations include:
@@ -66,12 +64,29 @@ impl<T> Default for BlockExecutionResult<T> {
 ///
 /// The trait ensures that the block executor can both execute the transaction in the EVM
 /// and access the original transaction data for receipt generation.
+pub trait ExecutableTxParts<TxEnv, T> {
+    /// Converts the transaction to an executable environment and a recovered transaction itself.
+    fn into_parts(self) -> (TxEnv, impl RecoveredTx<T>);
+}
+
+impl<T, TxEnv, Tx> ExecutableTxParts<TxEnv, Tx> for T
+where
+    T: ToTxEnv<TxEnv> + RecoveredTx<Tx>,
+{
+    fn into_parts(self) -> (TxEnv, impl RecoveredTx<Tx>) {
+        (self.to_tx_env(), self)
+    }
+}
+
+/// Alias for the [`ExecutableTxParts`] trait with types associated with the given
+/// [`BlockExecutor`].
 pub trait ExecutableTx<E: BlockExecutor + ?Sized>:
-    ToTxEnv<<E::Evm as Evm>::Tx> + RecoveredTx<E::Transaction>
+    ExecutableTxParts<<E::Evm as Evm>::Tx, E::Transaction>
 {
 }
+
 impl<E: BlockExecutor + ?Sized, T> ExecutableTx<E> for T where
-    T: ToTxEnv<<E::Evm as Evm>::Tx> + RecoveredTx<E::Transaction>
+    T: ExecutableTxParts<<E::Evm as Evm>::Tx, E::Transaction>
 {
 }
 
@@ -218,7 +233,7 @@ pub trait BlockExecutor {
         f: impl FnOnce(&ExecutionResult<<Self::Evm as Evm>::HaltReason>) -> CommitChanges,
     ) -> Result<Option<u64>, BlockExecutionError> {
         // Execute transaction without committing
-        let output = self.execute_transaction_without_commit(&tx)?;
+        let output = self.execute_transaction_without_commit(tx)?;
 
         if !f(&output.result().result).should_commit() {
             return Ok(None);
