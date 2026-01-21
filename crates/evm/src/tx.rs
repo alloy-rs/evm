@@ -531,6 +531,12 @@ impl<T, TxEnv: FromRecoveredTx<T>> ExecutableTxParts<TxEnv, T> for Recovered<T> 
     }
 }
 
+impl<T, TxEnv: FromRecoveredTx<T>> ExecutableTxParts<TxEnv, T> for Recovered<&T> {
+    fn into_parts(self) -> (TxEnv, impl RecoveredTx<T>) {
+        (self.to_tx_env(), self)
+    }
+}
+
 impl<T, TxEnv: FromRecoveredTx<T>> ExecutableTxParts<TxEnv, T> for &Recovered<T> {
     fn into_parts(self) -> (TxEnv, impl RecoveredTx<T>) {
         (self.to_tx_env(), self)
