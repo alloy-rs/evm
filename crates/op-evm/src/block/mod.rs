@@ -266,7 +266,7 @@ where
             inner: EthTxResult {
                 result,
                 blob_gas_used: da_footprint_used,
-                tx_type: R::tx_type(tx.tx()),
+                tx_type: tx.tx().tx_type(),
             },
             is_deposit,
             sender: *tx.signer(),

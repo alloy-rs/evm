@@ -29,9 +29,6 @@ pub trait ReceiptBuilder {
     /// Receipt type.
     type Receipt;
 
-    /// Helper to map a transaction to its type.
-    fn tx_type(tx: &Self::Transaction) -> <Self::Transaction as TransactionEnvelope>::TxType;
-
     /// Builds a receipt given a transaction and the result of the execution.
     fn build_receipt<E: Evm>(
         &self,
@@ -47,10 +44,6 @@ pub struct AlloyReceiptBuilder;
 impl ReceiptBuilder for AlloyReceiptBuilder {
     type Transaction = TxEnvelope;
     type Receipt = ReceiptEnvelope;
-
-    fn tx_type(tx: &Self::Transaction) -> <Self::Transaction as TransactionEnvelope>::TxType {
-        tx.tx_type()
-    }
 
     fn build_receipt<E: Evm>(&self, ctx: ReceiptBuilderCtx<'_, TxType, E>) -> Self::Receipt {
         let receipt = alloy_consensus::Receipt {

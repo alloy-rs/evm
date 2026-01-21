@@ -159,12 +159,10 @@ where
             BlockExecutionError::evm(err, hash)
         })?;
 
-        let tx_type = R::tx_type(tx.tx());
-
         Ok(EthTxResult {
             result,
             blob_gas_used: tx.tx().blob_gas_used().unwrap_or_default(),
-            tx_type,
+            tx_type: tx.tx().tx_type(),
         })
     }
 

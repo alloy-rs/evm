@@ -14,9 +14,6 @@ pub trait OpReceiptBuilder: Debug {
     /// Receipt type.
     type Receipt;
 
-    /// Helper to map a transaction to its type.
-    fn tx_type(tx: &Self::Transaction) -> <Self::Transaction as TransactionEnvelope>::TxType;
-
     /// Builds a receipt given a transaction and the result of the execution.
     ///
     /// Note: this method should return `Err` if the transaction is a deposit transaction. In that
@@ -41,10 +38,6 @@ pub struct OpAlloyReceiptBuilder;
 impl OpReceiptBuilder for OpAlloyReceiptBuilder {
     type Transaction = OpTxEnvelope;
     type Receipt = OpReceiptEnvelope;
-
-    fn tx_type(tx: &Self::Transaction) -> <Self::Transaction as TransactionEnvelope>::TxType {
-        tx.tx_type()
-    }
 
     fn build_receipt<'a, E: Evm>(
         &self,
