@@ -1,10 +1,12 @@
 //! Block execution abstraction.
 
-use crate::{Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, RecoveredTx};
+use crate::{Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, RecoveredTx, ToTxEnv};
 use alloc::{boxed::Box, vec::Vec};
-use alloy_eips::eip7685::Requests;
+use alloy_consensus::transaction::Recovered;
+use alloy_eips::{eip2718::WithEncoded, eip7685::Requests};
 use revm::{
     context::result::{ExecutionResult, ResultAndState},
+    context_interface::either::Either,
     database::State,
     inspector::NoOpInspector,
     Inspector,
@@ -56,17 +58,140 @@ impl<T> Default for BlockExecutionResult<T> {
 /// - Must be convertible to the EVM's transaction environment
 /// - Must provide access to the transaction and signer via [`RecoveredTx`]
 ///
-/// Common implementations include:
-/// - [`Recovered<T>`](alloy_consensus::transaction::Recovered) where `T` is a transaction type
-/// - [`WithEncoded<Recovered<T>>`](alloy_eips::eip2718::WithEncoded) for transactions with encoded
-///   bytes
-/// - [`WithTxEnv<TxEnv, T>`] for pre-computed transaction environments (zero-copy)
-///
 /// The trait ensures that the block executor can both execute the transaction in the EVM
 /// and access the original transaction data for receipt generation.
+///
+/// # Implementations
+///
+/// The following implementations are provided:
+/// - `Recovered<T>` and `Recovered<&T>` - owned recovered transactions
+/// - `WithEncoded<Recovered<T>>` and `WithEncoded<&Recovered<T>>` - encoded transactions
+/// - `Either<L, R>` where both `L` and `R` implement this trait
+/// - `&S` where `S: ToTxEnv + RecoveredTx` - covers `&Recovered<T>`, `&WithEncoded<...>`, etc.
+/// - [`WithTxEnv<TxEnv, T>`] - zero-copy path with pre-built `TxEnv` (no cloning)
 pub trait ExecutableTxParts<TxEnv, T> {
+    /// The recovered transaction accessor type.
+    type Recovered: RecoveredTx<T>;
+
     /// Converts the transaction to an executable environment and a recovered transaction itself.
-    fn into_parts(self) -> (TxEnv, impl RecoveredTx<T>);
+    fn into_parts(self) -> (TxEnv, Self::Recovered);
+}
+
+/// Blanket implementation for references to types implementing both [`ToTxEnv`] and
+/// [`RecoveredTx`].
+///
+/// This covers:
+/// - `&Recovered<T>` and `&Recovered<&T>`
+/// - `&WithEncoded<Recovered<T>>` and similar wrappers
+/// - Any `&S` where `S: ToTxEnv<TxEnv> + RecoveredTx<T>`
+impl<'a, S, TxEnv, T> ExecutableTxParts<TxEnv, T> for &'a S
+where
+    S: ToTxEnv<TxEnv> + RecoveredTx<T>,
+{
+    type Recovered = &'a S;
+
+    fn into_parts(self) -> (TxEnv, &'a S) {
+        (self.to_tx_env(), self)
+    }
+}
+
+/// Implementation for owned [`Recovered<T>`].
+impl<T, TxEnv: FromRecoveredTx<T>> ExecutableTxParts<TxEnv, T> for Recovered<T> {
+    type Recovered = Self;
+
+    fn into_parts(self) -> (TxEnv, Self) {
+        (self.to_tx_env(), self)
+    }
+}
+
+/// Implementation for [`Recovered<&T>`].
+impl<'a, T, TxEnv: FromRecoveredTx<T>> ExecutableTxParts<TxEnv, T> for Recovered<&'a T> {
+    type Recovered = Self;
+
+    fn into_parts(self) -> (TxEnv, Self) {
+        (self.to_tx_env(), self)
+    }
+}
+
+/// Implementation for [`WithEncoded<Recovered<T>>`].
+impl<T, TxEnv: FromTxWithEncoded<T>> ExecutableTxParts<TxEnv, T> for WithEncoded<Recovered<T>> {
+    type Recovered = Self;
+
+    fn into_parts(self) -> (TxEnv, Self) {
+        (self.to_tx_env(), self)
+    }
+}
+
+/// Implementation for [`WithEncoded<&Recovered<T>>`].
+impl<'a, T, TxEnv: FromTxWithEncoded<T>> ExecutableTxParts<TxEnv, T>
+    for WithEncoded<&'a Recovered<T>>
+{
+    type Recovered = Self;
+
+    fn into_parts(self) -> (TxEnv, Self) {
+        (self.to_tx_env(), self)
+    }
+}
+
+/// Implementation for [`Either<L, R>`] where both variants implement [`ExecutableTxParts`].
+impl<L, R, TxEnv, T> ExecutableTxParts<TxEnv, T> for Either<L, R>
+where
+    L: ExecutableTxParts<TxEnv, T>,
+    R: ExecutableTxParts<TxEnv, T>,
+{
+    type Recovered = Either<L::Recovered, R::Recovered>;
+
+    fn into_parts(self) -> (TxEnv, Self::Recovered) {
+        match self {
+            Self::Left(l) => {
+                let (env, rec) = l.into_parts();
+                (env, Either::Left(rec))
+            }
+            Self::Right(r) => {
+                let (env, rec) = r.into_parts();
+                (env, Either::Right(rec))
+            }
+        }
+    }
+}
+
+/// A wrapper containing a pre-computed transaction environment alongside a recovered transaction.
+///
+/// This is useful for zero-copy scenarios where the `TxEnv` has already been built and you want
+/// to avoid the cloning that [`ToTxEnv`] would require.
+///
+/// # Example
+///
+/// ```ignore
+/// // Build environment once, move it into the wrapper
+/// let tx_env = TxEnv::from_recovered_tx(tx.inner(), tx.signer());
+/// let with_env = WithTxEnv::new(tx_env, &tx);
+/// executor.execute_transaction(with_env)?;
+/// ```
+#[derive(Debug, Clone)]
+pub struct WithTxEnv<E, T> {
+    /// The pre-computed transaction environment.
+    pub tx_env: E,
+    /// The recovered transaction.
+    pub tx: T,
+}
+
+impl<E, T> WithTxEnv<E, T> {
+    /// Creates a new `WithTxEnv` from a pre-computed environment and transaction.
+    pub const fn new(tx_env: E, tx: T) -> Self {
+        Self { tx_env, tx }
+    }
+}
+
+impl<TxEnv, T, Tx> ExecutableTxParts<TxEnv, Tx> for WithTxEnv<TxEnv, T>
+where
+    T: RecoveredTx<Tx>,
+{
+    type Recovered = T;
+
+    fn into_parts(self) -> (TxEnv, T) {
+        (self.tx_env, self.tx)
+    }
 }
 
 /// Alias for the [`ExecutableTxParts`] trait with types associated with the given

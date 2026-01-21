@@ -523,41 +523,6 @@ impl<Eip4844: AsRef<TxEip4844>> FromRecoveredTx<EthereumTxEnvelope<Eip4844>> for
     }
 }
 
-use crate::block::ExecutableTxParts;
-
-impl<T, TxEnv: FromRecoveredTx<T>> ExecutableTxParts<TxEnv, T> for Recovered<T> {
-    fn into_parts(self) -> (TxEnv, impl RecoveredTx<T>) {
-        (self.to_tx_env(), self)
-    }
-}
-
-impl<T, TxEnv: FromRecoveredTx<T>> ExecutableTxParts<TxEnv, T> for Recovered<&T> {
-    fn into_parts(self) -> (TxEnv, impl RecoveredTx<T>) {
-        (self.to_tx_env(), self)
-    }
-}
-
-impl<T, TxEnv: FromRecoveredTx<T>> ExecutableTxParts<TxEnv, T> for &Recovered<T> {
-    fn into_parts(self) -> (TxEnv, impl RecoveredTx<T>) {
-        (self.to_tx_env(), self)
-    }
-}
-
-impl<Tx, TxEnv, T: ExecutableTxParts<TxEnv, Tx>> ExecutableTxParts<TxEnv, Tx> for WithEncoded<T> {
-    fn into_parts(self) -> (TxEnv, impl RecoveredTx<Tx>) {
-        self.1.into_parts()
-    }
-}
-
-impl<'a, Tx, TxEnv, T> ExecutableTxParts<TxEnv, Tx> for &'a WithEncoded<T>
-where
-    &'a T: ExecutableTxParts<TxEnv, Tx>,
-{
-    fn into_parts(self) -> (TxEnv, impl RecoveredTx<Tx>) {
-        self.1.into_parts()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
