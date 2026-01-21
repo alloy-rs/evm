@@ -256,7 +256,6 @@ pub trait BlockExecutor {
     ///
     /// # Parameters
     /// - `output`: The transaction output containing execution result and state changes
-    /// - `tx`: The original transaction (needed for receipt generation)
     fn commit_transaction(&mut self, output: Self::Result) -> Result<u64, BlockExecutionError>;
 
     /// Applies any necessary changes after executing the block's transactions, completes execution
