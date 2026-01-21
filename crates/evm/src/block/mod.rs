@@ -66,13 +66,18 @@ impl<T> Default for BlockExecutionResult<T> {
 ///
 /// The trait ensures that the block executor can both execute the transaction in the EVM
 /// and access the original transaction data for receipt generation.
-pub trait ExecutableTx<E: BlockExecutor + ?Sized>:
-    ToTxEnv<<E::Evm as Evm>::Tx> + RecoveredTx<E::Transaction>
-{
+pub trait ExecutableTx<E: BlockExecutor + ?Sized> {
+    /// Converts the transaction to an executable environment and a recovered transaction itself.
+    fn into_parts(self) -> (<E::Evm as Evm>::Tx, impl RecoveredTx<E::Transaction>);
 }
-impl<E: BlockExecutor + ?Sized, T> ExecutableTx<E> for T where
-    T: ToTxEnv<<E::Evm as Evm>::Tx> + RecoveredTx<E::Transaction>
+
+impl<E: BlockExecutor + ?Sized, T> ExecutableTx<E> for T
+where
+    T: ToTxEnv<<E::Evm as Evm>::Tx> + RecoveredTx<E::Transaction>,
 {
+    fn into_parts(self) -> (<E::Evm as Evm>::Tx, impl RecoveredTx<E::Transaction>) {
+        (self.to_tx_env(), self)
+    }
 }
 
 /// Marks whether transaction should be committed into block executor's state.
@@ -218,7 +223,7 @@ pub trait BlockExecutor {
         f: impl FnOnce(&ExecutionResult<<Self::Evm as Evm>::HaltReason>) -> CommitChanges,
     ) -> Result<Option<u64>, BlockExecutionError> {
         // Execute transaction without committing
-        let output = self.execute_transaction_without_commit(&tx)?;
+        let output = self.execute_transaction_without_commit(tx)?;
 
         if !f(&output.result().result).should_commit() {
             return Ok(None);
