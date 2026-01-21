@@ -3,14 +3,12 @@
 use crate::{Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, RecoveredTx};
 use alloc::{boxed::Box, vec::Vec};
 use alloy_eips::eip7685::Requests;
-use alloy_primitives::Address;
 use revm::{
     context::result::{ExecutionResult, ResultAndState},
     database::State,
     inspector::NoOpInspector,
     Inspector,
 };
-use alloc::sync::Arc;
 
 mod error;
 pub use error::*;
@@ -502,4 +500,3 @@ pub trait BlockExecutorFactory: 'static {
         DB: Database + 'a,
         I: Inspector<<Self::EvmFactory as EvmFactory>::Context<&'a mut State<DB>>> + 'a;
 }
-
