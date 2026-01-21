@@ -22,7 +22,7 @@ use alloy_hardforks::EthereumHardfork;
 use alloy_primitives::{Bytes, Log, B256};
 use revm::{
     context::Block,
-    context_interface::result::ResultAndState,
+    context_interface::result::{ExecutionResult, ResultAndState},
     database::{DatabaseCommitExt, State},
     DatabaseCommit, Inspector,
 };
@@ -67,6 +67,11 @@ pub struct EthBlockExecutor<'a, Evm, Spec, R: ReceiptBuilder> {
     /// Blob gas used by the block.
     /// Before cancun activation, this is always 0.
     pub blob_gas_used: u64,
+
+    /// Total gas refunded by transactions in this block.
+    /// Before osaka activation, this is always 0.
+    /// Used for EIP-7778 block gas accounting.
+    pub gas_refunded: u64,
 }
 
 impl<'a, Evm, Spec, R> EthBlockExecutor<'a, Evm, Spec, R>
@@ -83,6 +88,7 @@ where
             receipts: Vec::with_capacity(tx_count_hint),
             gas_used: 0,
             blob_gas_used: 0,
+            gas_refunded: 0,
             system_caller: SystemCaller::new(spec.clone()),
             spec,
             receipt_builder,
@@ -161,13 +167,30 @@ where
             self.blob_gas_used = self.blob_gas_used.saturating_add(tx_blob_gas_used);
         }
 
+        // EIP-7778: track gas refunds when osaka is active
+        // Gas refunds are excluded from block gas accounting but still apply to user costs
+        let is_osaka =
+            self.spec.is_osaka_active_at_timestamp(self.evm.block().timestamp().saturating_to());
+        if is_osaka {
+            if let ExecutionResult::Success { gas_refunded, .. } = &result {
+                self.gas_refunded = self.gas_refunded.saturating_add(*gas_refunded);
+            }
+        }
+
+        // EIP-7778: cumulative_gas_used is gross gas (before refunds) when osaka is active
+        let cumulative_gas_used = if is_osaka {
+            self.gas_used + self.gas_refunded
+        } else {
+            self.gas_used
+        };
+
         // Push transaction changeset and calculate header bloom filter for receipt.
         self.receipts.push(self.receipt_builder.build_receipt(ReceiptBuilderCtx {
             tx: tx.tx(),
             evm: &self.evm,
             result,
             state: &state,
-            cumulative_gas_used: self.gas_used,
+            cumulative_gas_used,
         }));
 
         // Commit the state changes.
