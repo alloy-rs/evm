@@ -1,14 +1,16 @@
 //! Block execution abstraction.
 
-use crate::{Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, RecoveredTx, ToTxEnv};
+use crate::{Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, RecoveredTx};
 use alloc::{boxed::Box, vec::Vec};
 use alloy_eips::eip7685::Requests;
+use alloy_primitives::Address;
 use revm::{
     context::result::{ExecutionResult, ResultAndState},
     database::State,
     inspector::NoOpInspector,
     Inspector,
 };
+use alloc::sync::Arc;
 
 mod error;
 pub use error::*;
@@ -56,26 +58,17 @@ impl<T> Default for BlockExecutionResult<T> {
 /// - Must be convertible to the EVM's transaction environment
 /// - Must provide access to the transaction and signer via [`RecoveredTx`]
 ///
-/// This trait is automatically implemented for any type that meets these requirements.
 /// Common implementations include:
 /// - [`Recovered<T>`](alloy_consensus::transaction::Recovered) where `T` is a transaction type
 /// - [`WithEncoded<Recovered<T>>`](alloy_eips::eip2718::WithEncoded) for transactions with encoded
 ///   bytes
+/// - [`WithTxEnv<TxEnv, T>`] for pre-computed transaction environments (zero-copy)
 ///
 /// The trait ensures that the block executor can both execute the transaction in the EVM
 /// and access the original transaction data for receipt generation.
 pub trait ExecutableTxParts<TxEnv, T> {
     /// Converts the transaction to an executable environment and a recovered transaction itself.
     fn into_parts(self) -> (TxEnv, impl RecoveredTx<T>);
-}
-
-impl<T, TxEnv, Tx> ExecutableTxParts<TxEnv, Tx> for T
-where
-    T: ToTxEnv<TxEnv> + RecoveredTx<Tx>,
-{
-    fn into_parts(self) -> (TxEnv, impl RecoveredTx<Tx>) {
-        (self.to_tx_env(), self)
-    }
 }
 
 /// Alias for the [`ExecutableTxParts`] trait with types associated with the given
@@ -509,3 +502,4 @@ pub trait BlockExecutorFactory: 'static {
         DB: Database + 'a,
         I: Inspector<<Self::EvmFactory as EvmFactory>::Context<&'a mut State<DB>>> + 'a;
 }
+

@@ -430,6 +430,16 @@ where
     }
 }
 
+impl<Tx, T: RecoveredTx<Tx>> RecoveredTx<Tx> for Arc<T> {
+    fn tx(&self) -> &Tx {
+        (**self).tx()
+    }
+
+    fn signer(&self) -> &Address {
+        (**self).signer()
+    }
+}
+
 /// Helper trait for building a transaction environment from a transaction with its encoded form.
 ///
 /// This trait enables the conversion of consensus transaction types along with their EIP-2718
@@ -510,6 +520,35 @@ impl<Eip4844: AsRef<TxEip4844>> FromRecoveredTx<EthereumTxEnvelope<Eip4844>> for
             EthereumTxEnvelope::Eip4844(tx) => Self::from_recovered_tx(tx.tx().as_ref(), sender),
             EthereumTxEnvelope::Eip7702(tx) => Self::from_recovered_tx(tx.tx(), sender),
         }
+    }
+}
+
+use crate::block::ExecutableTxParts;
+
+impl<T, TxEnv: FromRecoveredTx<T>> ExecutableTxParts<TxEnv, T> for Recovered<T> {
+    fn into_parts(self) -> (TxEnv, impl RecoveredTx<T>) {
+        (self.to_tx_env(), self)
+    }
+}
+
+impl<T, TxEnv: FromRecoveredTx<T>> ExecutableTxParts<TxEnv, T> for &Recovered<T> {
+    fn into_parts(self) -> (TxEnv, impl RecoveredTx<T>) {
+        (self.to_tx_env(), self)
+    }
+}
+
+impl<Tx, TxEnv, T: ExecutableTxParts<TxEnv, Tx>> ExecutableTxParts<TxEnv, Tx> for WithEncoded<T> {
+    fn into_parts(self) -> (TxEnv, impl RecoveredTx<Tx>) {
+        self.1.into_parts()
+    }
+}
+
+impl<'a, Tx, TxEnv, T> ExecutableTxParts<TxEnv, Tx> for &'a WithEncoded<T>
+where
+    &'a T: ExecutableTxParts<TxEnv, Tx>,
+{
+    fn into_parts(self) -> (TxEnv, impl RecoveredTx<Tx>) {
+        self.1.into_parts()
     }
 }
 
