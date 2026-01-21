@@ -143,6 +143,8 @@ pub trait BlockExecutor {
     /// This constraint ensures that the block executor can convert consensus transactions
     /// into the EVM's transaction format for execution.
     type Evm: Evm<Tx: FromRecoveredTx<Self::Transaction> + FromTxWithEncoded<Self::Transaction>>;
+    /// Result of a transaction execution.
+    type Result: TxResult<HaltReason = <Self::Evm as Evm>::HaltReason>;
 
     /// Applies any necessary changes before executing the block's transactions.
     fn apply_pre_execution_changes(&mut self) -> Result<(), BlockExecutionError>;
@@ -218,11 +220,11 @@ pub trait BlockExecutor {
         // Execute transaction without committing
         let output = self.execute_transaction_without_commit(&tx)?;
 
-        if !f(&output.result).should_commit() {
+        if !f(&output.result().result).should_commit() {
             return Ok(None);
         }
 
-        let gas_used = self.commit_transaction(output, tx)?;
+        let gas_used = self.commit_transaction(output)?;
         Ok(Some(gas_used))
     }
 
@@ -242,7 +244,7 @@ pub trait BlockExecutor {
     fn execute_transaction_without_commit(
         &mut self,
         tx: impl ExecutableTx<Self>,
-    ) -> Result<ResultAndState<<Self::Evm as Evm>::HaltReason>, BlockExecutionError>;
+    ) -> Result<Self::Result, BlockExecutionError>;
 
     /// Commits a previously executed transaction's state changes.
     ///
@@ -255,11 +257,7 @@ pub trait BlockExecutor {
     /// # Parameters
     /// - `output`: The transaction output containing execution result and state changes
     /// - `tx`: The original transaction (needed for receipt generation)
-    fn commit_transaction(
-        &mut self,
-        output: ResultAndState<<Self::Evm as Evm>::HaltReason>,
-        tx: impl ExecutableTx<Self>,
-    ) -> Result<u64, BlockExecutionError>;
+    fn commit_transaction(&mut self, output: Self::Result) -> Result<u64, BlockExecutionError>;
 
     /// Applies any necessary changes after executing the block's transactions, completes execution
     /// and returns the underlying EVM along with execution result.
@@ -335,6 +333,15 @@ pub trait BlockExecutor {
 
         self.apply_post_execution_changes()
     }
+}
+
+/// A result of transaction execution.
+pub trait TxResult {
+    /// Halt reason.
+    type HaltReason;
+
+    /// Returns the inner EVM result.
+    fn result(&self) -> &ResultAndState<Self::HaltReason>;
 }
 
 /// A helper trait encapsulating the constraints on [`BlockExecutor`] produced by the
