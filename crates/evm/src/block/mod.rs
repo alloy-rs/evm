@@ -53,10 +53,8 @@ impl<T> Default for BlockExecutionResult<T> {
 /// Helper trait to encapsulate requirements for a type to be used as input for [`BlockExecutor`].
 ///
 /// This trait combines the requirements for a transaction to be executable by a block executor:
-/// - Must be convertible to the EVM's transaction environment via [`ToTxEnv`]
+/// - Must be convertible to the EVM's transaction environment
 /// - Must provide access to the transaction and signer via [`RecoveredTx`]
-/// - Must be [`Copy`] for efficient handling during block execution (the expectation here is that
-///   this always passed as & reference)
 ///
 /// This trait is automatically implemented for any type that meets these requirements.
 /// Common implementations include:
