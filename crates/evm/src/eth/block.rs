@@ -70,7 +70,6 @@ pub struct EthBlockExecutor<'a, Evm, Spec, R: ReceiptBuilder> {
 
     /// Total gas refunded by transactions in this block.
     /// Before amsterdam activation, this is always 0.
-    /// Used for EIP-7778 block gas accounting.
     pub gas_refunded: u64,
 }
 
@@ -190,22 +189,16 @@ where
             self.blob_gas_used = self.blob_gas_used.saturating_add(blob_gas_used);
         }
 
-        // EIP-7778: track gas refunds when amsterdam is active.
-        // Refunds reduce user cost (gas_spent) but not block gas limit (cumulative_gas_used).
-        let is_amsterdam =
-            self.spec.is_amsterdam_active_at_timestamp(self.evm.block().timestamp().saturating_to());
-        if is_amsterdam {
-            if let ExecutionResult::Success { gas_refunded, .. } = &result {
-                self.gas_refunded = self.gas_refunded.saturating_add(*gas_refunded);
-            }
-        }
-
-        // EIP-7778: cumulative_gas_used is gross gas (before refunds) when amsterdam is active
-        let cumulative_gas_used = if is_amsterdam {
-            self.gas_used + self.gas_refunded
-        } else {
-            self.gas_used
-        };
+        // EIP-7778: Track refunds and compute gross gas for Amsterdam
+        let cumulative_gas_used =
+            if self.spec.is_amsterdam_active_at_timestamp(self.evm.block().timestamp().saturating_to()) {
+                if let ExecutionResult::Success { gas_refunded, .. } = &result {
+                    self.gas_refunded = self.gas_refunded.saturating_add(*gas_refunded);
+                }
+                self.gas_used + self.gas_refunded
+            } else {
+                self.gas_used
+            };
 
         // Push transaction changeset and calculate header bloom filter for receipt.
         self.receipts.push(self.receipt_builder.build_receipt(ReceiptBuilderCtx {
