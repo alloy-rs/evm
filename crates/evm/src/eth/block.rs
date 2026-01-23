@@ -190,15 +190,17 @@ where
         }
 
         // EIP-7778: Track refunds and compute gross gas for Amsterdam
-        let cumulative_gas_used =
-            if self.spec.is_amsterdam_active_at_timestamp(self.evm.block().timestamp().saturating_to()) {
-                if let ExecutionResult::Success { gas_refunded, .. } = &result {
-                    self.gas_refunded = self.gas_refunded.saturating_add(*gas_refunded);
-                }
-                self.gas_used + self.gas_refunded
-            } else {
-                self.gas_used
-            };
+        let cumulative_gas_used = if self
+            .spec
+            .is_amsterdam_active_at_timestamp(self.evm.block().timestamp().saturating_to())
+        {
+            if let ExecutionResult::Success { gas_refunded, .. } = &result {
+                self.gas_refunded = self.gas_refunded.saturating_add(*gas_refunded);
+            }
+            self.gas_used + self.gas_refunded
+        } else {
+            self.gas_used
+        };
 
         // Push transaction changeset and calculate header bloom filter for receipt.
         self.receipts.push(self.receipt_builder.build_receipt(ReceiptBuilderCtx {
