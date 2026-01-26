@@ -91,6 +91,7 @@ impl EvmEnv<SpecId> {
             gas_limit: input.gas_limit,
             basefee: input.base_fee_per_gas,
             blob_excess_gas_and_price,
+            slot_num: 0,
         };
 
         Self::new(cfg_env, block_env)
