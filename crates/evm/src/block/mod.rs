@@ -39,8 +39,6 @@ pub struct BlockExecutionResult<T> {
     pub gas_used: u64,
     /// Blob gas used by the block.
     pub blob_gas_used: u64,
-    /// Block access list (EIP-7928, Amsterdam).
-    pub block_access_list: Option<alloy_eip7928::BlockAccessList>,
 }
 
 impl<T> Default for BlockExecutionResult<T> {
@@ -50,7 +48,6 @@ impl<T> Default for BlockExecutionResult<T> {
             requests: Default::default(),
             gas_used: 0,
             blob_gas_used: 0,
-            block_access_list: None,
         }
     }
 }
