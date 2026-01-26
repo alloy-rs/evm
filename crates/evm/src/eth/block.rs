@@ -313,6 +313,7 @@ where
                 requests,
                 gas_used: self.gas_used,
                 blob_gas_used: self.blob_gas_used,
+                block_access_list: None, // BAL is extracted at a higher level from State
             },
         ))
     }
