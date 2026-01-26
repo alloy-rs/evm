@@ -313,6 +313,7 @@ where
                 cumulative_gas_used: self.gas_used,
                 evm: &self.evm,
                 state: &state,
+                gas_spent: None,
             }) {
                 Ok(receipt) => receipt,
                 Err(ctx) => {

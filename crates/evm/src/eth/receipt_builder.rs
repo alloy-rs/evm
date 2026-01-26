@@ -19,6 +19,13 @@ pub struct ReceiptBuilderCtx<'a, T, E: Evm> {
     pub state: &'a EvmState,
     /// Cumulative gas used.
     pub cumulative_gas_used: u64,
+    /// Gas spent by the transaction after refunds (what the user pays).
+    ///
+    /// This is set when EIP-7778 is active (Osaka hardfork).
+    /// Before Osaka, this is `None` and `cumulative_gas_used` tracks gas after refunds.
+    /// After Osaka, `cumulative_gas_used` tracks gas before refunds, and `gas_spent`
+    /// tracks gas after refunds.
+    pub gas_spent: Option<u64>,
 }
 
 /// Type that knows how to build a receipt based on execution result.
