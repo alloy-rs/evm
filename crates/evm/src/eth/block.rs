@@ -42,6 +42,8 @@ pub struct EthBlockExecutionCtx<'a> {
     pub extra_data: Bytes,
     /// Block transactions count hint. Used to preallocate the receipts vector.
     pub tx_count_hint: Option<usize>,
+    /// Slot number (EIP-7928, Amsterdam).
+    pub slot_number: Option<u64>,
 }
 
 /// Block executor for Ethereum.
