@@ -66,6 +66,7 @@ pub fn apply_block_overrides<DB>(overrides: BlockOverrides, db: &mut DB, env: &m
 where
     DB: OverrideBlockHashes,
 {
+    #[allow(clippy::needless_update)]
     let BlockOverrides {
         number,
         difficulty,
@@ -75,7 +76,8 @@ where
         random,
         base_fee,
         block_hash,
-    } = overrides;
+        ..
+    } = BlockOverrides { ..overrides };
 
     if let Some(block_hashes) = block_hash {
         // override block hashes
