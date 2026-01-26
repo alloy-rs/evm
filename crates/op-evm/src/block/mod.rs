@@ -323,6 +323,7 @@ where
                         status: Eip658Value::Eip658(ctx.result.is_success()),
                         cumulative_gas_used: self.gas_used,
                         logs: ctx.result.into_logs(),
+                        gas_spent: None,
                     };
 
                     self.receipt_builder.build_deposit_receipt(OpDepositReceipt {

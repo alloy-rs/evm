@@ -50,6 +50,7 @@ impl OpReceiptBuilder for OpAlloyReceiptBuilder {
                     status: Eip658Value::Eip658(ctx.result.is_success()),
                     cumulative_gas_used: ctx.cumulative_gas_used,
                     logs: ctx.result.into_logs(),
+                    gas_spent: ctx.gas_spent,
                 }
                 .with_bloom();
 
