@@ -70,3 +70,11 @@ test-case = "3"
 [patch.crates-io]
 revm = { git = "https://github.com/bluealloy/revm", rev = "0dc217a9d2c470c533ef8d7a51396e4fb2b02008" }
 op-revm = { git = "https://github.com/bluealloy/revm", rev = "0dc217a9d2c470c533ef8d7a51396e4fb2b02008" }
+
+# alloy bal-devnet2 patches
+alloy-eips = { git = "https://github.com/alloy-rs/alloy", branch = "bal-devnet2" }
+alloy-serde = { git = "https://github.com/alloy-rs/alloy", branch = "bal-devnet2" }
+alloy-consensus = { git = "https://github.com/alloy-rs/alloy", branch = "bal-devnet2" }
+alloy-rpc-types-eth = { git = "https://github.com/alloy-rs/alloy", branch = "bal-devnet2" }
+alloy-rpc-types-engine = { git = "https://github.com/alloy-rs/alloy", branch = "bal-devnet2" }
+alloy-network-primitives = { git = "https://github.com/alloy-rs/alloy", branch = "bal-devnet2" }
