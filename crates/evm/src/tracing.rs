@@ -255,12 +255,12 @@ where
     }
 
     /// Returns a reference to the underlying [`BlockExecutor`].
-    pub fn executor(&self) -> &E {
+    pub const fn executor(&self) -> &E {
         &self.executor
     }
 
     /// Returns a mutable reference to the underlying [`BlockExecutor`].
-    pub fn executor_mut(&mut self) -> &mut E {
+    pub const fn executor_mut(&mut self) -> &mut E {
         &mut self.executor
     }
 
@@ -287,6 +287,7 @@ where
     E::Evm: Evm<Inspector: Clone, DB: DatabaseCommit>,
 {
     /// Executes a transaction, and returns its outcome along with the inspector state.
+    #[expect(clippy::type_complexity)]
     pub fn trace(
         &mut self,
         tx: impl IntoTxEnv<<E::Evm as Evm>::Tx>,
