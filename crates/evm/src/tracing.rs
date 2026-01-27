@@ -4,6 +4,8 @@ use crate::{
     block::{BlockExecutionError, BlockExecutor, BlockExecutorFactory, BlockExecutorFor},
     Database, Evm, EvmFactory, IntoTxEnv,
 };
+use alloy_consensus::transaction::TxHashRef;
+use alloy_primitives::B256;
 use core::{fmt::Debug, iter::Peekable};
 use revm::{
     context::result::{ExecutionResult, ResultAndState},
@@ -301,6 +303,62 @@ where
             apply_pre_execution: true,
             done: false,
         }
+    }
+
+}
+
+impl<E> BlockTracer<E>
+where
+    E: BlockExecutor,
+    E::Evm: Evm<DB: DatabaseCommit>,
+{
+    /// Traces a single transaction in the block by its hash.
+    ///
+    /// This method:
+    /// 1. Applies pre-execution changes with inspector disabled
+    /// 2. Replays all transactions before the target with inspector disabled
+    /// 3. Enables the inspector and traces the target transaction
+    ///
+    /// Note: The target transaction is executed but not committed to state.
+    ///
+    /// Returns `None` if the target transaction was not found.
+    #[expect(clippy::type_complexity)]
+    pub fn trace_transaction<I, T>(
+        mut self,
+        transactions: I,
+        target_tx_hash: B256,
+    ) -> Result<
+        Option<TraceOutput<<E::Evm as Evm>::HaltReason, <E::Evm as Evm>::Inspector>>,
+        BlockTracingError<<E::Evm as Evm>::Error, core::convert::Infallible>,
+    >
+    where
+        I: IntoIterator<Item = T>,
+        T: IntoTxEnv<<E::Evm as Evm>::Tx> + TxHashRef,
+    {
+        self.executor.evm_mut().disable_inspector();
+        if let Err(err) = self.executor.apply_pre_execution_changes() {
+            return Err(BlockTracingError::PreExecution(err));
+        }
+
+        for tx in transactions {
+            if *tx.tx_hash() == target_tx_hash {
+                self.executor.evm_mut().enable_inspector();
+                let ResultAndState { result, state: _ } = self
+                    .executor
+                    .evm_mut()
+                    .transact(tx)
+                    .map_err(BlockTracingError::Evm)?;
+                let inspector =
+                    core::mem::replace(self.executor.evm_mut().inspector_mut(), self.fused_inspector);
+                return Ok(Some(TraceOutput { result, inspector }));
+            }
+            self.executor
+                .evm_mut()
+                .transact_commit(tx)
+                .map_err(BlockTracingError::Evm)?;
+        }
+
+        Ok(None)
     }
 }
 
