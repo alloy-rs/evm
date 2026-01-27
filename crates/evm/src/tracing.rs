@@ -12,46 +12,6 @@ use revm::{
     DatabaseCommit, Inspector,
 };
 
-/// Error that can occur during block tracing iteration.
-#[derive(Debug, thiserror::Error)]
-pub enum BlockTracingError<EvmErr, HookErr> {
-    /// Error during pre-execution changes (system calls, etc.)
-    #[error("pre-execution error: {0}")]
-    PreExecution(BlockExecutionError),
-    /// EVM error during transaction execution.
-    #[error("evm error: {0}")]
-    Evm(EvmErr),
-    /// Error from the tracing hook.
-    #[error(transparent)]
-    Hook(HookErr),
-}
-
-impl<EvmErr, HookErr> BlockTracingError<EvmErr, HookErr> {
-    /// Returns the pre-execution error if this is a [`BlockTracingError::PreExecution`] variant.
-    pub const fn as_pre_execution(&self) -> Option<&BlockExecutionError> {
-        match self {
-            Self::PreExecution(err) => Some(err),
-            _ => None,
-        }
-    }
-
-    /// Returns the EVM error if this is a [`BlockTracingError::Evm`] variant.
-    pub const fn as_evm(&self) -> Option<&EvmErr> {
-        match self {
-            Self::Evm(err) => Some(err),
-            _ => None,
-        }
-    }
-
-    /// Returns the hook error if this is a [`BlockTracingError::Hook`] variant.
-    pub const fn as_hook(&self) -> Option<&HookErr> {
-        match self {
-            Self::Hook(err) => Some(err),
-            _ => None,
-        }
-    }
-}
-
 /// A helper type for tracing transactions.
 #[derive(Debug, Clone)]
 pub struct TxTracer<E: Evm> {
@@ -468,3 +428,43 @@ pub trait BlockExecutorFactoryExt: BlockExecutorFactory {
 }
 
 impl<T: BlockExecutorFactory> BlockExecutorFactoryExt for T {}
+
+/// Error that can occur during block tracing iteration.
+#[derive(Debug, thiserror::Error)]
+pub enum BlockTracingError<EvmErr, HookErr> {
+    /// Error during pre-execution changes (system calls, etc.)
+    #[error("pre-execution error: {0}")]
+    PreExecution(BlockExecutionError),
+    /// EVM error during transaction execution.
+    #[error("evm error: {0}")]
+    Evm(EvmErr),
+    /// Error from the tracing hook.
+    #[error(transparent)]
+    Hook(HookErr),
+}
+
+impl<EvmErr, HookErr> BlockTracingError<EvmErr, HookErr> {
+    /// Returns the pre-execution error if this is a [`BlockTracingError::PreExecution`] variant.
+    pub const fn as_pre_execution(&self) -> Option<&BlockExecutionError> {
+        match self {
+            Self::PreExecution(err) => Some(err),
+            _ => None,
+        }
+    }
+
+    /// Returns the EVM error if this is a [`BlockTracingError::Evm`] variant.
+    pub const fn as_evm(&self) -> Option<&EvmErr> {
+        match self {
+            Self::Evm(err) => Some(err),
+            _ => None,
+        }
+    }
+
+    /// Returns the hook error if this is a [`BlockTracingError::Hook`] variant.
+    pub const fn as_hook(&self) -> Option<&HookErr> {
+        match self {
+            Self::Hook(err) => Some(err),
+            _ => None,
+        }
+    }
+}
