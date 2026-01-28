@@ -4,7 +4,7 @@ use crate::{Database, EvmInternals};
 use alloc::{borrow::Cow, boxed::Box, string::String, sync::Arc};
 use alloy_consensus::transaction::Either;
 use alloy_primitives::{
-    map::{HashMap, HashSet},
+    map::{AddressMap, AddressSet},
     Address, Bytes, U256,
 };
 use core::fmt::Debug;
@@ -90,7 +90,7 @@ impl PrecompilesMap {
         // apply the transformation to each precompile
         let entries = dyn_precompiles.inner.drain();
         let mut new_map =
-            HashMap::with_capacity_and_hasher(entries.size_hint().0, Default::default());
+            AddressMap::with_capacity_and_hasher(entries.size_hint().0, Default::default());
         for (addr, precompile) in entries {
             if filter(&addr, &precompile) {
                 let transformed = f(&addr, precompile);
@@ -562,9 +562,9 @@ impl core::fmt::Debug for DynPrecompile {
 #[derive(Clone, Default)]
 pub struct DynPrecompiles {
     /// Precompiles
-    inner: HashMap<Address, DynPrecompile>,
+    inner: AddressMap<DynPrecompile>,
     /// Addresses of precompile
-    addresses: HashSet<Address>,
+    addresses: AddressSet,
 }
 
 impl DynPrecompiles {
