@@ -3,7 +3,6 @@ set -eo pipefail
 
 no_std_packages=(
   alloy-evm
-  alloy-op-evm
 )
 
 for package in "${no_std_packages[@]}"; do
