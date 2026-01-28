@@ -22,7 +22,7 @@ use alloy_hardforks::EthereumHardfork;
 use alloy_primitives::{Bytes, Log, B256};
 use revm::{
     context::Block,
-    context_interface::result::ResultAndState,
+    context_interface::result::{ExecutionResult, ResultAndState},
     database::{DatabaseCommitExt, State},
     DatabaseCommit, Inspector,
 };
@@ -67,6 +67,10 @@ pub struct EthBlockExecutor<'a, Evm, Spec, R: ReceiptBuilder> {
     /// Blob gas used by the block.
     /// Before cancun activation, this is always 0.
     pub blob_gas_used: u64,
+
+    /// Total gas refunded by transactions in this block.
+    /// Before amsterdam activation, this is always 0.
+    pub gas_refunded: u64,
 }
 
 /// The result of executing an Ethereum transaction.
@@ -102,6 +106,7 @@ where
             receipts: Vec::with_capacity(tx_count_hint),
             gas_used: 0,
             blob_gas_used: 0,
+            gas_refunded: 0,
             system_caller: SystemCaller::new(spec.clone()),
             spec,
             receipt_builder,
@@ -184,13 +189,26 @@ where
             self.blob_gas_used = self.blob_gas_used.saturating_add(blob_gas_used);
         }
 
+        // EIP-7778: Track refunds and compute gross gas for Amsterdam
+        let cumulative_gas_used = if self
+            .spec
+            .is_amsterdam_active_at_timestamp(self.evm.block().timestamp().saturating_to())
+        {
+            if let ExecutionResult::Success { gas_refunded, .. } = &result {
+                self.gas_refunded = self.gas_refunded.saturating_add(*gas_refunded);
+            }
+            self.gas_used + self.gas_refunded
+        } else {
+            self.gas_used
+        };
+
         // Push transaction changeset and calculate header bloom filter for receipt.
         self.receipts.push(self.receipt_builder.build_receipt(ReceiptBuilderCtx {
             tx_type,
             evm: &self.evm,
             result,
             state: &state,
-            cumulative_gas_used: self.gas_used,
+            cumulative_gas_used,
         }));
 
         // Commit the state changes.
