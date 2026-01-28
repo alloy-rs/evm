@@ -5,7 +5,7 @@ use alloc::boxed::Box;
 use alloy_consensus::BlockHeader;
 use alloy_eips::eip4895::{Withdrawal, Withdrawals};
 use alloy_hardforks::EthereumHardforks;
-use alloy_primitives::{map::HashMap, Address};
+use alloy_primitives::{map::AddressMap, Address};
 use revm::{
     context::Block,
     state::{Account, AccountStatus, EvmState},
@@ -22,11 +22,11 @@ pub fn post_block_balance_increments<H>(
     block_env: impl Block,
     ommers: &[H],
     withdrawals: Option<&Withdrawals>,
-) -> HashMap<Address, u128>
+) -> AddressMap<u128>
 where
     H: BlockHeader,
 {
-    let mut balance_increments = HashMap::with_capacity_and_hasher(
+    let mut balance_increments = AddressMap::with_capacity_and_hasher(
         withdrawals.map_or(ommers.len(), |w| w.len()),
         Default::default(),
     );
@@ -69,9 +69,9 @@ pub fn post_block_withdrawals_balance_increments(
     spec: impl EthereumHardforks,
     block_timestamp: u64,
     withdrawals: &[Withdrawal],
-) -> HashMap<Address, u128> {
+) -> AddressMap<u128> {
     let mut balance_increments =
-        HashMap::with_capacity_and_hasher(withdrawals.len(), Default::default());
+        AddressMap::with_capacity_and_hasher(withdrawals.len(), Default::default());
     insert_post_block_withdrawals_balance_increments(
         spec,
         block_timestamp,
@@ -90,7 +90,7 @@ pub fn insert_post_block_withdrawals_balance_increments(
     spec: impl EthereumHardforks,
     block_timestamp: u64,
     withdrawals: Option<&[Withdrawal]>,
-    balance_increments: &mut HashMap<Address, u128>,
+    balance_increments: &mut AddressMap<u128>,
 ) {
     // Process withdrawals
     if spec.is_shanghai_active_at_timestamp(block_timestamp) {
@@ -109,7 +109,7 @@ pub fn insert_post_block_withdrawals_balance_increments(
 /// to load accounts from. No balance increment is done in the function.
 /// Zero balance increments are ignored and won't create state entries.
 pub fn balance_increment_state<DB>(
-    balance_increments: &HashMap<Address, u128>,
+    balance_increments: &AddressMap<u128>,
     state: &mut DB,
 ) -> Result<EvmState, BlockExecutionError>
 where
