@@ -209,8 +209,7 @@ where
             let tx_gas_used_before_refunds = gas_used + gas_refunded;
 
             self.gas_used += tx_gas_used_before_refunds;
-            let cumulative_gas_spent =
-                self.gas_spent.get_or_insert(0).saturating_add(tx_gas_spent);
+            let cumulative_gas_spent = self.gas_spent.get_or_insert(0).saturating_add(tx_gas_spent);
             *self.gas_spent.as_mut().unwrap() = cumulative_gas_spent;
 
             (self.gas_used, Some(cumulative_gas_spent))
