@@ -51,7 +51,7 @@ alloy-rpc-types-engine = { version = "1.5.2", default-features = false }
 
 # op-alloy
 alloy-op-hardforks = { version = "0.4.7" }
-op-alloy = { version = "0.23", default-features = false, features = [
+op-alloy = { version = "0.23.1", default-features = false, features = [
     "consensus",
 ] }
 
@@ -81,3 +81,4 @@ alloy-network-primitives = { git = "https://github.com/alloy-rs/alloy", branch =
 
 # op-alloy bal-devnet2 patches
 op-alloy-consensus = { git = "https://github.com/alloy-rs/op-alloy", branch = "bal-devnet2" }
+op-alloy-rpc-types-engine = { git = "https://github.com/alloy-rs/op-alloy", branch = "bal-devnet2" }
