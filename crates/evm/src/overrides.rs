@@ -57,7 +57,9 @@ impl<DB> OverrideBlockHashes for CacheDB<DB> {
 
 impl<DB> OverrideBlockHashes for State<DB> {
     fn override_block_hashes(&mut self, block_hashes: BTreeMap<u64, B256>) {
-        self.block_hashes.extend(block_hashes);
+        for (num, hash) in block_hashes {
+            self.block_hashes.insert(num, hash);
+        }
     }
 }
 
