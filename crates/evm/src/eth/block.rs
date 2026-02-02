@@ -190,13 +190,13 @@ where
 
         let gas_used = result.gas_used();
 
-        // EIP-7778: Track gas accounting differently for Osaka
+        // EIP-7778: Track gas accounting differently for Amsterdam
         // - gas_used (for block accounting): gas before refunds
         // - gas_spent (for user receipts): gas after refunds (what user pays)
-        let is_osaka =
-            self.spec.is_osaka_active_at_timestamp(self.evm.block().timestamp().saturating_to());
+        let is_amsterdam =
+            self.spec.is_amsterdam_active_at_timestamp(self.evm.block().timestamp().saturating_to());
 
-        let (cumulative_gas_used, gas_spent) = if is_osaka {
+        let (cumulative_gas_used, gas_spent) = if is_amsterdam {
             // Get gas_refunded from the result (only Success variant has refunds)
             let gas_refunded = match &result {
                 ExecutionResult::Success { gas_refunded, .. } => *gas_refunded,
@@ -214,7 +214,7 @@ where
 
             (self.gas_used, Some(cumulative_gas_spent))
         } else {
-            // Pre-Osaka: gas_used tracks gas after refunds
+            // Pre-Amsterdam: gas_used tracks gas after refunds
             self.gas_used += gas_used;
             (self.gas_used, None)
         };
