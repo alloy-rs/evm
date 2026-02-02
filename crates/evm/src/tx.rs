@@ -49,6 +49,12 @@ impl IntoTxEnv<Self> for TxEnv {
     }
 }
 
+impl ToTxEnv<TxEnv> for &TxEnv {
+    fn to_tx_env(&self) -> TxEnv {
+        (*self).clone()
+    }
+}
+
 /// A helper trait to allow implementing [`IntoTxEnv`] for types that build transaction environment
 /// by cloning data.
 #[auto_impl::auto_impl(&)]
@@ -86,6 +92,16 @@ where
 {
     fn into_tx_env(self) -> Self {
         self
+    }
+}
+
+#[cfg(feature = "op")]
+impl<T> ToTxEnv<op_revm::OpTransaction<T>> for &op_revm::OpTransaction<T>
+where
+    op_revm::OpTransaction<T>: Clone,
+{
+    fn to_tx_env(&self) -> op_revm::OpTransaction<T> {
+        (*self).clone()
     }
 }
 
