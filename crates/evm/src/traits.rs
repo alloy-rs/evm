@@ -77,7 +77,13 @@ trait EvmInternalsTr: Database<Error = ErasedError> + Debug {
 
 /// Helper internal struct for implementing [`EvmInternals`].
 #[derive(Debug)]
-struct EvmInternalsImpl<'a, T>(&'a mut T);
+pub(crate) struct EvmInternalsImpl<'a, T>(&'a mut T);
+
+impl<'a, T> EvmInternalsImpl<'a, T> {
+    pub(crate) fn new(inner: &'a mut T) -> Self {
+        Self(inner)
+    }
+}
 
 impl<T> revm::Database for EvmInternalsImpl<'_, T>
 where
@@ -154,9 +160,14 @@ where
     }
 }
 
+enum EvmInternalsInner<'a> {
+    Boxed(Box<dyn EvmInternalsTr + 'a>),
+    Ref(&'a mut dyn EvmInternalsTr),
+}
+
 /// Helper type exposing hooks into EVM and access to evm internal settings.
 pub struct EvmInternals<'a> {
-    internals: Box<dyn EvmInternalsTr + 'a>,
+    internals: EvmInternalsInner<'a>,
     block_env: &'a (dyn Block + 'a),
 }
 
@@ -166,7 +177,34 @@ impl<'a> EvmInternals<'a> {
     where
         T: JournalTr<Database: Database> + Debug,
     {
-        Self { internals: Box::new(EvmInternalsImpl(journal)), block_env }
+        Self { internals: EvmInternalsInner::Boxed(Box::new(EvmInternalsImpl(journal))), block_env }
+    }
+
+    /// Creates an `EvmInternals` backed by an existing `EvmInternalsImpl` to avoid a heap
+    /// allocation on hot paths (e.g. precompile execution).
+    pub(crate) fn from_impl<'b, T>(
+        internals: &'a mut EvmInternalsImpl<'b, T>,
+        block_env: &'a dyn Block,
+    ) -> Self
+    where
+        T: JournalTr<Database: Database> + Debug,
+    {
+        Self { internals: EvmInternalsInner::Ref(internals), block_env }
+    }
+
+    fn internals(&self) -> &dyn EvmInternalsTr {
+        match &self.internals {
+            EvmInternalsInner::Boxed(internals) => internals.as_ref(),
+            EvmInternalsInner::Ref(internals) => &**internals,
+        }
+    }
+
+    #[inline]
+    fn internals_mut(&mut self) -> &mut dyn EvmInternalsTr {
+        match &mut self.internals {
+            EvmInternalsInner::Boxed(internals) => internals.as_mut(),
+            EvmInternalsInner::Ref(internals) => &mut **internals,
+        }
     }
 
     /// Returns the  evm's block information.
@@ -189,7 +227,7 @@ impl<'a> EvmInternals<'a> {
     /// Users should prefer using other methods for accessing state that rely on cached state in the
     /// journal instead.
     pub fn db_mut(&mut self) -> impl Database<Error = ErasedError> + '_ {
-        &mut *self.internals
+        self.internals_mut()
     }
 
     /// Loads an account.
@@ -197,7 +235,7 @@ impl<'a> EvmInternals<'a> {
         &mut self,
         address: Address,
     ) -> Result<StateLoad<&mut Account>, EvmInternalsError> {
-        self.internals.load_account(address)
+        self.internals_mut().load_account(address)
     }
 
     /// Loads code of an account.
@@ -205,7 +243,7 @@ impl<'a> EvmInternals<'a> {
         &mut self,
         address: Address,
     ) -> Result<StateLoad<&mut Account>, EvmInternalsError> {
-        self.internals.load_account_code(address)
+        self.internals_mut().load_account_code(address)
     }
 
     /// Loads a storage slot.
@@ -214,17 +252,17 @@ impl<'a> EvmInternals<'a> {
         address: Address,
         key: StorageKey,
     ) -> Result<StateLoad<StorageValue>, EvmInternalsError> {
-        self.internals.sload(address, key)
+        self.internals_mut().sload(address, key)
     }
 
     /// Touches the account.
     pub fn touch_account(&mut self, address: Address) {
-        self.internals.touch_account(address);
+        self.internals_mut().touch_account(address);
     }
 
     /// Sets bytecode to the account.
     pub fn set_code(&mut self, address: Address, code: Bytecode) {
-        self.internals.set_code(address, code);
+        self.internals_mut().set_code(address, code);
     }
 
     /// Stores the storage value in Journal state.
@@ -234,19 +272,19 @@ impl<'a> EvmInternals<'a> {
         key: StorageKey,
         value: StorageValue,
     ) -> Result<StateLoad<SStoreResult>, EvmInternalsError> {
-        self.internals.sstore(address, key, value)
+        self.internals_mut().sstore(address, key, value)
     }
 
     /// Logs the log in Journal state.
     pub fn log(&mut self, log: Log) {
-        self.internals.log(log);
+        self.internals_mut().log(log);
     }
 }
 
 impl<'a> fmt::Debug for EvmInternals<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("EvmInternals")
-            .field("internals", &self.internals)
+            .field("internals", &self.internals())
             .field("block_env", &"{{}}")
             .finish_non_exhaustive()
     }

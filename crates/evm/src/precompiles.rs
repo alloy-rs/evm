@@ -1,6 +1,6 @@
 //! Helpers for dealing with Precompiles.
 
-use crate::{Database, EvmInternals};
+use crate::{traits::EvmInternalsImpl, Database, EvmInternals};
 use alloc::{borrow::Cow, boxed::Box, string::String, sync::Arc};
 use alloy_consensus::transaction::Either;
 use alloy_primitives::{
@@ -404,12 +404,13 @@ where
             CallInput::Bytes(bytes) => bytes.as_ref(),
         };
 
+        let mut internals_impl = EvmInternalsImpl::new(journal);
         let precompile_result = precompile.call(PrecompileInput {
             data: input_bytes,
             gas: gas_limit,
             caller: inputs.caller_address,
             value: inputs.call_value,
-            internals: EvmInternals::new(journal, &context.block),
+            internals: EvmInternals::from_impl(&mut internals_impl, &context.block),
         });
 
         match precompile_result {

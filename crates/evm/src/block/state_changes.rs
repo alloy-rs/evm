@@ -27,7 +27,7 @@ where
     H: BlockHeader,
 {
     let mut balance_increments = HashMap::with_capacity_and_hasher(
-        withdrawals.map_or(ommers.len(), |w| w.len()),
+        withdrawals.map_or(ommers.len(), |w| w.len()) + 1,
         Default::default(),
     );
 
