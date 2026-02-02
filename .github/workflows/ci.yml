@@ -36,18 +36,22 @@ jobs:
           # All features on MSRV
           - rust: "1.88" # MSRV
             flags: "--all-features"
+          # gmp doesn't compile on Windows
+          - os: windows-latest
+            flags: "--all-features"
+        include:
+          # Windows: all features except gmp
+          - os: windows-latest
+            rust: stable
+            flags: "--features std,secp256k1,op,overrides,call-util,engine,asm-keccak,rpc"
+          - os: windows-latest
+            rust: nightly
+            flags: "--features std,secp256k1,op,overrides,call-util,engine,asm-keccak,rpc"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust }}
-      - name: Install Anvil
-        uses: foundry-rs/foundry-toolchain@v1
-        with:
-          version: nightly
-      - name: Install test binaries
-        shell: bash
-        run: ./.github/scripts/install_test_binaries.sh
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
@@ -67,7 +71,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
@@ -79,7 +83,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
           target: wasm32-unknown-unknown
@@ -95,7 +99,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
           target: wasm32-wasip1
@@ -111,7 +115,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: taiki-e/install-action@cargo-hack
       - uses: Swatinem/rust-cache@v2
@@ -125,7 +129,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: riscv32imac-unknown-none-elf
@@ -139,7 +143,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: nightly
@@ -155,7 +159,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
         with:
@@ -169,14 +173,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@nightly
         with:
           components: rustfmt
       - run: cargo fmt --all --check
 
   deny:
-    uses: ithacaxyz/ci/.github/workflows/deny.yml@main
+    uses: tempoxyz/ci/.github/workflows/deny.yml@main
 
   ci-success:
     name: ci success
@@ -204,7 +208,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: run zepter
         run: |
           cargo install zepter -f --locked

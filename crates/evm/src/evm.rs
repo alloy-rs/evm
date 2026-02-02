@@ -1,10 +1,11 @@
 //! Abstraction over EVM.
 
-use crate::{tracing::TxTracer, EvmEnv, EvmError, IntoTxEnv};
-use alloy_primitives::{Address, Bytes};
+use crate::{env::BlockEnvironment, tracing::TxTracer, EvmEnv, EvmError, IntoTxEnv};
+use alloy_consensus::transaction::TxHashRef;
+use alloy_primitives::{Address, Bytes, B256};
 use core::{error::Error, fmt::Debug, hash::Hash};
 use revm::{
-    context::{result::ExecutionResult, BlockEnv},
+    context::result::ExecutionResult,
     context_interface::{
         result::{HaltReasonTr, ResultAndState},
         ContextTr,
@@ -53,13 +54,15 @@ pub trait Evm {
     /// Identifier of the EVM specification. EVM is expected to use this identifier to determine
     /// which features are enabled.
     type Spec: Debug + Copy + Hash + Eq + Send + Sync + Default + 'static;
+    /// Block environment used by the EVM.
+    type BlockEnv: BlockEnvironment;
     /// Precompiles used by the EVM.
     type Precompiles;
     /// Evm inspector.
     type Inspector;
 
-    /// Reference to [`BlockEnv`].
-    fn block(&self) -> &BlockEnv;
+    /// Reference to [`Evm::BlockEnv`].
+    fn block(&self) -> &Self::BlockEnv;
 
     /// Returns the chain ID of the environment.
     fn chain_id(&self) -> u64;
@@ -91,8 +94,8 @@ pub trait Evm {
     /// Executes a system call.
     ///
     /// Note: this will only keep the target `contract` in the state. This is done because revm is
-    /// loading [`BlockEnv::beneficiary`] into state by default, and we need to avoid it by also
-    /// covering edge cases when beneficiary is set to the system contract address.
+    /// loading [`revm::context::Block::beneficiary`] into state by default, and we need to avoid it
+    /// by also covering edge cases when beneficiary is set to the system contract address.
     fn transact_system_call(
         &mut self,
         caller: Address,
@@ -125,7 +128,7 @@ pub trait Evm {
     }
 
     /// Consumes the EVM and returns the inner [`EvmEnv`].
-    fn finish(self) -> (Self::DB, EvmEnv<Self::Spec>)
+    fn finish(self) -> (Self::DB, EvmEnv<Self::Spec, Self::BlockEnv>)
     where
         Self: Sized;
 
@@ -138,7 +141,7 @@ pub trait Evm {
     }
 
     /// Consumes the EVM and returns the inner [`EvmEnv`].
-    fn into_env(self) -> EvmEnv<Self::Spec>
+    fn into_env(self) -> EvmEnv<Self::Spec, Self::BlockEnv>
     where
         Self: Sized,
     {
@@ -191,6 +194,64 @@ pub trait Evm {
     fn components_mut(&mut self) -> (&mut Self::DB, &mut Self::Inspector, &mut Self::Precompiles);
 }
 
+/// An extension trait for [`Evm`] providing additional functionality.
+pub trait EvmExt: Evm {
+    /// Replays all the transactions until the target transaction is found.
+    ///
+    /// This stops before transacting the target hash and commits all previous changes.
+    ///
+    /// Returns the index of the target transaction in the iterator.
+    fn replay_transactions_until<I, T>(
+        &mut self,
+        transactions: I,
+        target_tx_hash: B256,
+    ) -> Result<usize, Self::Error>
+    where
+        Self::DB: DatabaseCommit,
+        I: IntoIterator<Item = T>,
+        T: IntoTxEnv<Self::Tx> + TxHashRef,
+    {
+        let mut index = 0;
+        for tx in transactions {
+            if *tx.tx_hash() == target_tx_hash {
+                // reached the target transaction
+                break;
+            }
+            self.transact_commit(tx)?;
+            index += 1;
+        }
+        Ok(index)
+    }
+
+    /// Replays all the previous transactions and returns the [`ResultAndState`] of the target
+    /// transaction.
+    ///
+    /// Returns `None` if the target transaction was not found.
+    fn replay_transaction<I, T>(
+        &mut self,
+        transactions: I,
+        target_tx_hash: B256,
+    ) -> Result<Option<ResultAndState<Self::HaltReason>>, Self::Error>
+    where
+        Self::DB: DatabaseCommit,
+        I: IntoIterator<Item = T>,
+        T: IntoTxEnv<Self::Tx> + TxHashRef,
+    {
+        for tx in transactions {
+            if *tx.tx_hash() == target_tx_hash {
+                // reached the target transaction
+                return self.transact(tx).map(Some);
+            } else {
+                self.transact_commit(tx)?;
+            }
+        }
+        Ok(None)
+    }
+}
+
+/// Automatic implementation of [`EvmExt`] for all types that implement [`Evm`].
+impl<T: Evm> EvmExt for T {}
+
 /// A type responsible for creating instances of an ethereum virtual machine given a certain input.
 pub trait EvmFactory {
     /// The EVM type that this factory creates.
@@ -200,6 +261,7 @@ pub trait EvmFactory {
         HaltReason = Self::HaltReason,
         Error = Self::Error<DB::Error>,
         Spec = Self::Spec,
+        BlockEnv = Self::BlockEnv,
         Precompiles = Self::Precompiles,
         Inspector = I,
     >;
@@ -214,6 +276,8 @@ pub trait EvmFactory {
     type HaltReason: HaltReasonTr + Send + Sync + 'static;
     /// The EVM specification identifier, see [`Evm::Spec`].
     type Spec: Debug + Copy + Hash + Eq + Send + Sync + Default + 'static;
+    /// Block environment used by the EVM. See [`Evm::BlockEnv`].
+    type BlockEnv: BlockEnvironment;
     /// Precompiles used by the EVM.
     type Precompiles;
 
@@ -221,7 +285,7 @@ pub trait EvmFactory {
     fn create_evm<DB: Database>(
         &self,
         db: DB,
-        evm_env: EvmEnv<Self::Spec>,
+        evm_env: EvmEnv<Self::Spec, Self::BlockEnv>,
     ) -> Self::Evm<DB, NoOpInspector>;
 
     /// Creates a new instance of an EVM with an inspector.
@@ -231,7 +295,7 @@ pub trait EvmFactory {
     fn create_evm_with_inspector<DB: Database, I: Inspector<Self::Context<DB>>>(
         &self,
         db: DB,
-        input: EvmEnv<Self::Spec>,
+        input: EvmEnv<Self::Spec, Self::BlockEnv>,
         inspector: I,
     ) -> Self::Evm<DB, I>;
 }
@@ -242,7 +306,7 @@ pub trait EvmFactoryExt: EvmFactory {
     fn create_tracer<DB, I>(
         &self,
         db: DB,
-        input: EvmEnv<Self::Spec>,
+        input: EvmEnv<Self::Spec, Self::BlockEnv>,
         fused_inspector: I,
     ) -> TxTracer<Self::Evm<DB, I>>
     where

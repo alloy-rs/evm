@@ -125,13 +125,13 @@ impl<E: Evm, Txs: Iterator, F> TracerIter<'_, E, Txs, F> {
     ///
     /// We are skipping last commit by default as it's expected that when tracing users are mostly
     /// interested in tracer output rather than in a state after it.
-    pub fn commit_last_tx(mut self) -> Self {
+    pub const fn commit_last_tx(mut self) -> Self {
         self.skip_last_commit = false;
         self
     }
 
     /// Disables inspector fusing on every transaction and expects user to fuse it manually.
-    pub fn no_fuse(mut self) -> Self {
+    pub const fn no_fuse(mut self) -> Self {
         self.fuse = false;
         self
     }

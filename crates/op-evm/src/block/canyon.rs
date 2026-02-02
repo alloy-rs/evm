@@ -1,7 +1,7 @@
 use alloy_evm::Database;
 use alloy_op_hardforks::OpHardforks;
 use alloy_primitives::{address, b256, hex, Address, Bytes, B256};
-use revm::{database::State, primitives::HashMap, state::Bytecode, DatabaseCommit};
+use revm::{primitives::HashMap, state::Bytecode, DatabaseCommit};
 
 /// The address of the create2 deployer
 const CREATE_2_DEPLOYER_ADDR: Address = address!("0x13b0D85CcB8bf860b6b79AF3029fCA081AE9beF2");
@@ -19,10 +19,10 @@ const CREATE_2_DEPLOYER_BYTECODE: [u8; 1584] = hex!("608060405260043610610043576
 pub(crate) fn ensure_create2_deployer<DB>(
     chain_spec: impl OpHardforks,
     timestamp: u64,
-    db: &mut State<DB>,
+    db: &mut DB,
 ) -> Result<(), DB::Error>
 where
-    DB: Database,
+    DB: Database + DatabaseCommit,
 {
     // If the canyon hardfork is active at the current timestamp, and it was not active at the
     // previous block timestamp (heuristically, block time is not perfectly constant at 2s), and the
@@ -31,10 +31,9 @@ where
         && !chain_spec.is_canyon_active_at_timestamp(timestamp.saturating_sub(2))
     {
         // Load the create2 deployer account from the cache.
-        let acc = db.load_cache_account(CREATE_2_DEPLOYER_ADDR)?;
+        let mut acc_info = db.basic(CREATE_2_DEPLOYER_ADDR)?.unwrap_or_default();
 
         // Update the account info with the create2 deployer codehash and bytecode.
-        let mut acc_info = acc.account_info().unwrap_or_default();
         acc_info.code_hash = CREATE_2_DEPLOYER_CODEHASH;
         acc_info.code = Some(Bytecode::new_raw(Bytes::from_static(&CREATE_2_DEPLOYER_BYTECODE)));
 

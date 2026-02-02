@@ -1,5 +1,10 @@
 //! Ethereum EVM implementation.
 
+pub use env::NextEvmEnvAttributes;
+
+#[cfg(feature = "op")]
+pub(crate) use env::EvmEnvInput;
+
 use crate::{env::EvmEnv, evm::EvmFactory, precompiles::PrecompilesMap, Database, Evm};
 use alloy_primitives::{Address, Bytes};
 use core::{
@@ -24,6 +29,9 @@ pub mod dao_fork;
 pub mod eip6110;
 pub mod receipt_builder;
 pub mod spec;
+
+mod env;
+pub(crate) mod spec_id;
 
 /// The Ethereum EVM context type.
 pub type EthEvmContext<DB> = Context<BlockEnv, TxEnv, CfgEnv, DB>;
@@ -72,13 +80,13 @@ impl<DB: Database, I> EthEvmBuilder<DB, I> {
     }
 
     /// Sets whether to invoke the inspector during transaction execution.
-    pub fn set_inspect(mut self, inspect: bool) -> Self {
+    pub const fn set_inspect(mut self, inspect: bool) -> Self {
         self.inspect = inspect;
         self
     }
 
     /// Enables invoking the inspector during transaction execution.
-    pub fn inspect(self) -> Self {
+    pub const fn inspect(self) -> Self {
         self.set_inspect(true)
     }
 
@@ -166,7 +174,7 @@ impl<DB: Database, I, PRECOMPILE> EthEvm<DB, I, PRECOMPILE> {
     }
 
     /// Provides a mutable reference to the EVM context.
-    pub fn ctx_mut(&mut self) -> &mut EthEvmContext<DB> {
+    pub const fn ctx_mut(&mut self) -> &mut EthEvmContext<DB> {
         &mut self.inner.ctx
     }
 }
@@ -198,6 +206,7 @@ where
     type Error = EVMError<DB::Error>;
     type HaltReason = HaltReason;
     type Spec = SpecId;
+    type BlockEnv = BlockEnv;
     type Precompiles = PRECOMPILE;
     type Inspector = I;
 
@@ -264,6 +273,7 @@ impl EvmFactory for EthEvmFactory {
     type Error<DBError: core::error::Error + Send + Sync + 'static> = EVMError<DBError>;
     type HaltReason = HaltReason;
     type Spec = SpecId;
+    type BlockEnv = BlockEnv;
     type Precompiles = PrecompilesMap;
 
     fn create_evm<DB: Database>(&self, db: DB, input: EvmEnv) -> Self::Evm<DB, NoOpInspector> {

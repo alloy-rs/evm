@@ -2,9 +2,14 @@
 
 use crate::{Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, RecoveredTx, ToTxEnv};
 use alloc::{boxed::Box, vec::Vec};
-use alloy_eips::eip7685::Requests;
+use alloy_consensus::transaction::Recovered;
+use alloy_eips::{eip2718::WithEncoded, eip7685::Requests};
 use revm::{
-    context::result::ExecutionResult, database::State, inspector::NoOpInspector, Inspector,
+    context::result::{ExecutionResult, ResultAndState},
+    context_interface::either::Either,
+    database::State,
+    inspector::NoOpInspector,
+    Inspector,
 };
 
 mod error;
@@ -18,10 +23,13 @@ pub use system_calls::*;
 
 pub mod state_changes;
 
+pub mod state;
+pub use state::*;
+
 pub mod calc;
 
 /// The result of executing a block.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BlockExecutionResult<T> {
     /// All the receipts of the transactions in the block.
     pub receipts: Vec<T>,
@@ -29,30 +37,133 @@ pub struct BlockExecutionResult<T> {
     pub requests: Requests,
     /// The total gas used by the block.
     pub gas_used: u64,
+    /// Blob gas used by the block.
+    pub blob_gas_used: u64,
+}
+
+impl<T> Default for BlockExecutionResult<T> {
+    fn default() -> Self {
+        Self {
+            receipts: Default::default(),
+            requests: Default::default(),
+            gas_used: 0,
+            blob_gas_used: 0,
+        }
+    }
 }
 
 /// Helper trait to encapsulate requirements for a type to be used as input for [`BlockExecutor`].
 ///
 /// This trait combines the requirements for a transaction to be executable by a block executor:
-/// - Must be convertible to the EVM's transaction environment via [`ToTxEnv`]
+/// - Must be convertible to the EVM's transaction environment
 /// - Must provide access to the transaction and signer via [`RecoveredTx`]
-/// - Must be [`Copy`] for efficient handling during block execution (the expectation here is that
-///   this always passed as & reference)
-///
-/// This trait is automatically implemented for any type that meets these requirements.
-/// Common implementations include:
-/// - [`Recovered<T>`](alloy_consensus::transaction::Recovered) where `T` is a transaction type
-/// - [`WithEncoded<Recovered<T>>`](alloy_eips::eip2718::WithEncoded) for transactions with encoded
-///   bytes
 ///
 /// The trait ensures that the block executor can both execute the transaction in the EVM
 /// and access the original transaction data for receipt generation.
+///
+/// # Implementations
+///
+/// The following implementations are provided:
+/// - `Recovered<T>` and `Recovered<&T>` - owned recovered transactions
+/// - `WithEncoded<Recovered<T>>` and `WithEncoded<&Recovered<T>>` - encoded transactions
+/// - `Either<L, R>` where both `L` and `R` implement this trait
+/// - `&S` where `S: ToTxEnv + RecoveredTx` - covers `&Recovered<T>`, `&WithEncoded<...>`, etc.
+pub trait ExecutableTxParts<TxEnv, T> {
+    /// The recovered transaction accessor type.
+    type Recovered: RecoveredTx<T>;
+
+    /// Converts the transaction to an executable environment and a recovered transaction itself.
+    fn into_parts(self) -> (TxEnv, Self::Recovered);
+}
+
+/// Blanket implementation for references to types implementing both [`ToTxEnv`] and
+/// [`RecoveredTx`].
+///
+/// This covers:
+/// - `&Recovered<T>` and `&Recovered<&T>`
+/// - `&WithEncoded<Recovered<T>>` and similar wrappers
+/// - Any `&S` where `S: ToTxEnv<TxEnv> + RecoveredTx<T>`
+impl<'a, S, TxEnv, T> ExecutableTxParts<TxEnv, T> for &'a S
+where
+    S: ToTxEnv<TxEnv> + RecoveredTx<T>,
+{
+    type Recovered = &'a S;
+
+    fn into_parts(self) -> (TxEnv, &'a S) {
+        (self.to_tx_env(), self)
+    }
+}
+
+impl<TxEnv, T: RecoveredTx<Tx>, Tx> ExecutableTxParts<TxEnv, Tx> for (TxEnv, T) {
+    type Recovered = T;
+
+    fn into_parts(self) -> (TxEnv, T) {
+        (self.0, self.1)
+    }
+}
+
+impl<T, TxEnv: FromRecoveredTx<T>> ExecutableTxParts<TxEnv, T> for Recovered<T> {
+    type Recovered = Self;
+
+    fn into_parts(self) -> (TxEnv, Self) {
+        (self.to_tx_env(), self)
+    }
+}
+
+impl<T, TxEnv: FromRecoveredTx<T>> ExecutableTxParts<TxEnv, T> for Recovered<&T> {
+    type Recovered = Self;
+
+    fn into_parts(self) -> (TxEnv, Self) {
+        (self.to_tx_env(), self)
+    }
+}
+
+impl<T, TxEnv: FromTxWithEncoded<T>> ExecutableTxParts<TxEnv, T> for WithEncoded<Recovered<T>> {
+    type Recovered = Self;
+
+    fn into_parts(self) -> (TxEnv, Self) {
+        (self.to_tx_env(), self)
+    }
+}
+
+impl<T, TxEnv: FromTxWithEncoded<T>> ExecutableTxParts<TxEnv, T> for WithEncoded<&Recovered<T>> {
+    type Recovered = Self;
+
+    fn into_parts(self) -> (TxEnv, Self) {
+        (self.to_tx_env(), self)
+    }
+}
+
+impl<L, R, TxEnv, T> ExecutableTxParts<TxEnv, T> for Either<L, R>
+where
+    L: ExecutableTxParts<TxEnv, T>,
+    R: ExecutableTxParts<TxEnv, T>,
+{
+    type Recovered = Either<L::Recovered, R::Recovered>;
+
+    fn into_parts(self) -> (TxEnv, Self::Recovered) {
+        match self {
+            Self::Left(l) => {
+                let (env, rec) = l.into_parts();
+                (env, Either::Left(rec))
+            }
+            Self::Right(r) => {
+                let (env, rec) = r.into_parts();
+                (env, Either::Right(rec))
+            }
+        }
+    }
+}
+
+/// Alias for the [`ExecutableTxParts`] trait with types associated with the given
+/// [`BlockExecutor`].
 pub trait ExecutableTx<E: BlockExecutor + ?Sized>:
-    ToTxEnv<<E::Evm as Evm>::Tx> + RecoveredTx<E::Transaction>
+    ExecutableTxParts<<E::Evm as Evm>::Tx, E::Transaction>
 {
 }
-impl<E: BlockExecutor, T> ExecutableTx<E> for T where
-    T: ToTxEnv<<E::Evm as Evm>::Tx> + RecoveredTx<E::Transaction>
+
+impl<E: BlockExecutor + ?Sized, T> ExecutableTx<E> for T where
+    T: ExecutableTxParts<<E::Evm as Evm>::Tx, E::Transaction>
 {
 }
 
@@ -68,7 +179,7 @@ pub enum CommitChanges {
 
 impl CommitChanges {
     /// Returns `true` if transaction should be committed into block executor's state.
-    pub fn should_commit(self) -> bool {
+    pub const fn should_commit(self) -> bool {
         matches!(self, Self::Yes)
     }
 }
@@ -124,6 +235,8 @@ pub trait BlockExecutor {
     /// This constraint ensures that the block executor can convert consensus transactions
     /// into the EVM's transaction format for execution.
     type Evm: Evm<Tx: FromRecoveredTx<Self::Transaction> + FromTxWithEncoded<Self::Transaction>>;
+    /// Result of a transaction execution.
+    type Result: TxResult<HaltReason = <Self::Evm as Evm>::HaltReason>;
 
     /// Applies any necessary changes before executing the block's transactions.
     fn apply_pre_execution_changes(&mut self) -> Result<(), BlockExecutionError>;
@@ -195,7 +308,47 @@ pub trait BlockExecutor {
         &mut self,
         tx: impl ExecutableTx<Self>,
         f: impl FnOnce(&ExecutionResult<<Self::Evm as Evm>::HaltReason>) -> CommitChanges,
-    ) -> Result<Option<u64>, BlockExecutionError>;
+    ) -> Result<Option<u64>, BlockExecutionError> {
+        // Execute transaction without committing
+        let output = self.execute_transaction_without_commit(tx)?;
+
+        if !f(&output.result().result).should_commit() {
+            return Ok(None);
+        }
+
+        let gas_used = self.commit_transaction(output)?;
+        Ok(Some(gas_used))
+    }
+
+    /// Executes a single transaction without committing state changes.
+    ///
+    /// This method performs the transaction execution through the EVM but does not
+    /// commit the resulting state changes. The output can be inspected and potentially
+    /// committed later using [`commit_transaction`](Self::commit_transaction).
+    ///
+    /// Returns a [`revm::context_interface::result::ResultAndState`] containing the execution
+    /// result and state changes.
+    ///
+    /// # Use Cases
+    /// - Transaction simulation without affecting state
+    /// - Inspecting transaction effects before committing
+    /// - Building custom commit logic
+    fn execute_transaction_without_commit(
+        &mut self,
+        tx: impl ExecutableTx<Self>,
+    ) -> Result<Self::Result, BlockExecutionError>;
+
+    /// Commits a previously executed transaction's state changes.
+    ///
+    /// Takes the output from
+    /// [`execute_transaction_without_commit`](Self::execute_transaction_without_commit)
+    /// and applies the state changes, updates gas accounting, and generates a receipt.
+    ///
+    /// Returns the gas used by the transaction.
+    ///
+    /// # Parameters
+    /// - `output`: The transaction output containing execution result and state changes
+    fn commit_transaction(&mut self, output: Self::Result) -> Result<u64, BlockExecutionError>;
 
     /// Applies any necessary changes after executing the block's transactions, completes execution
     /// and returns the underlying EVM along with execution result.
@@ -231,6 +384,9 @@ pub trait BlockExecutor {
 
     /// Exposes immutable reference to EVM.
     fn evm(&self) -> &Self::Evm;
+
+    /// Returns a reference to all recorded receipts.
+    fn receipts(&self) -> &[Self::Receipt];
 
     /// Executes all transactions in a block, applying pre and post execution changes.
     ///
@@ -268,6 +424,15 @@ pub trait BlockExecutor {
 
         self.apply_post_execution_changes()
     }
+}
+
+/// A result of transaction execution.
+pub trait TxResult {
+    /// Halt reason.
+    type HaltReason;
+
+    /// Returns the inner EVM result.
+    fn result(&self) -> &ResultAndState<Self::HaltReason>;
 }
 
 /// A helper trait encapsulating the constraints on [`BlockExecutor`] produced by the

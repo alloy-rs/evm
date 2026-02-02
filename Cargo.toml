@@ -3,7 +3,7 @@ members = ["crates/*"]
 resolver = "2"
 
 [workspace.package]
-version = "0.18.4"
+version = "0.27.0"
 edition = "2021"
 rust-version = "1.88"
 authors = ["Alloy Contributors"]
@@ -25,9 +25,9 @@ unnameable-types = "warn"
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }
-missing-const-for-fn = "allow" # TODO: https://github.com/rust-lang/rust-clippy/issues/14020
+missing-const-for-fn = "warn"
 use-self = "warn"
-option-if-let-else = "warn"
+option-if-let-else = "allow"
 redundant-clone = "warn"
 
 [workspace.metadata.docs.rs]
@@ -35,26 +35,29 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [workspace.dependencies]
-alloy-evm = { version = "0.18.4", path = "crates/evm", default-features = false }
-alloy-op-evm = { version = "0.18.4", path = "crates/op-evm", default-features = false }
+alloy-evm = { version = "0.27.0", path = "crates/evm", default-features = false }
+alloy-op-evm = { version = "0.27.0", path = "crates/op-evm", default-features = false }
 
 # alloy
 alloy-eip2124 = { version = "0.2", default-features = false }
 alloy-chains = { version = "0.2.0", default-features = false }
-alloy-eips = { version = "1.0", default-features = false }
-alloy-consensus = { version = "1.0.0", default-features = false }
+alloy-eips = { version = "1.5.2", default-features = false }
+alloy-consensus = { version = "1.5.2", default-features = false }
 alloy-primitives = { version = "1.0.0", default-features = false }
 alloy-sol-types = { version = "1.0.0", default-features = false }
-alloy-hardforks = { version = "0.2" }
-alloy-rpc-types-eth = { version = "1.0.0", default-features = false }
+alloy-hardforks = { version = "0.4.7" }
+alloy-rpc-types-eth = { version = "1.5.2", default-features = false }
+alloy-rpc-types-engine = { version = "1.5.2", default-features = false }
 
 # op-alloy
-alloy-op-hardforks = { version = "0.2" }
-op-alloy-consensus = { version = "0.18", default-features = false }
+alloy-op-hardforks = { version = "0.4.7" }
+op-alloy = { version = "0.23", default-features = false, features = [
+    "consensus",
+] }
 
 # revm
-revm = { version = "28.0.0", default-features = false }
-op-revm = { version = "9.0.0", default-features = false }
+revm = { version = "34.0.0", default-features = false }
+op-revm = { version = "15.0.0", default-features = false }
 
 # misc
 auto_impl = "1"
@@ -62,7 +65,4 @@ derive_more = { version = "2", default-features = false, features = ["full"] }
 serde = { version = "1", default-features = false, features = ["derive"] }
 thiserror = { version = "2.0.0", default-features = false }
 serde_json = "1"
-
-#[patch.crates-io]
-#revm = { git = "https://github.com/bluealloy/revm", rev = "11b16259" }
-#op-revm = { git = "https://github.com/bluealloy/revm", rev = "11b16259" }
+test-case = "3"

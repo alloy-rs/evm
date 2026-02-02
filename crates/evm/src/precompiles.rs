@@ -4,15 +4,15 @@ use crate::{traits::EvmInternalsImpl, Database, EvmInternals};
 use alloc::{borrow::Cow, boxed::Box, string::String, sync::Arc};
 use alloy_consensus::transaction::Either;
 use alloy_primitives::{
-    map::{HashMap, HashSet},
+    map::{AddressMap, AddressSet},
     Address, Bytes, U256,
 };
 use core::fmt::Debug;
 use revm::{
-    context::LocalContextTr,
+    context::{ContextTr, LocalContextTr},
     handler::{EthPrecompiles, PrecompileProvider},
-    interpreter::{CallInput, Gas, InputsImpl, InstructionResult, InterpreterResult},
-    precompile::{PrecompileError, PrecompileFn, PrecompileResult, Precompiles},
+    interpreter::{CallInput, CallInputs, Gas, InstructionResult, InterpreterResult},
+    precompile::{PrecompileError, PrecompileFn, PrecompileId, PrecompileResult, Precompiles},
     Context, Journal,
 };
 
@@ -90,7 +90,7 @@ impl PrecompilesMap {
         // apply the transformation to each precompile
         let entries = dyn_precompiles.inner.drain();
         let mut new_map =
-            HashMap::with_capacity_and_hasher(entries.size_hint().0, Default::default());
+            AddressMap::with_capacity_and_hasher(entries.size_hint().0, Default::default());
         for (addr, precompile) in entries {
             if filter(&addr, &precompile) {
                 let transformed = f(&addr, precompile);
@@ -202,6 +202,61 @@ impl PrecompilesMap {
         self
     }
 
+    /// Extends the precompile map with multiple precompiles.
+    ///
+    /// This is a convenience method for inserting or replacing multiple precompiles at once.
+    /// Each precompile in the iterator is applied to its corresponding address.
+    ///
+    /// **Note**: This method will **replace** any existing precompiles at the given addresses.
+    /// If you need to modify existing precompiles, use [`map_precompile`](Self::map_precompile)
+    /// or [`apply_precompile`](Self::apply_precompile) instead.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// let precompiles = vec![
+    ///     (address1, my_precompile1),
+    ///     (address2, my_precompile2),
+    /// ];
+    /// precompiles_map.extend_precompiles(precompiles);
+    /// ```
+    pub fn extend_precompiles<I>(&mut self, precompiles: I)
+    where
+        I: IntoIterator<Item = (Address, DynPrecompile)>,
+    {
+        for (addr, precompile) in precompiles {
+            self.apply_precompile(&addr, |_| Some(precompile));
+        }
+    }
+
+    /// Builder-style method that extends the precompile map with multiple precompiles.
+    ///
+    /// This is a consuming version of [`extend_precompiles`](Self::extend_precompiles) that returns
+    /// `Self`.
+    ///
+    /// **Note**: This method will **replace** any existing precompiles at the given addresses.
+    /// If you need to modify existing precompiles, use
+    /// [`with_mapped_precompile`](Self::with_mapped_precompile)
+    /// or [`with_applied_precompile`](Self::with_applied_precompile) instead.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// let precompiles = vec![
+    ///     (address1, my_precompile1),
+    ///     (address2, my_precompile2),
+    /// ];
+    /// let map = PrecompilesMap::new(precompiles_cow)
+    ///     .with_extended_precompiles(precompiles);
+    /// ```
+    pub fn with_extended_precompiles<I>(mut self, precompiles: I) -> Self
+    where
+        I: IntoIterator<Item = (Address, DynPrecompile)>,
+    {
+        self.extend_precompiles(precompiles);
+        self
+    }
+
     /// Sets a dynamic precompile lookup function that is called for addresses not found
     /// in the static precompile map.
     ///
@@ -280,13 +335,12 @@ impl PrecompilesMap {
                 Cow::Owned(owned) => owned,
             };
 
-            for (addr, precompile_fn) in
-                static_precompiles.inner().iter().map(|(addr, f)| (addr, *f))
-            {
-                let precompile =
-                    move |input: PrecompileInput<'_>| precompile_fn(input.data, input.gas);
-                dynamic.inner.insert(*addr, precompile.into());
-                dynamic.addresses.insert(*addr);
+            for (&addr, pc) in static_precompiles.inner().iter() {
+                dynamic.inner.insert(
+                    addr,
+                    DynPrecompile::from((pc.precompile_id().clone(), *pc.precompile())),
+                );
+                dynamic.addresses.insert(addr);
             }
 
             self.precompiles = PrecompilesKind::Dynamic(dynamic);
@@ -295,6 +349,18 @@ impl PrecompilesMap {
         match &mut self.precompiles {
             PrecompilesKind::Dynamic(dynamic) => dynamic,
             _ => unreachable!("We just ensured that this is a Dynamic variant"),
+        }
+    }
+
+    /// Returns an iterator over the [`PrecompileId`]s of the installed precompiles.
+    pub fn identifiers(&self) -> impl Iterator<Item = &PrecompileId> {
+        match &self.precompiles {
+            PrecompilesKind::Builtin(precompiles) => {
+                Either::Left(precompiles.inner().values().map(|p| p.precompile_id()))
+            }
+            PrecompilesKind::Dynamic(dyn_precompiles) => {
+                Either::Right(dyn_precompiles.inner.values().map(|p| p.precompile_id()))
+            }
         }
     }
 
@@ -315,9 +381,7 @@ impl PrecompilesMap {
     pub fn get(&self, address: &Address) -> Option<impl Precompile + '_> {
         // First check static precompiles
         let static_result = match &self.precompiles {
-            PrecompilesKind::Builtin(precompiles) => precompiles
-                .get(address)
-                .map(|f| Either::Left(|input: PrecompileInput<'_>| f(input.data, input.gas))),
+            PrecompilesKind::Builtin(precompiles) => precompiles.get(address).map(Either::Left),
             PrecompilesKind::Dynamic(dyn_precompiles) => {
                 dyn_precompiles.inner.get(address).map(Either::Right)
             }
@@ -369,23 +433,20 @@ where
     fn run(
         &mut self,
         context: &mut Context<BlockEnv, TxEnv, CfgEnv, DB, Journal<DB>, Chain>,
-        address: &Address,
-        inputs: &InputsImpl,
-        _is_static: bool,
-        gas_limit: u64,
+        inputs: &CallInputs,
     ) -> Result<Option<InterpreterResult>, String> {
         // Get the precompile at the address
-        let Some(precompile) = self.get(address) else {
+        let Some(precompile) = self.get(&inputs.bytecode_address) else {
             return Ok(None);
         };
 
         let mut result = InterpreterResult {
             result: InstructionResult::Return,
-            gas: Gas::new(gas_limit),
+            gas: Gas::new(inputs.gas_limit),
             output: Bytes::new(),
         };
 
-        let (local, journal) = (&context.local, &mut context.journaled_state);
+        let (block, tx, cfg, journaled_state, _, local) = context.all_mut();
 
         // Execute the precompile
         let r;
@@ -407,10 +468,13 @@ where
         let mut internals_impl = EvmInternalsImpl::new(journal);
         let precompile_result = precompile.call(PrecompileInput {
             data: input_bytes,
-            gas: gas_limit,
-            caller: inputs.caller_address,
-            value: inputs.call_value,
+           gas: inputs.gas_limit,
+            caller: inputs.caller,
+            value: inputs.call_value(),
+            is_static: inputs.is_static,
             internals: EvmInternals::from_impl(&mut internals_impl, &context.block),
+            target_address: inputs.target_address,
+            bytecode_address: inputs.bytecode_address,
         });
 
         match precompile_result {
@@ -464,20 +528,20 @@ pub struct DynPrecompile(pub(crate) Arc<dyn Precompile + Send + Sync>);
 
 impl DynPrecompile {
     /// Creates a new [`DynPrecompiles`] with the given closure.
-    pub fn new<F>(f: F) -> Self
+    pub fn new<F>(id: PrecompileId, f: F) -> Self
     where
         F: Fn(PrecompileInput<'_>) -> PrecompileResult + Send + Sync + 'static,
     {
-        Self(Arc::new(f))
+        Self(Arc::new((id, f)))
     }
 
     /// Creates a new [`DynPrecompiles`] with the given closure and [`Precompile::is_pure`]
     /// returning `false`.
-    pub fn new_stateful<F>(f: F) -> Self
+    pub fn new_stateful<F>(id: PrecompileId, f: F) -> Self
     where
         F: Fn(PrecompileInput<'_>) -> PrecompileResult + Send + Sync + 'static,
     {
-        Self(Arc::new(StatefulPrecompile(f)))
+        Self(Arc::new(StatefulPrecompile((id, f))))
     }
 
     /// Flips [`Precompile::is_pure`] to `false`.
@@ -499,9 +563,9 @@ impl core::fmt::Debug for DynPrecompile {
 #[derive(Clone, Default)]
 pub struct DynPrecompiles {
     /// Precompiles
-    inner: HashMap<Address, DynPrecompile>,
+    inner: AddressMap<DynPrecompile>,
     /// Addresses of precompile
-    addresses: HashSet<Address>,
+    addresses: AddressSet,
 }
 
 impl DynPrecompiles {
@@ -529,13 +593,76 @@ pub struct PrecompileInput<'a> {
     pub caller: Address,
     /// Value sent with the call.
     pub value: U256,
+    /// Target address of the call. Would be the same as `bytecode_address` unless it's a
+    /// DELEGATECALL.
+    pub target_address: Address,
+    /// Whether this call is in a STATICCALL context.
+    pub is_static: bool,
+    /// Bytecode address of the call.
+    pub bytecode_address: Address,
     /// Various hooks for interacting with the EVM state.
     pub internals: EvmInternals<'a>,
 }
 
+impl<'a> PrecompileInput<'a> {
+    /// Returns the calldata of the call.
+    pub const fn data(&self) -> &[u8] {
+        self.data
+    }
+
+    /// Returns the caller address of the call.
+    pub const fn caller(&self) -> &Address {
+        &self.caller
+    }
+
+    /// Returns the gas limit of the call.
+    pub const fn gas(&self) -> u64 {
+        self.gas
+    }
+
+    /// Returns the value of the call.
+    pub const fn value(&self) -> &U256 {
+        &self.value
+    }
+
+    /// Returns the target address of the call.
+    pub const fn target_address(&self) -> &Address {
+        &self.target_address
+    }
+
+    /// Returns the bytecode address of the call.
+    pub const fn bytecode_address(&self) -> &Address {
+        &self.bytecode_address
+    }
+
+    /// Returns whether the call is a direct call, i.e when precompile was called directly and not
+    /// via a DELEGATECALL/CALLCODE.
+    pub fn is_direct_call(&self) -> bool {
+        self.target_address == self.bytecode_address
+    }
+
+    /// Returns whether this call is in a STATICCALL context.
+    pub const fn is_static_call(&self) -> bool {
+        self.is_static
+    }
+
+    /// Returns the [`EvmInternals`].
+    pub const fn internals(&self) -> &EvmInternals<'_> {
+        &self.internals
+    }
+
+    /// Returns a mutable reference to the [`EvmInternals`].
+    pub const fn internals_mut(&mut self) -> &mut EvmInternals<'a> {
+        &mut self.internals
+    }
+}
+
 /// Trait for implementing precompiled contracts.
-#[auto_impl::auto_impl(Arc)]
+#[auto_impl::auto_impl(&, Arc)]
 pub trait Precompile {
+    /// Returns precompile ID.
+    fn precompile_id(&self) -> &PrecompileId;
+
     /// Execute the precompile with the given input data, gas limit, and caller address.
     fn call(&self, input: PrecompileInput<'_>) -> PrecompileResult;
 
@@ -570,12 +697,39 @@ pub trait Precompile {
     }
 }
 
-impl<F> Precompile for F
+impl<F> Precompile for (PrecompileId, F)
 where
     F: Fn(PrecompileInput<'_>) -> PrecompileResult + Send + Sync,
 {
+    fn precompile_id(&self) -> &PrecompileId {
+        &self.0
+    }
+
     fn call(&self, input: PrecompileInput<'_>) -> PrecompileResult {
-        self(input)
+        self.1(input)
+    }
+}
+
+impl<F> Precompile for (&PrecompileId, F)
+where
+    F: Fn(PrecompileInput<'_>) -> PrecompileResult + Send + Sync,
+{
+    fn precompile_id(&self) -> &PrecompileId {
+        self.0
+    }
+
+    fn call(&self, input: PrecompileInput<'_>) -> PrecompileResult {
+        self.1(input)
+    }
+}
+
+impl Precompile for revm::precompile::Precompile {
+    fn precompile_id(&self) -> &PrecompileId {
+        self.id()
+    }
+
+    fn call(&self, input: PrecompileInput<'_>) -> PrecompileResult {
+        self.precompile()(input.data, input.gas)
     }
 }
 
@@ -584,7 +738,7 @@ where
     F: Fn(PrecompileInput<'_>) -> PrecompileResult + Send + Sync + 'static,
 {
     fn from(f: F) -> Self {
-        Self(Arc::new(f))
+        Self::new(PrecompileId::Custom("closure".into()), f)
     }
 }
 
@@ -595,17 +749,27 @@ impl From<PrecompileFn> for DynPrecompile {
     }
 }
 
-impl Precompile for DynPrecompile {
-    fn call(&self, input: PrecompileInput<'_>) -> PrecompileResult {
-        self.0.call(input)
-    }
-
-    fn is_pure(&self) -> bool {
-        self.0.is_pure()
+impl<F> From<(PrecompileId, F)> for DynPrecompile
+where
+    F: Fn(PrecompileInput<'_>) -> PrecompileResult + Send + Sync + 'static,
+{
+    fn from((id, f): (PrecompileId, F)) -> Self {
+        Self(Arc::new((id, f)))
     }
 }
 
-impl Precompile for &DynPrecompile {
+impl From<(PrecompileId, PrecompileFn)> for DynPrecompile {
+    fn from((id, f): (PrecompileId, PrecompileFn)) -> Self {
+        let p = move |input: PrecompileInput<'_>| f(input.data, input.gas);
+        (id, p).into()
+    }
+}
+
+impl Precompile for DynPrecompile {
+    fn precompile_id(&self) -> &PrecompileId {
+        self.0.precompile_id()
+    }
+
     fn call(&self, input: PrecompileInput<'_>) -> PrecompileResult {
         self.0.call(input)
     }
@@ -616,6 +780,13 @@ impl Precompile for &DynPrecompile {
 }
 
 impl<A: Precompile, B: Precompile> Precompile for Either<A, B> {
+    fn precompile_id(&self) -> &PrecompileId {
+        match self {
+            Self::Left(p) => p.precompile_id(),
+            Self::Right(p) => p.precompile_id(),
+        }
+    }
+
     fn call(&self, input: PrecompileInput<'_>) -> PrecompileResult {
         match self {
             Self::Left(p) => p.call(input),
@@ -634,6 +805,10 @@ impl<A: Precompile, B: Precompile> Precompile for Either<A, B> {
 struct StatefulPrecompile<P>(P);
 
 impl<P: Precompile> Precompile for StatefulPrecompile<P> {
+    fn precompile_id(&self) -> &PrecompileId {
+        self.0.precompile_id()
+    }
+
     fn call(&self, input: PrecompileInput<'_>) -> PrecompileResult {
         self.0.call(input)
     }
@@ -670,7 +845,11 @@ mod tests {
     use super::*;
     use crate::eth::EthEvmContext;
     use alloy_primitives::{address, Bytes};
-    use revm::{context::Block, database::EmptyDB, precompile::PrecompileOutput};
+    use revm::{
+        context::Block,
+        database::EmptyDB,
+        precompile::{PrecompileId, PrecompileOutput},
+    };
 
     #[test]
     fn test_map_precompile() {
@@ -701,7 +880,10 @@ mod tests {
                 gas: gas_limit,
                 caller: Address::ZERO,
                 value: U256::ZERO,
-                internals: EvmInternals::new(&mut ctx.journaled_state, &ctx.block),
+                is_static: false,
+                internals: EvmInternals::from_context(&mut ctx),
+                target_address: identity_address,
+                bytecode_address: identity_address,
             })
             .unwrap();
         assert_eq!(result.bytes, test_input, "Identity precompile should return the input data");
@@ -713,9 +895,9 @@ mod tests {
         // define a function to modify the precompile to always return a constant value
         spec_precompiles.map_precompile(&identity_address, move |_original_dyn| {
             // create a new DynPrecompile that always returns our constant
-            |_input: PrecompileInput<'_>| -> PrecompileResult {
+            (|_input: PrecompileInput<'_>| -> PrecompileResult {
                 Ok(PrecompileOutput::new(10, Bytes::from_static(b"constant value")))
-            }
+            })
             .into()
         });
 
@@ -733,7 +915,10 @@ mod tests {
                 gas: gas_limit,
                 caller: Address::ZERO,
                 value: U256::ZERO,
-                internals: EvmInternals::new(&mut ctx.journaled_state, &ctx.block),
+                is_static: false,
+                internals: EvmInternals::from_context(&mut ctx),
+                target_address: identity_address,
+                bytecode_address: identity_address,
             })
             .unwrap();
         assert_eq!(
@@ -766,7 +951,10 @@ mod tests {
                 gas: gas_limit,
                 caller: Address::ZERO,
                 value: U256::ZERO,
-                internals: EvmInternals::new(&mut ctx.journaled_state, &ctx.block),
+                is_static: false,
+                internals: EvmInternals::from_context(&mut ctx),
+                target_address: Address::ZERO,
+                bytecode_address: Address::ZERO,
             })
             .unwrap();
         assert_eq!(result.gas_used, 15);
@@ -784,7 +972,8 @@ mod tests {
         assert!(dyn_precompile.is_pure(), "should be pure by default");
 
         // Test custom precompile with overridden is_pure
-        let stateful_precompile = DynPrecompile::new_stateful(closure_precompile);
+        let stateful_precompile =
+            DynPrecompile::new_stateful(PrecompileId::Custom("closure".into()), closure_precompile);
         assert!(!stateful_precompile.is_pure(), "PurePrecompile should return true for is_pure");
 
         let either_left = Either::<DynPrecompile, DynPrecompile>::Left(stateful_precompile);
@@ -807,9 +996,10 @@ mod tests {
         // Set up the lookup function
         spec_precompiles.set_precompile_lookup(move |address: &Address| {
             if address.as_slice().starts_with(&dynamic_prefix) {
-                Some(DynPrecompile::new(|_input| {
+                Some(DynPrecompile::new(PrecompileId::Custom("dynamic".into()), |_input| {
                     Ok(PrecompileOutput {
                         gas_used: 100,
+                        gas_refunded: 0,
                         bytes: Bytes::from("dynamic precompile response"),
                         reverted: false,
                     })
@@ -836,7 +1026,10 @@ mod tests {
                 gas: 1000,
                 caller: Address::ZERO,
                 value: U256::ZERO,
-                internals: EvmInternals::new(&mut ctx.journaled_state, &ctx.block),
+                is_static: false,
+                internals: EvmInternals::from_context(&mut ctx),
+                target_address: dynamic_address,
+                bytecode_address: dynamic_address,
             })
             .unwrap();
         assert_eq!(result.gas_used, 100);
@@ -868,7 +1061,10 @@ mod tests {
                 gas: gas_limit,
                 caller: Address::ZERO,
                 value: U256::ZERO,
-                internals: EvmInternals::new(&mut ctx.journaled_state, &ctx.block),
+                is_static: false,
+                target_address: identity_address,
+                bytecode_address: identity_address,
+                internals: EvmInternals::from_context(&mut ctx),
             })
             .unwrap();
         assert_eq!(result.bytes, test_input, "Identity precompile should return the input data");
@@ -895,7 +1091,10 @@ mod tests {
                 gas: gas_limit,
                 caller: Address::ZERO,
                 value: U256::ZERO,
-                internals: EvmInternals::new(&mut ctx.journaled_state, &ctx.block),
+                is_static: false,
+                internals: EvmInternals::from_context(&mut ctx),
+                target_address: identity_address,
+                bytecode_address: identity_address,
             })
             .unwrap();
         assert_eq!(

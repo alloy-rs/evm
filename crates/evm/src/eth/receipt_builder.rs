@@ -2,14 +2,14 @@
 //! [`super::EthBlockExecutor`].
 
 use crate::Evm;
-use alloy_consensus::{Eip658Value, ReceiptEnvelope, TxEnvelope, TxType};
+use alloy_consensus::{Eip658Value, ReceiptEnvelope, TransactionEnvelope, TxEnvelope, TxType};
 use revm::{context::result::ExecutionResult, state::EvmState};
 
 /// Context for building a receipt.
 #[derive(Debug)]
 pub struct ReceiptBuilderCtx<'a, T, E: Evm> {
     /// Transaction
-    pub tx: &'a T,
+    pub tx_type: T,
     /// Reference to EVM. State changes should not be committed to inner database when building
     /// receipt so that [`ReceiptBuilder`] can use data from state before transaction execution.
     pub evm: &'a E,
@@ -25,14 +25,14 @@ pub struct ReceiptBuilderCtx<'a, T, E: Evm> {
 #[auto_impl::auto_impl(&, Arc)]
 pub trait ReceiptBuilder {
     /// Transaction type.
-    type Transaction;
+    type Transaction: TransactionEnvelope;
     /// Receipt type.
     type Receipt;
 
     /// Builds a receipt given a transaction and the result of the execution.
     fn build_receipt<E: Evm>(
         &self,
-        ctx: ReceiptBuilderCtx<'_, Self::Transaction, E>,
+        ctx: ReceiptBuilderCtx<'_, <Self::Transaction as TransactionEnvelope>::TxType, E>,
     ) -> Self::Receipt;
 }
 
@@ -45,7 +45,7 @@ impl ReceiptBuilder for AlloyReceiptBuilder {
     type Transaction = TxEnvelope;
     type Receipt = ReceiptEnvelope;
 
-    fn build_receipt<E: Evm>(&self, ctx: ReceiptBuilderCtx<'_, TxEnvelope, E>) -> Self::Receipt {
+    fn build_receipt<E: Evm>(&self, ctx: ReceiptBuilderCtx<'_, TxType, E>) -> Self::Receipt {
         let receipt = alloy_consensus::Receipt {
             status: Eip658Value::Eip658(ctx.result.is_success()),
             cumulative_gas_used: ctx.cumulative_gas_used,
@@ -53,7 +53,7 @@ impl ReceiptBuilder for AlloyReceiptBuilder {
         }
         .with_bloom();
 
-        match ctx.tx.tx_type() {
+        match ctx.tx_type {
             TxType::Legacy => ReceiptEnvelope::Legacy(receipt),
             TxType::Eip2930 => ReceiptEnvelope::Eip2930(receipt),
             TxType::Eip1559 => ReceiptEnvelope::Eip1559(receipt),
