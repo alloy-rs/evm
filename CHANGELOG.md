@@ -5,11 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.26.4](https://github.com/alloy-rs/evm/releases/tag/v0.26.4) - 2026-02-03
+
+### Miscellaneous Tasks
+
+- Use ..Default pattern for BlockOverrides ([#267](https://github.com/alloy-rs/evm/issues/267))
+
 ## [0.26.3](https://github.com/alloy-rs/evm/releases/tag/v0.26.3) - 2026-01-16
 
 ### Bug Fixes
 
 - `Default` for `BlockExecutionResult` ([#255](https://github.com/alloy-rs/evm/issues/255))
+
+### Miscellaneous Tasks
+
+- Release 0.26.3
 
 ## [0.26.1](https://github.com/alloy-rs/evm/releases/tag/v0.26.1) - 2026-01-16
 
