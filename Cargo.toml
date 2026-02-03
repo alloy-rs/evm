@@ -68,8 +68,8 @@ serde_json = "1"
 test-case = "3"
 
 [patch.crates-io]
-revm = { git = "https://github.com/bluealloy/revm", rev = "f3b74d4ff0c6c88a09ca281323a100257fa61ebf" }
-op-revm = { git = "https://github.com/bluealloy/revm", rev = "f3b74d4ff0c6c88a09ca281323a100257fa61ebf" }
+revm = { git = "https://github.com/bluealloy/revm", rev = "6aa06829d2caa2aa38606ed22b83354a7a7ff98e" }
+op-revm = { git = "https://github.com/bluealloy/revm", rev = "6aa06829d2caa2aa38606ed22b83354a7a7ff98e" }
 
 # alloy bal-devnet2 patches
 alloy-eips = { git = "https://github.com/alloy-rs/alloy", branch = "bal-devnet2" }
