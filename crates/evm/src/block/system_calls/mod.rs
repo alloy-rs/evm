@@ -67,7 +67,16 @@ where
         evm: &mut impl Evm<DB: DatabaseCommit>,
     ) -> Result<Requests, BlockExecutionError> {
         let mut requests = Requests::default();
+        self.append_post_execution_changes(evm, &mut requests)?;
+        Ok(requests)
+    }
 
+    /// Apply post execution changes, appending any requests to the provided container.
+    pub fn append_post_execution_changes(
+        &mut self,
+        evm: &mut impl Evm<DB: DatabaseCommit>,
+        requests: &mut Requests,
+    ) -> Result<(), BlockExecutionError> {
         // Collect all EIP-7685 requests
         let withdrawal_requests = self.apply_withdrawal_requests_contract_call(evm)?;
         if !withdrawal_requests.is_empty() {
@@ -80,7 +89,7 @@ where
             requests.push_request_with_type(CONSOLIDATION_REQUEST_TYPE, consolidation_requests);
         }
 
-        Ok(requests)
+        Ok(())
     }
 
     /// Applies the pre-block call to the EIP-2935 blockhashes contract.

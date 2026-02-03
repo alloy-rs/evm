@@ -211,12 +211,11 @@ where
                 eip6110::parse_deposits_from_receipts(&self.spec, &self.receipts)?;
 
             let mut requests = Requests::default();
-
             if !deposit_requests.is_empty() {
                 requests.push_request_with_type(eip6110::DEPOSIT_REQUEST_TYPE, deposit_requests);
             }
 
-            requests.extend(self.system_caller.apply_post_execution_changes(&mut self.evm)?);
+            self.system_caller.append_post_execution_changes(&mut self.evm, &mut requests)?;
             requests
         } else {
             Requests::default()
