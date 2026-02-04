@@ -193,8 +193,9 @@ where
         // EIP-7778: Track gas accounting differently for Amsterdam
         // - gas_used (for block accounting): gas before refunds
         // - gas_spent (for user receipts): gas after refunds (what user pays)
-        let is_amsterdam =
-            self.spec.is_amsterdam_active_at_timestamp(self.evm.block().timestamp().saturating_to());
+        let is_amsterdam = self
+            .spec
+            .is_amsterdam_active_at_timestamp(self.evm.block().timestamp().saturating_to());
 
         let (cumulative_gas_used, gas_spent) = if is_amsterdam {
             // Get gas_refunded from the result (only Success variant has refunds)
