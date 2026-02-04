@@ -71,7 +71,7 @@ impl<E: Evm<Inspector: Clone, DB: DatabaseCommit>> TxTracer<E> {
         mut f: F,
     ) -> TracerIter<'_, E, Txs::IntoIter, impl FnMut(TracingCtx<'_, T, E>) -> Result<O, E::Error>>
     where
-        T: IntoTxEnv<E::Tx> + Clone,
+        for<'a> &'a T: IntoTxEnv<E::Tx>,
         Txs: IntoIterator<Item = T>,
         F: FnMut(TracingCtx<'_, Txs::Item, E>) -> O,
     {
@@ -85,7 +85,7 @@ impl<E: Evm<Inspector: Clone, DB: DatabaseCommit>> TxTracer<E> {
         hook: F,
     ) -> TracerIter<'_, E, Txs::IntoIter, F>
     where
-        T: IntoTxEnv<E::Tx> + Clone,
+        for<'a> &'a T: IntoTxEnv<E::Tx>,
         Txs: IntoIterator<Item = T>,
         F: FnMut(TracingCtx<'_, T, E>) -> Result<O, Err>,
         Err: From<E::Error>,
@@ -140,7 +140,7 @@ impl<E: Evm, Txs: Iterator, F> TracerIter<'_, E, Txs, F> {
 impl<E, T, Txs, F, O, Err> Iterator for TracerIter<'_, E, Txs, F>
 where
     E: Evm<DB: DatabaseCommit, Inspector: Clone>,
-    T: IntoTxEnv<E::Tx> + Clone,
+    for<'a> &'a T: IntoTxEnv<E::Tx>,
     Txs: Iterator<Item = T>,
     Err: From<E::Error>,
     F: FnMut(TracingCtx<'_, T, E>) -> Result<O, Err>,
@@ -149,7 +149,7 @@ where
 
     fn next(&mut self) -> Option<Self::Item> {
         let tx = self.txs.next()?;
-        let result = self.inner.evm.transact(tx.clone());
+        let result = self.inner.evm.transact(&tx);
 
         let TxTracer { evm, fused_inspector } = self.inner;
         let (db, inspector, _) = evm.components_mut();
