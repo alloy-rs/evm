@@ -53,9 +53,13 @@ impl ReceiptBuilder for AlloyReceiptBuilder {
     type Receipt = ReceiptEnvelope;
 
     fn build_receipt<E: Evm>(&self, ctx: ReceiptBuilderCtx<'_, TxType, E>) -> Self::Receipt {
+        // EIP-7778: when active, `cumulative_gas_used` tracks gas before refunds (for block
+        // accounting), but receipts must use gas after refunds (unchanged). `gas_spent` holds the
+        // after-refund cumulative gas when EIP-7778 is active.
+        let receipt_gas = ctx.gas_spent.unwrap_or(ctx.cumulative_gas_used);
         let receipt = alloy_consensus::Receipt {
             status: Eip658Value::Eip658(ctx.result.is_success()),
-            cumulative_gas_used: ctx.cumulative_gas_used,
+            cumulative_gas_used: receipt_gas,
             logs: ctx.result.into_logs(),
         }
         .with_bloom();
