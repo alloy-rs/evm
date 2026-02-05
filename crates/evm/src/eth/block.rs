@@ -89,8 +89,6 @@ pub struct EthTxResult<H, T> {
     pub blob_gas_used: u64,
     /// Type of the transaction.
     pub tx_type: T,
-    /// Gas limit of transaction.
-    pub gas_limit: Option<u64>,
 }
 
 impl<H, T> TxResult for EthTxResult<H, T> {
@@ -179,19 +177,14 @@ where
             result,
             blob_gas_used: tx.tx().blob_gas_used().unwrap_or_default(),
             tx_type: tx.tx().tx_type(),
-            gas_limit: Some(tx.tx().gas_limit()),
         })
     }
 
     fn commit_transaction(&mut self, output: Self::Result) -> Result<u64, BlockExecutionError> {
         use revm::context::result::ExecutionResult;
 
-        let EthTxResult {
-            result: ResultAndState { result, state },
-            blob_gas_used,
-            tx_type,
-            gas_limit,
-        } = output;
+        let EthTxResult { result: ResultAndState { result, state }, blob_gas_used, tx_type } =
+            output;
 
         self.system_caller.on_state(StateChangeSource::Transaction(self.receipts.len()), &state);
 
@@ -206,12 +199,8 @@ where
 
         let (cumulative_gas_used, gas_spent) = if is_amsterdam {
             // Get gas_refunded from the result (only Success variant has refunds)
-            // For Revert, refunded gas is (gas_limit - gas_used)
             let gas_refunded = match &result {
                 ExecutionResult::Success { gas_refunded, .. } => *gas_refunded,
-                ExecutionResult::Revert { gas_used, .. } => {
-                    gas_limit.unwrap_or_default() - gas_used
-                }
                 _ => 0,
             };
 
