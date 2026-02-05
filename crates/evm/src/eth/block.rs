@@ -213,7 +213,7 @@ where
             let cumulative_gas_spent = self.gas_spent.get_or_insert(0).saturating_add(tx_gas_spent);
             *self.gas_spent.as_mut().unwrap() = cumulative_gas_spent;
 
-            (cumulative_gas_spent, Some(self.gas_used))
+            (self.gas_used, Some(cumulative_gas_spent))
         } else {
             // Pre-Amsterdam: gas_used tracks gas after refunds
             self.gas_used += gas_used;
