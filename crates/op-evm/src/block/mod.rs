@@ -269,6 +269,7 @@ where
                 result,
                 blob_gas_used: da_footprint_used,
                 tx_type: tx.tx().tx_type(),
+                gas_limit: None,
             },
             is_deposit,
             sender: *tx.signer(),
@@ -277,7 +278,13 @@ where
 
     fn commit_transaction(&mut self, output: Self::Result) -> Result<u64, BlockExecutionError> {
         let OpTxResult {
-            inner: EthTxResult { result: ResultAndState { result, state }, blob_gas_used, tx_type },
+            inner:
+                EthTxResult {
+                    result: ResultAndState { result, state },
+                    blob_gas_used,
+                    tx_type,
+                    gas_limit: _,
+                },
             is_deposit,
             sender,
         } = output;
