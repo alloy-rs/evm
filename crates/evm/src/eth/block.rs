@@ -1,7 +1,5 @@
 //! Ethereum block executor.
 
-use std::cmp::max;
-
 use super::{
     dao_fork, eip6110,
     receipt_builder::{AlloyReceiptBuilder, ReceiptBuilder, ReceiptBuilderCtx},
@@ -22,6 +20,7 @@ use alloy_consensus::{Header, Transaction, TransactionEnvelope, TxReceipt, TxTyp
 use alloy_eips::{eip4895::Withdrawals, eip7685::Requests, Encodable2718, Typed2718};
 use alloy_hardforks::EthereumHardfork;
 use alloy_primitives::{Bytes, Log, B256};
+use core::cmp::max;
 use revm::{
     context::{transaction::AccessListItemTr, Block},
     context_interface::result::ResultAndState,
