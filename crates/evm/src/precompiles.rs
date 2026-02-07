@@ -734,6 +734,10 @@ impl Precompile for revm::precompile::Precompile {
     fn call(&self, input: PrecompileInput<'_>) -> PrecompileResult {
         self.precompile()(input.data, input.gas)
     }
+
+    fn supports_caching(&self) -> bool {
+        !matches!(self.id(), PrecompileId::Identity)
+    }
 }
 
 impl<F> From<F> for DynPrecompile
@@ -988,6 +992,14 @@ mod tests {
 
         let either_right = Either::<DynPrecompile, DynPrecompile>::Right(dyn_precompile);
         assert!(either_right.supports_caching(), "Either::Right with cacheable should return true");
+
+        // Identity precompile should not support caching
+        let identity = revm::precompile::identity::FUN;
+        assert!(!identity.supports_caching(), "identity precompile should not support caching");
+
+        // Other builtin precompiles should support caching
+        let sha256 = revm::precompile::hash::SHA256;
+        assert!(sha256.supports_caching(), "sha256 precompile should support caching");
     }
 
     #[test]
