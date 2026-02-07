@@ -30,6 +30,7 @@ op-alloy = { workspace = true, optional = true }
 auto_impl.workspace = true
 derive_more.workspace = true
 thiserror.workspace = true
+tracing.workspace = true
 
 [dev-dependencies]
 alloy-primitives = { workspace = true, features = ["serde"] }
@@ -38,10 +39,7 @@ test-case.workspace = true
 
 [features]
 default = ["std"]
-secp256k1 = [
-    "std",
-    "alloy-consensus/secp256k1",
-]
+secp256k1 = ["std", "alloy-consensus/secp256k1"]
 std = [
 	"alloy-primitives/std",
 	"revm/std",
@@ -53,11 +51,9 @@ std = [
 	"thiserror/std",
 	"op-alloy?/std",
 	"alloy-rpc-types-eth?/std",
-	"alloy-rpc-types-engine?/std"
+	"alloy-rpc-types-engine?/std",
 ]
-gmp = [
-    "revm/gmp",
-]
+gmp = ["revm/gmp"]
 op = ["op-revm", "op-alloy", "alloy-op-hardforks"]
 overrides = ["dep:alloy-rpc-types-eth"]
 call-util = ["overrides"]

@@ -23,7 +23,7 @@ use alloy_primitives::{Bytes, Log, B256};
 use core::cmp::max;
 use revm::{
     context::{transaction::AccessListItemTr, Block},
-    context_interface::result::ResultAndState,
+    context_interface::{cfg::GasParams, result::ResultAndState},
     database::{DatabaseCommitExt, State},
     interpreter::gas::calculate_initial_tx_gas,
     primitives::hardfork::SpecId,
@@ -160,9 +160,13 @@ where
     ) -> Result<Self::Result, BlockExecutionError> {
         let (tx_env, tx) = tx.into_parts();
 
+        tracing::debug!("Tx gas limit {:?}", tx.tx().gas_limit());
+        tracing::debug!("Block gas limit {:?}", self.evm.block().gas_limit());
+        tracing::debug!("Tx Sender {:?}", tx.signer());
         // The sum of the transaction's gas limit, Tg, and the gas utilized in this block prior,
         // must be no greater than the block's gasLimit.
         let block_available_gas = self.evm.block().gas_limit() - self.gas_used;
+        tracing::debug!("Block available gas {:?}", block_available_gas);
 
         if tx.tx().gas_limit() > block_available_gas {
             return Err(BlockValidationError::TransactionGasLimitMoreThanAvailableBlockGas {
@@ -197,6 +201,11 @@ where
             tx.tx().authorization_list().unwrap_or_default().len() as u64,
         );
 
+        let floor_gas = GasParams::new_spec(SpecId::AMSTERDAM)
+            .tx_floor_cost(alloy_eips::eip7623::tokens_in_calldata(tx.tx().input()));
+        tracing::debug!("Ga calculated using custom fn in revm : {:?}", gas);
+        tracing::debug!("Ga calculated using gas params fn in revm : {:?}", floor_gas);
+
         Ok(EthTxResult {
             result,
             blob_gas_used: tx.tx().blob_gas_used().unwrap_or_default(),
@@ -214,10 +223,13 @@ where
             tx_type,
             floor_cost,
         } = output;
+
+        tracing::debug!("Result of exec is  {:?} ", result);
         self.system_caller.on_state(StateChangeSource::Transaction(self.receipts.len()), &state);
 
         // gas_used returned by revm is AFTER refunds
         let gas_after_refund = result.gas_used();
+        tracing::debug!("gas_after_refund = {}", gas_after_refund);
 
         // EIP-7778 (Amsterdam):
         // - block gas accounting uses gas BEFORE refunds, floored
@@ -248,6 +260,16 @@ where
             self.gas_used = self.gas_used.saturating_add(tx_block_gas_used);
             let cumulative_gas_spent = self.gas_spent.get_or_insert(0).saturating_add(tx_gas_spent);
             *self.gas_spent.as_mut().unwrap() = cumulative_gas_spent;
+
+            tracing::debug!("gas_refunded = {} | floor = {}", gas_refunded, floor);
+            tracing::debug!("gas_before_refund = {}", gas_before_refund);
+            tracing::debug!("tx_gas_spent (EIP-7623 user pays) = {}", tx_gas_spent);
+            tracing::debug!(
+                "tx_block_gas_used (EIP-7778 block accounting) = {}",
+                tx_block_gas_used
+            );
+            tracing::debug!("block gas_used (before add) = {}", self.gas_used);
+            tracing::debug!("cumulative gas_spent (before add) = {:?}", self.gas_spent);
             (self.gas_used, Some(cumulative_gas_spent))
         } else {
             // Pre-Amsterdam:
@@ -341,7 +363,8 @@ where
                 )
             })
         })?;
-
+        tracing::debug!("Final gas used = {}", self.gas_used);
+        tracing::debug!("Final gas spent = {:?}", self.gas_spent);
         Ok((
             self.evm,
             BlockExecutionResult {
