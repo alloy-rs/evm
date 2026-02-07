@@ -44,12 +44,11 @@ impl<T: Send + Sync + 'static> HookClosure for T {}
 /// # Example
 ///
 /// ```ignore
-/// 
-/// let mut executor = factory.create_executor(evm, ctx)
-///     .before(|evm, tx| { /* inspect evm/tx */ Ok(()) })
-///     .after(|evm, result| { /* inspect result */ Ok(()) });
+/// let executor = factory.create_executor(evm, ctx);
 ///
-/// executor.execute_tx(&recovered_tx)?;
+/// let gas_used = executor.before(|evm, tx| { Ok(()) })
+///     .after(|evm, result| { Ok(()) })
+///     .execute_transaction(&recovered_tx)?;
 /// ```
 pub struct ExecHook<E: BlockExecutor> {
     inner: E,
