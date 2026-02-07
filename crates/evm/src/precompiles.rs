@@ -64,15 +64,15 @@ impl PrecompilesMap {
         self.map_precompiles_filtered(f, |_, _| true);
     }
 
-    /// Maps all pure precompiles using the provided function.
+    /// Maps all cacheable precompiles using the provided function.
     ///
     /// This is a variant of [`Self::map_precompiles`] that only applies the transformation
-    /// to precompiles that are pure, see [`Precompile::is_pure`].
-    pub fn map_pure_precompiles<F>(&mut self, f: F)
+    /// to precompiles that support caching, see [`Precompile::supports_caching`].
+    pub fn map_cacheable_precompiles<F>(&mut self, f: F)
     where
         F: FnMut(&Address, DynPrecompile) -> DynPrecompile,
     {
-        self.map_precompiles_filtered(f, |_, precompile| precompile.is_pure());
+        self.map_precompiles_filtered(f, |_, precompile| precompile.supports_caching());
     }
 
     /// Internal helper to map precompiles with an optional filter.
@@ -534,8 +534,8 @@ impl DynPrecompile {
         Self(Arc::new((id, f)))
     }
 
-    /// Creates a new [`DynPrecompiles`] with the given closure and [`Precompile::is_pure`]
-    /// returning `false`.
+    /// Creates a new [`DynPrecompiles`] with the given closure and
+    /// [`Precompile::supports_caching`] returning `false`.
     pub fn new_stateful<F>(id: PrecompileId, f: F) -> Self
     where
         F: Fn(PrecompileInput<'_>) -> PrecompileResult + Send + Sync + 'static,
@@ -543,7 +543,7 @@ impl DynPrecompile {
         Self(Arc::new(StatefulPrecompile((id, f))))
     }
 
-    /// Flips [`Precompile::is_pure`] to `false`.
+    /// Flips [`Precompile::supports_caching`] to `false`.
     pub fn stateful(self) -> Self {
         Self(Arc::new(StatefulPrecompile(self.0)))
     }
@@ -665,33 +665,37 @@ pub trait Precompile {
     /// Execute the precompile with the given input data, gas limit, and caller address.
     fn call(&self, input: PrecompileInput<'_>) -> PrecompileResult;
 
-    /// Returns whether the precompile is pure.
+    /// Returns whether this precompile's results should be cached.
     ///
-    /// A pure precompile has deterministic output based solely on its input.
-    /// Non-pure precompiles may produce different outputs for the same input
-    /// based on the current state or other external factors.
+    /// A cacheable precompile has deterministic output based solely on its input,
+    /// and the cost of execution is high enough that caching the result is beneficial.
     ///
     /// # Default
     ///
-    /// Returns `true` by default, indicating the precompile is pure
-    /// and its results should be cached as this is what most of the precompiles are.
+    /// Returns `true` by default, indicating the precompile supports caching,
+    /// as this is what most precompiles benefit from.
+    ///
+    /// # When to return `false`
+    ///
+    /// - **Non-deterministic precompiles**: If the output depends on state or external factors
+    /// - **Cheap precompiles**: If the cost of computing a cache key (hashing the input) is
+    ///   comparable to just re-executing the precompile (e.g., the identity precompile which simply
+    ///   copies input to output)
     ///
     /// # Examples
     ///
-    /// Override this method to return `false` for non-deterministic precompiles:
-    ///
     /// ```ignore
-    /// impl Precompile for MyDeterministicPrecompile {
+    /// impl Precompile for MyPrecompile {
     ///     fn call(&self, input: PrecompileInput<'_>) -> PrecompileResult {
-    ///         // non-deterministic computation dependent on state
+    ///         // ...
     ///     }
     ///
-    ///     fn is_pure(&self) -> bool {
-    ///         false // This precompile might produce different output for the same input
+    ///     fn supports_caching(&self) -> bool {
+    ///         false
     ///     }
     /// }
     /// ```
-    fn is_pure(&self) -> bool {
+    fn supports_caching(&self) -> bool {
         true
     }
 }
@@ -729,6 +733,10 @@ impl Precompile for revm::precompile::Precompile {
 
     fn call(&self, input: PrecompileInput<'_>) -> PrecompileResult {
         self.precompile()(input.data, input.gas)
+    }
+
+    fn supports_caching(&self) -> bool {
+        !matches!(self.id(), PrecompileId::Identity)
     }
 }
 
@@ -773,8 +781,8 @@ impl Precompile for DynPrecompile {
         self.0.call(input)
     }
 
-    fn is_pure(&self) -> bool {
-        self.0.is_pure()
+    fn supports_caching(&self) -> bool {
+        self.0.supports_caching()
     }
 }
 
@@ -793,10 +801,10 @@ impl<A: Precompile, B: Precompile> Precompile for Either<A, B> {
         }
     }
 
-    fn is_pure(&self) -> bool {
+    fn supports_caching(&self) -> bool {
         match self {
-            Self::Left(p) => p.is_pure(),
-            Self::Right(p) => p.is_pure(),
+            Self::Left(p) => p.supports_caching(),
+            Self::Right(p) => p.supports_caching(),
         }
     }
 }
@@ -812,7 +820,7 @@ impl<P: Precompile> Precompile for StatefulPrecompile<P> {
         self.0.call(input)
     }
 
-    fn is_pure(&self) -> bool {
+    fn supports_caching(&self) -> bool {
         false
     }
 }
@@ -961,25 +969,37 @@ mod tests {
     }
 
     #[test]
-    fn test_is_pure() {
-        // Test default behavior (should be false)
+    fn test_supports_caching() {
         let closure_precompile = |_input: PrecompileInput<'_>| -> PrecompileResult {
             Ok(PrecompileOutput::new(10, Bytes::from_static(b"output")))
         };
 
         let dyn_precompile: DynPrecompile = closure_precompile.into();
-        assert!(dyn_precompile.is_pure(), "should be pure by default");
+        assert!(dyn_precompile.supports_caching(), "should support caching by default");
 
-        // Test custom precompile with overridden is_pure
         let stateful_precompile =
             DynPrecompile::new_stateful(PrecompileId::Custom("closure".into()), closure_precompile);
-        assert!(!stateful_precompile.is_pure(), "PurePrecompile should return true for is_pure");
+        assert!(
+            !stateful_precompile.supports_caching(),
+            "stateful precompile should not support caching"
+        );
 
         let either_left = Either::<DynPrecompile, DynPrecompile>::Left(stateful_precompile);
-        assert!(!either_left.is_pure(), "Either::Left with non-pure should return false");
+        assert!(
+            !either_left.supports_caching(),
+            "Either::Left with non-cacheable should return false"
+        );
 
         let either_right = Either::<DynPrecompile, DynPrecompile>::Right(dyn_precompile);
-        assert!(either_right.is_pure(), "Either::Right with pure should return true");
+        assert!(either_right.supports_caching(), "Either::Right with cacheable should return true");
+
+        // Identity precompile should not support caching
+        let identity = revm::precompile::identity::FUN;
+        assert!(!identity.supports_caching(), "identity precompile should not support caching");
+
+        // Other builtin precompiles should support caching
+        let sha256 = revm::precompile::hash::SHA256;
+        assert!(sha256.supports_caching(), "sha256 precompile should support caching");
     }
 
     #[test]
