@@ -29,6 +29,7 @@ pub mod op;
 #[cfg(feature = "overrides")]
 pub mod overrides;
 pub mod precompiles;
+pub use precompiles::MovePrecompileError;
 #[cfg(feature = "rpc")]
 pub mod rpc;
 pub mod tracing;
