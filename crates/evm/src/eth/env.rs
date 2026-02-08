@@ -144,7 +144,7 @@ impl EvmEnvInput {
                 .maybe_next_block_excess_blob_gas(blob_params)
                 .or_else(|| blob_params.map(|_| 0)),
             base_fee_per_gas,
-            slot_number: None,
+            slot_number: attributes.slot_number,
         }
     }
 }
@@ -164,6 +164,8 @@ pub struct NextEvmEnvAttributes {
     pub prev_randao: B256,
     /// Block gas limit.
     pub gas_limit: u64,
+    /// Slot number (EIP-7843).
+    pub slot_number: Option<u64>,
 }
 
 #[cfg(feature = "engine")]
