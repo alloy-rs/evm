@@ -203,8 +203,8 @@ where
 
         let floor_gas = GasParams::new_spec(SpecId::AMSTERDAM)
             .tx_floor_cost(alloy_eips::eip7623::tokens_in_calldata(tx.tx().input()));
-        tracing::debug!("Ga calculated using custom fn in revm : {:?}", gas);
-        tracing::debug!("Ga calculated using gas params fn in revm : {:?}", floor_gas);
+        tracing::debug!("Gas calculated using custom fn in revm : {:?}", gas);
+        tracing::debug!("Gas calculated using gas params fn in revm : {:?}", floor_gas);
 
         Ok(EthTxResult {
             result,
