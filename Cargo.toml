@@ -69,8 +69,8 @@ test-case = "3"
 tracing = { version = "0.1.44", default-features = false }
 
 [patch.crates-io]
-revm = { git = "https://github.com/bluealloy/revm", rev = "6aa06829d2caa2aa38606ed22b83354a7a7ff98e" }
-op-revm = { git = "https://github.com/bluealloy/revm", rev = "6aa06829d2caa2aa38606ed22b83354a7a7ff98e" }
+revm = { git = "https://github.com/Rimeeeeee/revm", branch = "main" }
+op-revm = { git = "https://github.com/Rimeeeeee/revm", branch = "main" }
 
 # alloy bal-devnet2 patches
 alloy-eips = { git = "https://github.com/alloy-rs/alloy", branch = "bal-devnet2" }
