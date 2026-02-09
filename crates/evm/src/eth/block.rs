@@ -239,9 +239,10 @@ where
             .is_amsterdam_active_at_timestamp(self.evm.block().timestamp().saturating_to());
 
         let (cumulative_gas_used, gas_spent) = if is_amsterdam {
-            // Refunds only exist for successful executions
+            // Refunds exist for both successful executions and reverts.
             let gas_refunded = match &result {
-                ExecutionResult::Success { gas_refunded, .. } => *gas_refunded,
+                ExecutionResult::Success { gas_refunded, .. }
+                | ExecutionResult::Revert { gas_refunded, .. } => *gas_refunded,
                 _ => 0,
             };
 
