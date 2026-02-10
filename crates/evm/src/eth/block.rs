@@ -207,9 +207,9 @@ where
         let (cumulative_gas_used, gas_spent) = if is_amsterdam {
             // Refunds exist for both successful executions and reverts.
             let (gas_refunded, floor_gas) = match &result {
-                ExecutionResult::Success { gas, .. } => (gas.gas_refunded, gas.floor_gas),
-                ExecutionResult::Revert { gas, .. } => (gas.gas_refunded, gas.floor_gas),
-                ExecutionResult::Halt { gas, .. } => (gas.gas_refunded, gas.floor_gas),
+                ExecutionResult::Success { gas, .. } => (gas.refunded, gas.floor_gas),
+                ExecutionResult::Revert { gas, .. } => (gas.refunded, gas.floor_gas),
+                ExecutionResult::Halt { gas, .. } => (gas.refunded, gas.floor_gas),
             };
             tracing::debug!("gas refunded and used {:?}, {:?}", gas_refunded, floor_gas);
             let floor = floor_gas;
