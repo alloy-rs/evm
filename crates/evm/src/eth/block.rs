@@ -197,6 +197,8 @@ where
         let gas_after_refund = result.gas_used();
         tracing::debug!("gas_after_refund = {}", gas_after_refund);
 
+        let mut cumulative_gas_used_in_block: u64 = 0;
+
         // EIP-7778 (Amsterdam):
         // - block gas accounting uses gas BEFORE refunds, floored
         // - user pays gas AFTER refunds, floored (EIP-7623)
@@ -206,14 +208,25 @@ where
 
         let (cumulative_gas_used, gas_spent) = if is_amsterdam {
             // Refunds exist for both successful executions and reverts.
-            let (gas_refunded, floor_gas) = match &result {
-                ExecutionResult::Success { gas, .. } => (gas.refunded, gas.floor_gas),
-                ExecutionResult::Revert { gas, .. } => (gas.refunded, gas.floor_gas),
-                ExecutionResult::Halt { gas, .. } => (gas.refunded, gas.floor_gas),
+            let (gas_refunded, floor_gas, gas_spent) = match &result {
+                ExecutionResult::Success { gas, .. } => {
+                    (gas.refunded(), gas.floor_gas(), gas.spent())
+                }
+                ExecutionResult::Revert { gas, .. } => {
+                    (gas.refunded(), gas.floor_gas(), gas.spent())
+                }
+                ExecutionResult::Halt { gas, .. } => (gas.refunded(), gas.floor_gas(), gas.spent()),
             };
-            tracing::debug!("gas refunded and used {:?}, {:?}", gas_refunded, floor_gas);
+            tracing::debug!(
+                "gas refunded and used ans spent {:?}, {:?}, {:?}",
+                gas_refunded,
+                floor_gas,
+                gas_spent
+            );
             let floor = floor_gas;
+            cumulative_gas_used_in_block += gas_spent.max(floor_gas);
 
+            tracing::debug!("Cumulative gas used is {:?}", cumulative_gas_used_in_block);
             // Gas before refunds (exec_gas)
             let gas_before_refund = gas_after_refund + gas_refunded;
 
