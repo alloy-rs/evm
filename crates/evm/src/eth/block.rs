@@ -90,6 +90,8 @@ pub struct EthTxResult<H, T> {
     pub blob_gas_used: u64,
     /// Type of the transaction.
     pub tx_type: T,
+    /// Gas limit of the transaction.
+    pub gas_limit: u64,
 }
 
 impl<H, T> TxResult for EthTxResult<H, T> {
@@ -181,14 +183,19 @@ where
             result,
             blob_gas_used: tx.tx().blob_gas_used().unwrap_or_default(),
             tx_type: tx.tx().tx_type(),
+            gas_limit: tx.tx().gas_limit(),
         })
     }
 
     fn commit_transaction(&mut self, output: Self::Result) -> Result<u64, BlockExecutionError> {
         use revm::context::result::ExecutionResult;
 
-        let EthTxResult { result: ResultAndState { result, state }, blob_gas_used, tx_type } =
-            output;
+        let EthTxResult {
+            result: ResultAndState { result, state },
+            blob_gas_used,
+            tx_type,
+            gas_limit,
+        } = output;
 
         tracing::debug!("Result of exec is  {:?} ", result);
         self.system_caller.on_state(StateChangeSource::Transaction(self.receipts.len()), &state);
@@ -206,16 +213,26 @@ where
 
         let (cumulative_gas_used, gas_spent) = if is_amsterdam {
             // Refunds exist for both successful executions and reverts.
-            let (gas_refunded, floor_gas) = match &result {
-                ExecutionResult::Success { gas, .. } => (gas.gas_refunded, gas.floor_gas),
-                ExecutionResult::Revert { gas, .. } => (gas.gas_refunded, gas.floor_gas),
-                ExecutionResult::Halt { gas, .. } => (gas.gas_refunded, gas.floor_gas),
+            let (gas_used, gas_refunded, gas_spent, floor_gas) = match &result {
+                ExecutionResult::Success { gas, .. } => {
+                    (gas.gas_used, gas.gas_refunded, gas.gas_spent, gas.floor_gas)
+                }
+                ExecutionResult::Revert { gas, .. } => {
+                    (gas.gas_used, gas.gas_refunded, gas.gas_spent, gas.floor_gas)
+                }
+                ExecutionResult::Halt { gas, .. } => {
+                    (gas.gas_used, gas.gas_refunded, gas.gas_spent, gas.floor_gas)
+                }
             };
             tracing::debug!("gas refunded and used {:?}, {:?}", gas_refunded, floor_gas);
             let floor = floor_gas;
 
             // Gas before refunds (exec_gas)
-            let gas_before_refund = gas_after_refund + gas_refunded;
+            let gas_before_refund = if gas_used == gas_spent && gas_spent == floor_gas {
+                gas_limit
+            } else {
+                gas_after_refund + gas_refunded
+            };
 
             // --- User pays (receipt gas) ---
             // EIP-7623: max(calldata_floor, gas_after_refund)
