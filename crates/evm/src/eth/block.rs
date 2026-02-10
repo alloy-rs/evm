@@ -16,17 +16,15 @@ use crate::{
     Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, RecoveredTx,
 };
 use alloc::{borrow::Cow, boxed::Box, vec::Vec};
-use alloy_consensus::{Header, Transaction, TransactionEnvelope, TxReceipt, TxType};
-use alloy_eips::{eip4895::Withdrawals, eip7685::Requests, Encodable2718, Typed2718};
+use alloy_consensus::{Header, Transaction, TransactionEnvelope, TxReceipt};
+use alloy_eips::{eip4895::Withdrawals, eip7685::Requests, Encodable2718};
 use alloy_hardforks::EthereumHardfork;
 use alloy_primitives::{Bytes, Log, B256};
 use core::cmp::max;
 use revm::{
-    context::{transaction::AccessListItemTr, Block},
-    context_interface::{cfg::GasParams, result::ResultAndState},
+    context::Block,
+    context_interface::result::ResultAndState,
     database::{DatabaseCommitExt, State},
-    interpreter::gas::calculate_initial_tx_gas,
-    primitives::hardfork::SpecId,
     DatabaseCommit, Inspector,
 };
 
@@ -92,8 +90,6 @@ pub struct EthTxResult<H, T> {
     pub blob_gas_used: u64,
     /// Type of the transaction.
     pub tx_type: T,
-    /// Floor cost estimation.
-    pub floor_cost: Option<u64>,
 }
 
 impl<H, T> TxResult for EthTxResult<H, T> {
@@ -181,48 +177,18 @@ where
             BlockExecutionError::evm(err, hash)
         })?;
 
-        let mut accounts = 0;
-        let mut storages = 0;
-        if tx.tx().ty() != TxType::Legacy {
-            if let Some(access_list) = tx.tx().access_list() {
-                (accounts, storages) =
-                    access_list.iter().fold((0, 0), |(num_accounts, num_storage_slots), item| {
-                        (num_accounts + 1, num_storage_slots + item.storage_slots().count())
-                    });
-            }
-        }
-
-        let gas = calculate_initial_tx_gas(
-            SpecId::AMSTERDAM,
-            tx.tx().input(),
-            tx.tx().kind().is_create(),
-            accounts as u64,
-            storages as u64,
-            tx.tx().authorization_list().unwrap_or_default().len() as u64,
-        );
-
-        let floor_gas = GasParams::new_spec(SpecId::AMSTERDAM)
-            .tx_floor_cost(alloy_eips::eip7623::tokens_in_calldata(tx.tx().input()));
-        tracing::debug!("Gas calculated using custom fn in revm : {:?}", gas);
-        tracing::debug!("Gas calculated using gas params fn in revm : {:?}", floor_gas);
-
         Ok(EthTxResult {
             result,
             blob_gas_used: tx.tx().blob_gas_used().unwrap_or_default(),
             tx_type: tx.tx().tx_type(),
-            floor_cost: Some(gas.floor_gas),
         })
     }
 
     fn commit_transaction(&mut self, output: Self::Result) -> Result<u64, BlockExecutionError> {
         use revm::context::result::ExecutionResult;
 
-        let EthTxResult {
-            result: ResultAndState { result, state },
-            blob_gas_used,
-            tx_type,
-            floor_cost,
-        } = output;
+        let EthTxResult { result: ResultAndState { result, state }, blob_gas_used, tx_type } =
+            output;
 
         tracing::debug!("Result of exec is  {:?} ", result);
         self.system_caller.on_state(StateChangeSource::Transaction(self.receipts.len()), &state);
@@ -240,13 +206,13 @@ where
 
         let (cumulative_gas_used, gas_spent) = if is_amsterdam {
             // Refunds exist for both successful executions and reverts.
-            let gas_refunded = match &result {
-                ExecutionResult::Success { gas, .. } => gas.gas_refunded,
-                ExecutionResult::Revert { gas, .. } => gas.gas_refunded,
-                _ => 0,
+            let (gas_refunded, floor_gas) = match &result {
+                ExecutionResult::Success { gas, .. } => (gas.gas_refunded, gas.floor_gas),
+                ExecutionResult::Revert { gas, .. } => (gas.gas_refunded, gas.floor_gas),
+                ExecutionResult::Halt { gas, .. } => (gas.gas_refunded, gas.floor_gas),
             };
-
-            let floor = floor_cost.unwrap_or(0);
+            tracing::debug!("gas refunded and used {:?}, {:?}", gas_refunded, floor_gas);
+            let floor = floor_gas;
 
             // Gas before refunds (exec_gas)
             let gas_before_refund = gas_after_refund + gas_refunded;
