@@ -241,8 +241,8 @@ where
         let (cumulative_gas_used, gas_spent) = if is_amsterdam {
             // Refunds exist for both successful executions and reverts.
             let gas_refunded = match &result {
-                ExecutionResult::Success { gas_refunded, .. }
-                | ExecutionResult::Revert { gas_refunded, .. } => *gas_refunded,
+                ExecutionResult::Success { gas, .. } => gas.gas_refunded,
+                ExecutionResult::Revert { gas, .. } => gas.gas_refunded,
                 _ => 0,
             };
 
