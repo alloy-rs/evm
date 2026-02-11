@@ -7,7 +7,6 @@ use alloy_eips::{eip2718::WithEncoded, eip7685::Requests};
 use revm::{
     context::result::{ExecutionResult, ResultAndState},
     context_interface::either::Either,
-    database::State,
     inspector::NoOpInspector,
     DatabaseCommit, Inspector,
 };
