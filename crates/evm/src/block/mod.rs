@@ -40,7 +40,7 @@ pub struct BlockExecutionResult<T> {
     /// Blob gas used by the block.
     pub blob_gas_used: u64,
     /// Block Access List in the block.
-    pub block_access_list: BlockAccessList,
+    pub block_access_list: Option<BlockAccessList>,
 }
 
 impl<T> Default for BlockExecutionResult<T> {

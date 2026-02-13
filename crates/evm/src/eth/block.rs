@@ -335,7 +335,7 @@ where
                 requests,
                 gas_used: self.gas_used,
                 blob_gas_used: self.blob_gas_used,
-                block_access_list: bal.unwrap_or_default(),
+                block_access_list: bal,
             },
         ))
     }
