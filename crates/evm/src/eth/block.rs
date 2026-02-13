@@ -17,7 +17,9 @@ use crate::{
 };
 use alloc::{borrow::Cow, boxed::Box, vec::Vec};
 use alloy_consensus::{Header, Transaction, TransactionEnvelope, TxReceipt};
-use alloy_eips::{eip4895::Withdrawals, eip7685::Requests, Encodable2718};
+use alloy_eips::{
+    eip4895::Withdrawals, eip7685::Requests, eip7928::compute_block_access_list_hash, Encodable2718,
+};
 use alloy_hardforks::EthereumHardfork;
 use alloy_primitives::{Bytes, Log, B256};
 use core::cmp::max;
@@ -323,7 +325,12 @@ where
             .spec
             .is_amsterdam_active_at_timestamp(self.evm.block().timestamp().saturating_to())
         {
-            self.evm.db_mut().take_built_alloy_bal()
+            let built_bal = self.evm.db_mut().take_built_alloy_bal();
+            if built_bal.is_some() {
+                Some(compute_block_access_list_hash(&built_bal.unwrap_or_default()))
+            } else {
+                None
+            }
         } else {
             None
         };
