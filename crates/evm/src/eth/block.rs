@@ -321,7 +321,7 @@ where
                 )
             })
         })?;
-        let bal = if self
+        let bal_hash = if self
             .spec
             .is_amsterdam_active_at_timestamp(self.evm.block().timestamp().saturating_to())
         {
@@ -342,7 +342,7 @@ where
                 requests,
                 gas_used: self.gas_used,
                 blob_gas_used: self.blob_gas_used,
-                block_access_list: bal,
+                block_access_list_hash: bal_hash,
             },
         ))
     }

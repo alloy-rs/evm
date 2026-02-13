@@ -40,8 +40,8 @@ pub struct BlockExecutionResult<T> {
     pub gas_used: u64,
     /// Blob gas used by the block.
     pub blob_gas_used: u64,
-    /// Block Access List in the block.
-    pub block_access_list: Option<B256>,
+    /// Block Access List Hash in the block.
+    pub block_access_list_hash: Option<B256>,
 }
 
 impl<T> Default for BlockExecutionResult<T> {
@@ -51,7 +51,7 @@ impl<T> Default for BlockExecutionResult<T> {
             requests: Default::default(),
             gas_used: 0,
             blob_gas_used: 0,
-            block_access_list: Default::default(),
+            block_access_list_hash: Default::default(),
         }
     }
 }
