@@ -73,6 +73,7 @@ impl EvmEnv<OpSpecId> {
             basefee: input.base_fee_per_gas,
             // EIP-4844 excess blob gas of this block, introduced in Cancun
             blob_excess_gas_and_price,
+            slot_num: 0,
         };
 
         Self::new(cfg_env, block_env)
@@ -114,6 +115,7 @@ mod payload {
                 gas_limit: payload.as_v1().gas_limit,
                 excess_blob_gas: payload.as_v3().map(|v| v.excess_blob_gas),
                 base_fee_per_gas: payload.as_v1().base_fee_per_gas.saturating_to(),
+                slot_number: None,
             }
         }
     }

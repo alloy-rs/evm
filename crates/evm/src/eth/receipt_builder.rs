@@ -19,6 +19,13 @@ pub struct ReceiptBuilderCtx<'a, T, E: Evm> {
     pub state: &'a EvmState,
     /// Cumulative gas used.
     pub cumulative_gas_used: u64,
+    /// Gas spent by the transaction after refunds (what the user pays).
+    ///
+    /// This is set when EIP-7778 is active (Osaka hardfork).
+    /// Before Osaka, this is `None` and `cumulative_gas_used` tracks gas after refunds.
+    /// After Osaka, `cumulative_gas_used` tracks gas before refunds, and `gas_spent`
+    /// tracks gas after refunds.
+    pub gas_spent: Option<u64>,
 }
 
 /// Type that knows how to build a receipt based on execution result.
@@ -46,9 +53,13 @@ impl ReceiptBuilder for AlloyReceiptBuilder {
     type Receipt = ReceiptEnvelope;
 
     fn build_receipt<E: Evm>(&self, ctx: ReceiptBuilderCtx<'_, TxType, E>) -> Self::Receipt {
+        // EIP-7778: when active, `cumulative_gas_used` tracks gas before refunds (for block
+        // accounting), but receipts must use gas after refunds (unchanged). `gas_spent` holds the
+        // after-refund cumulative gas when EIP-7778 is active.
+        let receipt_gas = ctx.gas_spent.unwrap_or(ctx.cumulative_gas_used);
         let receipt = alloy_consensus::Receipt {
             status: Eip658Value::Eip658(ctx.result.is_success()),
-            cumulative_gas_used: ctx.cumulative_gas_used,
+            cumulative_gas_used: receipt_gas,
             logs: ctx.result.into_logs(),
         }
         .with_bloom();

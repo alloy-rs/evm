@@ -277,7 +277,8 @@ where
 
     fn commit_transaction(&mut self, output: Self::Result) -> Result<u64, BlockExecutionError> {
         let OpTxResult {
-            inner: EthTxResult { result: ResultAndState { result, state }, blob_gas_used, tx_type },
+            inner:
+                EthTxResult { result: ResultAndState { result, state }, blob_gas_used, tx_type, .. },
             is_deposit,
             sender,
         } = output;
@@ -313,6 +314,7 @@ where
                 cumulative_gas_used: self.gas_used,
                 evm: &self.evm,
                 state: &state,
+                gas_spent: None,
             }) {
                 Ok(receipt) => receipt,
                 Err(ctx) => {

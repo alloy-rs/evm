@@ -91,6 +91,7 @@ impl EvmEnv<SpecId> {
             gas_limit: input.gas_limit,
             basefee: input.base_fee_per_gas,
             blob_excess_gas_and_price,
+            slot_num: input.slot_number.unwrap_or_default(),
         };
 
         Self::new(cfg_env, block_env)
@@ -106,6 +107,7 @@ pub(crate) struct EvmEnvInput {
     pub(crate) gas_limit: u64,
     pub(crate) excess_blob_gas: Option<u64>,
     pub(crate) base_fee_per_gas: u64,
+    pub(crate) slot_number: Option<u64>,
 }
 
 impl EvmEnvInput {
@@ -119,6 +121,7 @@ impl EvmEnvInput {
             gas_limit: header.gas_limit(),
             excess_blob_gas: header.excess_blob_gas(),
             base_fee_per_gas: header.base_fee_per_gas().unwrap_or_default(),
+            slot_number: header.slot_number(),
         }
     }
 
@@ -141,6 +144,7 @@ impl EvmEnvInput {
                 .maybe_next_block_excess_blob_gas(blob_params)
                 .or_else(|| blob_params.map(|_| 0)),
             base_fee_per_gas,
+            slot_number: attributes.slot_number,
         }
     }
 }
@@ -160,6 +164,8 @@ pub struct NextEvmEnvAttributes {
     pub prev_randao: B256,
     /// Block gas limit.
     pub gas_limit: u64,
+    /// Slot number (EIP-7843).
+    pub slot_number: Option<u64>,
 }
 
 #[cfg(feature = "engine")]
@@ -198,6 +204,7 @@ mod payload {
                 gas_limit: payload.gas_limit(),
                 excess_blob_gas: payload.excess_blob_gas(),
                 base_fee_per_gas: payload.saturated_base_fee_per_gas(),
+                slot_number: payload.slot_number(),
             }
         }
     }

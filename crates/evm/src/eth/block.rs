@@ -20,6 +20,7 @@ use alloy_consensus::{Header, Transaction, TransactionEnvelope, TxReceipt};
 use alloy_eips::{eip4895::Withdrawals, eip7685::Requests, Encodable2718};
 use alloy_hardforks::EthereumHardfork;
 use alloy_primitives::{Bytes, Log, B256};
+use core::cmp::max;
 use revm::{
     context::Block,
     context_interface::result::ResultAndState,
@@ -42,6 +43,8 @@ pub struct EthBlockExecutionCtx<'a> {
     pub extra_data: Bytes,
     /// Block transactions count hint. Used to preallocate the receipts vector.
     pub tx_count_hint: Option<usize>,
+    /// Slot number (EIP-7928, Amsterdam).
+    pub slot_number: Option<u64>,
 }
 
 /// Block executor for Ethereum.
@@ -62,7 +65,16 @@ pub struct EthBlockExecutor<'a, Evm, Spec, R: ReceiptBuilder> {
     /// Receipts of executed transactions.
     pub receipts: Vec<R::Receipt>,
     /// Total gas used by transactions in this block.
+    ///
+    /// Before Osaka, this tracks gas after refunds.
+    /// After Osaka (EIP-7778), this tracks gas before refunds for block gas accounting.
     pub gas_used: u64,
+
+    /// Total gas spent by transactions in this block (after refunds, what users pay).
+    ///
+    /// This is only tracked when EIP-7778 is active (Osaka hardfork).
+    /// Before Osaka, this is always `None`.
+    pub gas_spent: Option<u64>,
 
     /// Blob gas used by the block.
     /// Before cancun activation, this is always 0.
@@ -101,6 +113,7 @@ where
             ctx,
             receipts: Vec::with_capacity(tx_count_hint),
             gas_used: 0,
+            gas_spent: None,
             blob_gas_used: 0,
             system_caller: SystemCaller::new(spec.clone()),
             spec,
@@ -154,7 +167,6 @@ where
             }
             .into());
         }
-
         // Execute transaction and return the result
         let result = self.evm.transact(tx_env).map_err(|err| {
             let hash = tx.tx().trie_hash();
@@ -169,15 +181,58 @@ where
     }
 
     fn commit_transaction(&mut self, output: Self::Result) -> Result<u64, BlockExecutionError> {
+        use revm::context::result::ExecutionResult;
+
         let EthTxResult { result: ResultAndState { result, state }, blob_gas_used, tx_type } =
             output;
 
         self.system_caller.on_state(StateChangeSource::Transaction(self.receipts.len()), &state);
 
-        let gas_used = result.gas_used();
+        // gas_used returned by revm is AFTER refunds
+        let gas_after_refund = result.gas_used();
 
-        // append gas used
-        self.gas_used += gas_used;
+        // EIP-7778 (Amsterdam):
+        // - block gas accounting uses gas BEFORE refunds, floored
+        // - user pays gas AFTER refunds, floored (EIP-7623)
+        let is_amsterdam = self
+            .spec
+            .is_amsterdam_active_at_timestamp(self.evm.block().timestamp().saturating_to());
+
+        let (cumulative_gas_used, gas_spent) = if is_amsterdam {
+            // Refunds exist for both successful executions and reverts.
+            let (gas_spent, gas_refunded, floor_gas) = match &result {
+                ExecutionResult::Success { gas, .. } => {
+                    (gas.spent(), gas.inner_refunded(), gas.floor_gas())
+                }
+                ExecutionResult::Revert { gas, .. } => {
+                    (gas.spent(), gas.inner_refunded(), gas.floor_gas())
+                }
+                ExecutionResult::Halt { gas, .. } => {
+                    (gas.spent(), gas.inner_refunded(), gas.floor_gas())
+                }
+            };
+
+            let gas_before_refund = gas_spent;
+            let tx_gas_used_after_refund = gas_before_refund.saturating_sub(gas_refunded);
+            // --- User pays (receipt gas) ---
+            // EIP-7623: max(calldata_floor, gas_after_refund)
+            let tx_gas_spent = max(tx_gas_used_after_refund, floor_gas);
+
+            // --- Block accounting ---
+            // EIP-7778: max(calldata_floor, gas_before_refund)
+            let tx_block_gas_used = max(gas_before_refund, floor_gas);
+            self.gas_used = self.gas_used.saturating_add(tx_block_gas_used);
+            let cumulative_gas_spent = self.gas_spent.get_or_insert(0).saturating_add(tx_gas_spent);
+            *self.gas_spent.as_mut().unwrap() = cumulative_gas_spent;
+
+            (self.gas_used, Some(cumulative_gas_spent))
+        } else {
+            // Pre-Amsterdam:
+            // - gas_used already includes refund semantics
+
+            self.gas_used = self.gas_used.saturating_add(gas_after_refund);
+            (self.gas_used, None)
+        };
 
         // only determine cancun fields when active
         if self.spec.is_cancun_active_at_timestamp(self.evm.block().timestamp().saturating_to()) {
@@ -190,13 +245,14 @@ where
             evm: &self.evm,
             result,
             state: &state,
-            cumulative_gas_used: self.gas_used,
+            cumulative_gas_used,
+            gas_spent,
         }));
 
         // Commit the state changes.
         self.evm.db_mut().commit(state);
 
-        Ok(gas_used)
+        Ok(gas_after_refund)
     }
 
     fn finish(
