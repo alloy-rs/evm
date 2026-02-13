@@ -319,6 +319,14 @@ where
                 )
             })
         })?;
+        let bal = if self
+            .spec
+            .is_amsterdam_active_at_timestamp(self.evm.block().timestamp().saturating_to())
+        {
+            self.evm.db_mut().take_built_alloy_bal()
+        } else {
+            None
+        };
 
         Ok((
             self.evm,
@@ -327,6 +335,7 @@ where
                 requests,
                 gas_used: self.gas_used,
                 blob_gas_used: self.blob_gas_used,
+                block_access_list: bal.unwrap_or_default(),
             },
         ))
     }
