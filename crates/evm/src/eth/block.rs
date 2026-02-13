@@ -17,9 +17,7 @@ use crate::{
 };
 use alloc::{borrow::Cow, boxed::Box, vec::Vec};
 use alloy_consensus::{Header, Transaction, TransactionEnvelope, TxReceipt};
-use alloy_eips::{
-    eip4895::Withdrawals, eip7685::Requests, eip7928::compute_block_access_list_hash, Encodable2718,
-};
+use alloy_eips::{eip4895::Withdrawals, eip7685::Requests, Encodable2718};
 use alloy_hardforks::EthereumHardfork;
 use alloy_primitives::{Bytes, Log, B256};
 use core::cmp::max;
@@ -321,16 +319,11 @@ where
                 )
             })
         })?;
-        let bal_hash = if self
+        let bal = if self
             .spec
             .is_amsterdam_active_at_timestamp(self.evm.block().timestamp().saturating_to())
         {
-            let built_bal = self.evm.db_mut().take_built_alloy_bal();
-            if built_bal.is_some() {
-                Some(compute_block_access_list_hash(&built_bal.unwrap_or_default()))
-            } else {
-                None
-            }
+            self.evm.db_mut().bal_state.take_built_alloy_bal()
         } else {
             None
         };
@@ -342,7 +335,7 @@ where
                 requests,
                 gas_used: self.gas_used,
                 blob_gas_used: self.blob_gas_used,
-                block_access_list_hash: bal_hash,
+                block_access_list: bal,
             },
         ))
     }
