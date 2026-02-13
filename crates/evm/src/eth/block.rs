@@ -323,11 +323,11 @@ where
             .spec
             .is_amsterdam_active_at_timestamp(self.evm.block().timestamp().saturating_to())
         {
-            self.evm.db_mut().bal_state.take_built_alloy_bal()
+            self.evm.db_mut().take_built_alloy_bal()
         } else {
             None
         };
-
+        tracing::debug!("Bal in evm is  {:?}", bal);
         Ok((
             self.evm,
             BlockExecutionResult {
