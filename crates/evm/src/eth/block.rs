@@ -202,12 +202,14 @@ where
             // Refunds exist for both successful executions and reverts.
             let (gas_spent, gas_refunded, floor_gas) = match &result {
                 ExecutionResult::Success { gas, .. } => {
-                    (gas.spent(), gas.refunded(), gas.floor_gas())
+                    (gas.spent(), gas.inner_refunded(), gas.floor_gas())
                 }
                 ExecutionResult::Revert { gas, .. } => {
-                    (gas.spent(), gas.refunded(), gas.floor_gas())
+                    (gas.spent(), gas.inner_refunded(), gas.floor_gas())
                 }
-                ExecutionResult::Halt { gas, .. } => (gas.spent(), gas.refunded(), gas.floor_gas()),
+                ExecutionResult::Halt { gas, .. } => {
+                    (gas.spent(), gas.inner_refunded(), gas.floor_gas())
+                }
             };
 
             let gas_before_refund = gas_spent;
