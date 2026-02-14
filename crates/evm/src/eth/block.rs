@@ -258,6 +258,7 @@ where
     fn finish(
         mut self,
     ) -> Result<(Self::Evm, BlockExecutionResult<R::Receipt>), BlockExecutionError> {
+        self.evm.db_mut().bump_bal_index();
         let requests = if self
             .spec
             .is_prague_active_at_timestamp(self.evm.block().timestamp().saturating_to())
