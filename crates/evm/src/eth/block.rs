@@ -25,7 +25,6 @@ use revm::{
     context::Block,
     context_interface::result::ResultAndState,
     database::{DatabaseCommitExt, State},
-    state::bal::Bal,
     DatabaseCommit, Inspector,
 };
 
@@ -344,7 +343,6 @@ where
             .is_amsterdam_active_at_timestamp(self.evm.block().timestamp().saturating_to())
         {
             let built_bal = self.evm.db_mut().take_built_alloy_bal();
-            self.evm.db_mut().bal_state.bal_builder = Some(Bal::new());
             built_bal
         } else {
             None
