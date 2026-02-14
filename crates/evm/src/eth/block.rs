@@ -144,6 +144,8 @@ where
             .is_amsterdam_active_at_timestamp(self.evm.block().timestamp().saturating_to());
         if !is_amsterdam_active {
             self.evm.db_mut().bal_state.bal_builder = None;
+        } else {
+            self.evm.db_mut().bal_state.bal_builder = Some(revm::state::bal::Bal::new());
         }
         let state_clear_flag =
             self.spec.is_spurious_dragon_active_at_block(self.evm.block().number().saturating_to());
