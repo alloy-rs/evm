@@ -183,13 +183,6 @@ where
             let hash = tx.tx().trie_hash();
             BlockExecutionError::evm(err, hash)
         })?;
-
-        tracing::debug!(
-            "Tx sender  {:?}, bal_index {:?}",
-            tx.signer(),
-            self.evm().db().bal_state.bal_index
-        );
-
         Ok(EthTxResult {
             result,
             blob_gas_used: tx.tx().blob_gas_used().unwrap_or_default(),
@@ -349,7 +342,6 @@ where
         } else {
             None
         };
-        tracing::debug!("Bal in evm is  {:?}", bal);
         Ok((
             self.evm,
             BlockExecutionResult {
