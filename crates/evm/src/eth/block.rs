@@ -16,17 +16,15 @@ use crate::{
     Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, RecoveredTx,
 };
 use alloc::{borrow::Cow, boxed::Box, vec::Vec};
-use alloy_consensus::{Header, Transaction, TransactionEnvelope, TxReceipt, TxType};
-use alloy_eips::{eip4895::Withdrawals, eip7685::Requests, Encodable2718, Typed2718};
+use alloy_consensus::{Header, Transaction, TransactionEnvelope, TxReceipt};
+use alloy_eips::{eip4895::Withdrawals, eip7685::Requests, Encodable2718};
 use alloy_hardforks::EthereumHardfork;
 use alloy_primitives::{Bytes, Log, B256};
 use core::cmp::max;
 use revm::{
-    context::{transaction::AccessListItemTr, Block},
+    context::Block,
     context_interface::result::ResultAndState,
     database::{DatabaseCommitExt, State},
-    interpreter::gas::calculate_initial_tx_gas,
-    primitives::hardfork::SpecId,
     DatabaseCommit, Inspector,
 };
 
@@ -92,8 +90,6 @@ pub struct EthTxResult<H, T> {
     pub blob_gas_used: u64,
     /// Type of the transaction.
     pub tx_type: T,
-    /// Floor cost estimation.
-    pub floor_cost: Option<u64>,
 }
 
 impl<H, T> TxResult for EthTxResult<H, T> {
@@ -177,43 +173,19 @@ where
             BlockExecutionError::evm(err, hash)
         })?;
 
-        let mut accounts = 0;
-        let mut storages = 0;
-        if tx.tx().ty() != TxType::Legacy {
-            if let Some(access_list) = tx.tx().access_list() {
-                (accounts, storages) =
-                    access_list.iter().fold((0, 0), |(num_accounts, num_storage_slots), item| {
-                        (num_accounts + 1, num_storage_slots + item.storage_slots().count())
-                    });
-            }
-        }
-
-        let gas = calculate_initial_tx_gas(
-            SpecId::AMSTERDAM,
-            tx.tx().input(),
-            tx.tx().kind().is_create(),
-            accounts as u64,
-            storages as u64,
-            tx.tx().authorization_list().unwrap_or_default().len() as u64,
-        );
-
         Ok(EthTxResult {
             result,
             blob_gas_used: tx.tx().blob_gas_used().unwrap_or_default(),
             tx_type: tx.tx().tx_type(),
-            floor_cost: Some(gas.floor_gas),
         })
     }
 
     fn commit_transaction(&mut self, output: Self::Result) -> Result<u64, BlockExecutionError> {
         use revm::context::result::ExecutionResult;
 
-        let EthTxResult {
-            result: ResultAndState { result, state },
-            blob_gas_used,
-            tx_type,
-            floor_cost,
-        } = output;
+        let EthTxResult { result: ResultAndState { result, state }, blob_gas_used, tx_type } =
+            output;
+
         self.system_caller.on_state(StateChangeSource::Transaction(self.receipts.len()), &state);
 
         // gas_used returned by revm is AFTER refunds
@@ -227,31 +199,37 @@ where
             .is_amsterdam_active_at_timestamp(self.evm.block().timestamp().saturating_to());
 
         let (cumulative_gas_used, gas_spent) = if is_amsterdam {
-            // Refunds only exist for successful executions
-            let gas_refunded = match &result {
-                ExecutionResult::Success { gas_refunded, .. } => *gas_refunded,
-                _ => 0,
+            // Refunds exist for both successful executions and reverts.
+            let (gas_spent, gas_refunded, floor_gas) = match &result {
+                ExecutionResult::Success { gas, .. } => {
+                    (gas.spent(), gas.inner_refunded(), gas.floor_gas())
+                }
+                ExecutionResult::Revert { gas, .. } => {
+                    (gas.spent(), gas.inner_refunded(), gas.floor_gas())
+                }
+                ExecutionResult::Halt { gas, .. } => {
+                    (gas.spent(), gas.inner_refunded(), gas.floor_gas())
+                }
             };
 
-            let floor = floor_cost.unwrap_or(0);
-
-            // Gas before refunds (exec_gas)
-            let gas_before_refund = gas_after_refund + gas_refunded;
-
+            let gas_before_refund = gas_spent;
+            let tx_gas_used_after_refund = gas_before_refund.saturating_sub(gas_refunded);
             // --- User pays (receipt gas) ---
             // EIP-7623: max(calldata_floor, gas_after_refund)
-            let tx_gas_spent = max(gas_after_refund, floor);
+            let tx_gas_spent = max(tx_gas_used_after_refund, floor_gas);
 
             // --- Block accounting ---
             // EIP-7778: max(calldata_floor, gas_before_refund)
-            let tx_block_gas_used = max(gas_before_refund, floor);
+            let tx_block_gas_used = max(gas_before_refund, floor_gas);
             self.gas_used = self.gas_used.saturating_add(tx_block_gas_used);
             let cumulative_gas_spent = self.gas_spent.get_or_insert(0).saturating_add(tx_gas_spent);
             *self.gas_spent.as_mut().unwrap() = cumulative_gas_spent;
+
             (self.gas_used, Some(cumulative_gas_spent))
         } else {
             // Pre-Amsterdam:
             // - gas_used already includes refund semantics
+
             self.gas_used = self.gas_used.saturating_add(gas_after_refund);
             (self.gas_used, None)
         };
