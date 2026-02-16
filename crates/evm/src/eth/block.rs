@@ -139,6 +139,14 @@ where
 
     fn apply_pre_execution_changes(&mut self) -> Result<(), BlockExecutionError> {
         // Set state clear flag if the block is after the Spurious Dragon hardfork.
+        let is_amsterdam_active = self
+            .spec
+            .is_amsterdam_active_at_timestamp(self.evm.block().timestamp().saturating_to());
+        if !is_amsterdam_active {
+            self.evm.db_mut().bal_state.bal_builder = None;
+        } else {
+            self.evm.db_mut().bal_state.bal_builder = Some(revm::state::bal::Bal::new());
+        }
         let state_clear_flag =
             self.spec.is_spurious_dragon_active_at_block(self.evm.block().number().saturating_to());
         self.evm.db_mut().set_state_clear_flag(state_clear_flag);
@@ -146,6 +154,9 @@ where
         self.system_caller.apply_blockhashes_contract_call(self.ctx.parent_hash, &mut self.evm)?;
         self.system_caller
             .apply_beacon_root_contract_call(self.ctx.parent_beacon_block_root, &mut self.evm)?;
+        if is_amsterdam_active {
+            self.evm.db_mut().bump_bal_index();
+        }
 
         Ok(())
     }
@@ -172,7 +183,6 @@ where
             let hash = tx.tx().trie_hash();
             BlockExecutionError::evm(err, hash)
         })?;
-
         Ok(EthTxResult {
             result,
             blob_gas_used: tx.tx().blob_gas_used().unwrap_or_default(),
@@ -251,6 +261,10 @@ where
 
         // Commit the state changes.
         self.evm.db_mut().commit(state);
+        if self.spec.is_amsterdam_active_at_timestamp(self.evm.block().timestamp().saturating_to())
+        {
+            self.evm.db_mut().bump_bal_index();
+        }
 
         Ok(gas_after_refund)
     }
@@ -319,7 +333,15 @@ where
                 )
             })
         })?;
-
+        let bal = if self
+            .spec
+            .is_amsterdam_active_at_timestamp(self.evm.block().timestamp().saturating_to())
+        {
+            let built_bal = self.evm.db_mut().take_built_alloy_bal();
+            built_bal
+        } else {
+            None
+        };
         Ok((
             self.evm,
             BlockExecutionResult {
@@ -327,6 +349,7 @@ where
                 requests,
                 gas_used: self.gas_used,
                 blob_gas_used: self.blob_gas_used,
+                block_access_list: bal,
             },
         ))
     }
