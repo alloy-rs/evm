@@ -22,7 +22,7 @@ pub mod system_calls;
 pub use system_calls::*;
 
 /// Gas output from transaction execution containing regular and state gas used.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct GasOutput {
     /// Regular gas used by the transaction.
     pub regular_gas_used: u64,
@@ -263,11 +263,11 @@ pub trait BlockExecutor {
     /// The transaction is executed in the EVM, state changes are committed, and a receipt
     /// is generated internally.
     ///
-    /// Returns the gas used by the transaction.
+    /// Returns the gas output containing regular and state gas used by the transaction.
     fn execute_transaction(
         &mut self,
         tx: impl ExecutableTx<Self>,
-    ) -> Result<u64, BlockExecutionError> {
+    ) -> Result<GasOutput, BlockExecutionError> {
         self.execute_transaction_with_result_closure(tx, |_| ())
     }
 
@@ -285,12 +285,12 @@ pub trait BlockExecutor {
         &mut self,
         tx: impl ExecutableTx<Self>,
         f: impl FnOnce(&ExecutionResult<<Self::Evm as Evm>::HaltReason>),
-    ) -> Result<u64, BlockExecutionError> {
+    ) -> Result<GasOutput, BlockExecutionError> {
         self.execute_transaction_with_commit_condition(tx, |res| {
             f(res);
             CommitChanges::Yes
         })
-        .map(|opt| opt.map(|gas| gas.regular_gas_used).unwrap_or_default())
+        .map(|opt| opt.unwrap_or_default())
     }
 
     /// Executes a single transaction and applies execution result to internal state. Invokes the
