@@ -275,7 +275,7 @@ where
         })
     }
 
-    fn commit_transaction(&mut self, output: Self::Result) -> Result<u64, BlockExecutionError> {
+    fn commit_transaction(&mut self, output: Self::Result) -> Result<alloy_evm::block::GasOutput, BlockExecutionError> {
         let OpTxResult {
             inner: EthTxResult { result: ResultAndState { result, state }, blob_gas_used, tx_type },
             is_deposit,
@@ -344,7 +344,10 @@ where
 
         self.evm.db_mut().commit(state);
 
-        Ok(gas_used)
+        Ok(alloy_evm::block::GasOutput {
+            regular_gas_used: gas_used,
+            state_gas_used: 0,
+        })
     }
 
     fn finish(

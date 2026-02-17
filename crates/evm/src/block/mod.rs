@@ -21,6 +21,15 @@ pub use state_hook::*;
 pub mod system_calls;
 pub use system_calls::*;
 
+/// Gas output from transaction execution containing regular and state gas used.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GasOutput {
+    /// Regular gas used by the transaction.
+    pub regular_gas_used: u64,
+    /// State gas used by the transaction.
+    pub state_gas_used: u64,
+}
+
 pub mod state_changes;
 
 pub mod state;
@@ -281,7 +290,7 @@ pub trait BlockExecutor {
             f(res);
             CommitChanges::Yes
         })
-        .map(Option::unwrap_or_default)
+        .map(|opt| opt.map(|gas| gas.regular_gas_used).unwrap_or_default())
     }
 
     /// Executes a single transaction and applies execution result to internal state. Invokes the
@@ -303,12 +312,12 @@ pub trait BlockExecutor {
     ///    generation
     ///
     /// Returns [`None`] if committing changes from the transaction should be skipped via
-    /// [`CommitChanges::No`], otherwise returns the gas used by the transaction.
+    /// [`CommitChanges::No`], otherwise returns the gas output from the transaction.
     fn execute_transaction_with_commit_condition(
         &mut self,
         tx: impl ExecutableTx<Self>,
         f: impl FnOnce(&ExecutionResult<<Self::Evm as Evm>::HaltReason>) -> CommitChanges,
-    ) -> Result<Option<u64>, BlockExecutionError> {
+    ) -> Result<Option<GasOutput>, BlockExecutionError> {
         // Execute transaction without committing
         let output = self.execute_transaction_without_commit(tx)?;
 
@@ -316,8 +325,8 @@ pub trait BlockExecutor {
             return Ok(None);
         }
 
-        let gas_used = self.commit_transaction(output)?;
-        Ok(Some(gas_used))
+        let gas_output = self.commit_transaction(output)?;
+        Ok(Some(gas_output))
     }
 
     /// Executes a single transaction without committing state changes.
@@ -344,11 +353,11 @@ pub trait BlockExecutor {
     /// [`execute_transaction_without_commit`](Self::execute_transaction_without_commit)
     /// and applies the state changes, updates gas accounting, and generates a receipt.
     ///
-    /// Returns the gas used by the transaction.
+    /// Returns the gas output containing regular and state gas used by the transaction.
     ///
     /// # Parameters
     /// - `output`: The transaction output containing execution result and state changes
-    fn commit_transaction(&mut self, output: Self::Result) -> Result<u64, BlockExecutionError>;
+    fn commit_transaction(&mut self, output: Self::Result) -> Result<GasOutput, BlockExecutionError>;
 
     /// Applies any necessary changes after executing the block's transactions, completes execution
     /// and returns the underlying EVM along with execution result.
