@@ -7,13 +7,9 @@ use super::{
     EthEvmFactory,
 };
 use crate::{
-    block::{
-        state_changes::{balance_increment_state, post_block_balance_increments},
-        BlockExecutionError, BlockExecutionResult, BlockExecutor, BlockExecutorFactory,
-        BlockExecutorFor, BlockValidationError, ExecutableTx, OnStateHook,
-        StateChangePostBlockSource, StateChangeSource, SystemCaller, TxResult,
-    },
-    Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, RecoveredTx,
+    Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, RecoveredTx, block::{
+        BlockExecutionError, BlockExecutionResult, BlockExecutor, BlockExecutorFactory, BlockExecutorFor, BlockValidationError, ExecutableTx, GasOutput, OnStateHook, StateChangePostBlockSource, StateChangeSource, SystemCaller, TxResult, state_changes::{balance_increment_state, post_block_balance_increments}
+    }
 };
 use alloc::{borrow::Cow, boxed::Box, vec::Vec};
 use alloy_consensus::{Header, Transaction, TransactionEnvelope, TxReceipt};
@@ -168,7 +164,7 @@ where
         })
     }
 
-    fn commit_transaction(&mut self, output: Self::Result) -> Result<u64, BlockExecutionError> {
+    fn commit_transaction(&mut self, output: Self::Result) -> Result<GasOutput, BlockExecutionError> {
         let EthTxResult { result: ResultAndState { result, state }, blob_gas_used, tx_type } =
             output;
 
@@ -196,7 +192,10 @@ where
         // Commit the state changes.
         self.evm.db_mut().commit(state);
 
-        Ok(gas_used)
+        Ok(GasOutput {
+            regular_gas_used: gas_used,
+            state_gas_used: 0,
+        })
     }
 
     fn finish(

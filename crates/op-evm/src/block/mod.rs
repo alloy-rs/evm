@@ -8,7 +8,7 @@ use alloy_evm::{
     block::{
         state_changes::{balance_increment_state, post_block_balance_increments},
         BlockExecutionError, BlockExecutionResult, BlockExecutor, BlockExecutorFactory,
-        BlockExecutorFor, BlockValidationError, ExecutableTx, OnStateHook,
+        BlockExecutorFor, BlockValidationError, ExecutableTx, GasOutput, OnStateHook,
         StateChangePostBlockSource, StateChangeSource, StateDB, SystemCaller, TxResult,
     },
     eth::{receipt_builder::ReceiptBuilderCtx, EthTxResult},
@@ -275,7 +275,10 @@ where
         })
     }
 
-    fn commit_transaction(&mut self, output: Self::Result) -> Result<u64, BlockExecutionError> {
+    fn commit_transaction(
+        &mut self,
+        output: Self::Result,
+    ) -> Result<GasOutput, BlockExecutionError> {
         let OpTxResult {
             inner: EthTxResult { result: ResultAndState { result, state }, blob_gas_used, tx_type },
             is_deposit,
@@ -344,7 +347,7 @@ where
 
         self.evm.db_mut().commit(state);
 
-        Ok(gas_used)
+        Ok(GasOutput { regular_gas_used: gas_used, state_gas_used: 0 })
     }
 
     fn finish(
@@ -743,13 +746,13 @@ mod tests {
         let gas_used_tx = executor.execute_transaction(&tx).expect("failed to execute transaction");
 
         // The gas used when executing the transaction should be the legacy value...
-        assert!(gas_used_tx < expected_da_footprint);
+        assert!(gas_used_tx.regular_gas_used < expected_da_footprint);
 
         // The gas used when finishing the executor should be the DA footprint since this is higher
         // than the legacy gas used and jovian is active...
         let (_, result) = executor.finish().expect("failed to finish executor");
         assert_eq!(result.blob_gas_used, expected_da_footprint);
-        assert_eq!(result.gas_used, gas_used_tx);
+        assert_eq!(result.gas_used, gas_used_tx.regular_gas_used);
         assert!(result.blob_gas_used > result.gas_used);
     }
 }

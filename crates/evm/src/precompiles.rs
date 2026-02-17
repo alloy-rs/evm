@@ -478,7 +478,7 @@ where
 
         match precompile_result {
             Ok(output) => {
-                let underflow = result.gas.record_cost(output.gas_used);
+                let underflow = result.gas.record_regular_cost(output.gas_used);
                 assert!(underflow, "Gas underflow is not possible");
                 result.result = if output.reverted {
                     InstructionResult::Revert
