@@ -5,14 +5,9 @@ use alloc::{borrow::Cow, boxed::Box, vec::Vec};
 use alloy_consensus::{Eip658Value, Header, Transaction, TransactionEnvelope, TxReceipt};
 use alloy_eips::{Encodable2718, Typed2718};
 use alloy_evm::{
-    block::{
-        state_changes::{balance_increment_state, post_block_balance_increments},
-        BlockExecutionError, BlockExecutionResult, BlockExecutor, BlockExecutorFactory,
-        BlockExecutorFor, BlockValidationError, ExecutableTx, OnStateHook,
-        StateChangePostBlockSource, StateChangeSource, StateDB, SystemCaller, TxResult,
-    },
-    eth::{receipt_builder::ReceiptBuilderCtx, EthTxResult},
-    Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, RecoveredTx,
+    Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, RecoveredTx, block::{
+        BlockExecutionError, BlockExecutionResult, BlockExecutor, BlockExecutorFactory, BlockExecutorFor, BlockValidationError, ExecutableTx, GasOutput, OnStateHook, StateChangePostBlockSource, StateChangeSource, StateDB, SystemCaller, TxResult, state_changes::{balance_increment_state, post_block_balance_increments}
+    }, eth::{EthTxResult, receipt_builder::ReceiptBuilderCtx}
 };
 use alloy_op_hardforks::{OpChainHardforks, OpHardforks};
 use alloy_primitives::{Address, Bytes, B256};
@@ -275,7 +270,7 @@ where
         })
     }
 
-    fn commit_transaction(&mut self, output: Self::Result) -> Result<alloy_evm::block::GasOutput, BlockExecutionError> {
+    fn commit_transaction(&mut self, output: Self::Result) -> Result<GasOutput, BlockExecutionError> {
         let OpTxResult {
             inner: EthTxResult { result: ResultAndState { result, state }, blob_gas_used, tx_type },
             is_deposit,
@@ -344,7 +339,7 @@ where
 
         self.evm.db_mut().commit(state);
 
-        Ok(alloy_evm::block::GasOutput {
+        Ok(GasOutput {
             regular_gas_used: gas_used,
             state_gas_used: 0,
         })
