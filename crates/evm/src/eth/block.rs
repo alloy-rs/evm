@@ -263,6 +263,7 @@ where
         self.evm.db_mut().commit(state);
         if self.spec.is_amsterdam_active_at_timestamp(self.evm.block().timestamp().saturating_to())
         {
+            tracing::debug!("Bumped bal index {:?}", self.evm.db_mut().bal_state.bal_index);
             self.evm.db_mut().bump_bal_index();
         }
 
@@ -337,10 +338,13 @@ where
             .is_amsterdam_active_at_timestamp(self.evm.block().timestamp().saturating_to())
         {
             let built_bal = self.evm.db_mut().take_built_alloy_bal();
+            tracing::debug!("Bal in amsterdam arm {:?}", built_bal);
             built_bal
         } else {
+            tracing::debug!("Bal in non amsterdam arm ");
             None
         };
+        tracing::debug!("Bal after everything : {:?}", self.evm.db().bal_state);
         Ok((
             self.evm,
             BlockExecutionResult {
