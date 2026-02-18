@@ -75,6 +75,18 @@ impl PrecompilesMap {
         self.map_precompiles_filtered(f, |_, precompile| precompile.supports_caching());
     }
 
+    /// Maps all pure precompiles using the provided function.
+    ///
+    /// This is a variant of [`Self::map_precompiles`] that only applies the transformation
+    /// to precompiles that are pure, see [`Precompile::is_pure`].
+    #[deprecated(note = "use `map_cacheable_precompiles` instead")]
+    pub fn map_pure_precompiles<F>(&mut self, f: F)
+    where
+        F: FnMut(&Address, DynPrecompile) -> DynPrecompile,
+    {
+        self.map_cacheable_precompiles(f);
+    }
+
     /// Internal helper to map precompiles with an optional filter.
     ///
     /// The `filter` decides whether to apply the mapping function `f` to a given
@@ -697,6 +709,15 @@ pub trait Precompile {
     /// ```
     fn supports_caching(&self) -> bool {
         true
+    }
+
+    /// Returns whether the precompile is pure.
+    ///
+    /// A pure precompile has deterministic output based solely on its input.
+    #[deprecated(note = "use `supports_caching` instead")]
+    #[allow(deprecated)]
+    fn is_pure(&self) -> bool {
+        self.supports_caching()
     }
 }
 
