@@ -58,6 +58,9 @@ op-alloy = { version = "0.23", default-features = false, features = [
 revm = { version = "34.0.0", default-features = false }
 op-revm = { version = "15.0.0", default-features = false }
 
+# tracing
+tracing = "0.1"
+
 # misc
 auto_impl = "1"
 derive_more = { version = "2", default-features = false, features = ["full"] }
