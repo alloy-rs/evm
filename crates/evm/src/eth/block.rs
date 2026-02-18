@@ -143,9 +143,12 @@ where
             .spec
             .is_amsterdam_active_at_timestamp(self.evm.block().timestamp().saturating_to());
         if !is_amsterdam_active {
+            tracing::info!("Amsterdam not active {:?}", self.evm.db_mut().bal_state.bal);
             self.evm.db_mut().bal_state.bal_builder = None;
         } else {
+            tracing::info!("Amsterdam active {:?}", self.evm.db_mut().bal_state.bal);
             self.evm.db_mut().bal_state.bal_builder = Some(revm::state::bal::Bal::new());
+            tracing::info!("Amsterdam active, set bal {:?}", self.evm.db_mut().bal_state.bal);
         }
         let state_clear_flag =
             self.spec.is_spurious_dragon_active_at_block(self.evm.block().number().saturating_to());
@@ -263,7 +266,7 @@ where
         self.evm.db_mut().commit(state);
         if self.spec.is_amsterdam_active_at_timestamp(self.evm.block().timestamp().saturating_to())
         {
-            tracing::debug!("Bumped bal index {:?}", self.evm.db_mut().bal_state.bal_index);
+            tracing::info!("Bumped bal index {:?}", self.evm.db_mut().bal_state.bal_index);
             self.evm.db_mut().bump_bal_index();
         }
 
@@ -338,13 +341,13 @@ where
             .is_amsterdam_active_at_timestamp(self.evm.block().timestamp().saturating_to())
         {
             let built_bal = self.evm.db_mut().take_built_alloy_bal();
-            tracing::debug!("Bal in amsterdam arm {:?}", built_bal);
+            tracing::info!("Bal in amsterdam arm {:?}", built_bal);
             built_bal
         } else {
-            tracing::debug!("Bal in non amsterdam arm ");
+            tracing::info!("Bal in non amsterdam arm ");
             None
         };
-        tracing::debug!("Bal after everything : {:?}", self.evm.db().bal_state);
+        tracing::info!("Bal after everything : {:?}", self.evm.db().bal_state);
         Ok((
             self.evm,
             BlockExecutionResult {
