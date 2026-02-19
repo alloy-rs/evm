@@ -17,7 +17,7 @@ use crate::{
 };
 use alloc::{borrow::Cow, boxed::Box, vec::Vec};
 use alloy_consensus::{Header, Transaction, TransactionEnvelope, TxReceipt};
-use alloy_eips::{eip4895::Withdrawals, eip7685::Requests, Encodable2718};
+use alloy_eips::{eip4895::Withdrawal, eip7685::Requests, Encodable2718};
 use alloy_hardforks::EthereumHardfork;
 use alloy_primitives::{Bytes, Log, B256};
 use revm::{
@@ -37,7 +37,7 @@ pub struct EthBlockExecutionCtx<'a> {
     /// Block ommers
     pub ommers: &'a [Header],
     /// Block withdrawals.
-    pub withdrawals: Option<Cow<'a, Withdrawals>>,
+    pub withdrawals: Option<Vec<Withdrawal>>,
     /// Block extra data.
     pub extra_data: Bytes,
     /// Block transactions count hint. Used to preallocate the receipts vector.
