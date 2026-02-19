@@ -36,7 +36,6 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [workspace.dependencies]
 alloy-evm = { version = "0.27.2", path = "crates/evm", default-features = false }
-alloy-op-evm = { version = "0.27.2", path = "crates/op-evm", default-features = false }
 
 # alloy
 alloy-eip2124 = { version = "0.2", default-features = false }
