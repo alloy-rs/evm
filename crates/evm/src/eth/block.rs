@@ -37,7 +37,7 @@ pub struct EthBlockExecutionCtx<'a> {
     /// Block ommers
     pub ommers: &'a [Header],
     /// Block withdrawals.
-    pub withdrawals: Option<Vec<Withdrawal>>,
+    pub withdrawals: Option<Cow<'a, [Withdrawal]>>,
     /// Block extra data.
     pub extra_data: Bytes,
     /// Block transactions count hint. Used to preallocate the receipts vector.
