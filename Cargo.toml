@@ -59,7 +59,7 @@ revm = { version = "34.0.0", default-features = false }
 op-revm = { version = "15.0.0", default-features = false }
 
 # tracing
-tracing = "0.1"
+tracing = { version = "0.1", default-features = false }
 
 # misc
 auto_impl = "1"
