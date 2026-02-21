@@ -5,7 +5,7 @@ resolver = "2"
 [workspace.package]
 version = "0.27.2"
 edition = "2021"
-rust-version = "1.88"
+rust-version = "1.91"
 authors = ["Alloy Contributors"]
 license = "MIT OR Apache-2.0"
 homepage = "https://github.com/alloy-rs/alloy-evm"
@@ -57,6 +57,9 @@ op-alloy = { version = "0.23", default-features = false, features = [
 # revm
 revm = { version = "34.0.0", default-features = false }
 op-revm = { version = "15.0.0", default-features = false }
+
+# tracing
+tracing = { version = "0.1", default-features = false }
 
 # misc
 auto_impl = "1"

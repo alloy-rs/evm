@@ -98,6 +98,7 @@ where
         parent_block_hash: B256,
         evm: &mut impl Evm<DB: DatabaseCommit>,
     ) -> Result<(), BlockExecutionError> {
+        let _span = tracing::debug_span!("eip2935_blockhashes").entered();
         let result_and_state =
             eip2935::transact_blockhashes_contract_call(&self.spec, parent_block_hash, evm)?;
 
@@ -120,6 +121,7 @@ where
         parent_beacon_block_root: Option<B256>,
         evm: &mut impl Evm<DB: DatabaseCommit>,
     ) -> Result<(), BlockExecutionError> {
+        let _span = tracing::debug_span!("eip4788_beacon_root").entered();
         let result_and_state =
             eip4788::transact_beacon_root_contract_call(&self.spec, parent_beacon_block_root, evm)?;
 
@@ -141,6 +143,7 @@ where
         &mut self,
         evm: &mut impl Evm<DB: DatabaseCommit>,
     ) -> Result<Bytes, BlockExecutionError> {
+        let _span = tracing::debug_span!("eip7002_withdrawal_requests").entered();
         let result_and_state = eip7002::transact_withdrawal_requests_contract_call(evm)?;
 
         if let Some(ref mut hook) = &mut self.hook {
@@ -161,6 +164,7 @@ where
         &mut self,
         evm: &mut impl Evm<DB: DatabaseCommit>,
     ) -> Result<Bytes, BlockExecutionError> {
+        let _span = tracing::debug_span!("eip7251_consolidation_requests").entered();
         let result_and_state = eip7251::transact_consolidation_requests_contract_call(evm)?;
 
         if let Some(ref mut hook) = &mut self.hook {
