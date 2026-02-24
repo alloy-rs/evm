@@ -466,11 +466,9 @@ where
         };
 
         let precompile_result = {
-            let _span = tracing::debug_span!(
-                "precompile",
-                name = precompile.precompile_id().name(),
-            )
-            .entered();
+            let _span =
+                tracing::debug_span!("precompile", name = precompile.precompile_id().name(),)
+                    .entered();
             precompile.call(PrecompileInput {
                 data: input_bytes,
                 gas: inputs.gas_limit,
