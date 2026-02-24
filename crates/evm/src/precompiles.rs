@@ -466,7 +466,7 @@ where
         };
 
         let precompile_result = {
-            let _span = tracing::trace_span!(
+            let _span = tracing::debug_span!(
                 "precompile",
                 name = precompile.precompile_id().name(),
                 %inputs.bytecode_address,
