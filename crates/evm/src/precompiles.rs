@@ -465,16 +465,26 @@ where
             CallInput::Bytes(bytes) => bytes.as_ref(),
         };
 
-        let precompile_result = precompile.call(PrecompileInput {
-            data: input_bytes,
-            gas: inputs.gas_limit,
-            caller: inputs.caller,
-            value: inputs.call_value(),
-            is_static: inputs.is_static,
-            internals: EvmInternals::new(journaled_state, block, cfg, tx),
-            target_address: inputs.target_address,
-            bytecode_address: inputs.bytecode_address,
-        });
+        let precompile_result = {
+            let _span = tracing::trace_span!(
+                "precompile",
+                name = precompile.precompile_id().name(),
+                %inputs.bytecode_address,
+                input_size = input_bytes.len(),
+                gas_limit = inputs.gas_limit,
+            )
+            .entered();
+            precompile.call(PrecompileInput {
+                data: input_bytes,
+                gas: inputs.gas_limit,
+                caller: inputs.caller,
+                value: inputs.call_value(),
+                is_static: inputs.is_static,
+                internals: EvmInternals::new(journaled_state, block, cfg, tx),
+                target_address: inputs.target_address,
+                bytecode_address: inputs.bytecode_address,
+            })
+        };
 
         match precompile_result {
             Ok(output) => {
