@@ -13,7 +13,7 @@ use crate::{
         BlockExecutorFor, BlockValidationError, ExecutableTx, OnStateHook,
         StateChangePostBlockSource, StateChangeSource, SystemCaller, TxResult,
     },
-    Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, RecoveredTx,
+    Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, InspectorFor, RecoveredTx,
 };
 use alloc::{borrow::Cow, boxed::Box, vec::Vec};
 use alloy_consensus::{Header, Transaction, TransactionEnvelope, TxReceipt};
@@ -24,7 +24,7 @@ use revm::{
     context::Block,
     context_interface::result::ResultAndState,
     database::{DatabaseCommitExt, State},
-    DatabaseCommit, Inspector,
+    DatabaseCommit,
 };
 
 /// Context for Ethereum block execution.
@@ -347,12 +347,13 @@ where
 
     fn create_executor<'a, DB, I>(
         &'a self,
-        evm: EvmF::Evm<&'a mut State<DB>, I>,
+        evm: <EvmF as InspectorFor<&'a mut State<DB>, I>>::Evm,
         ctx: Self::ExecutionCtx<'a>,
     ) -> impl BlockExecutorFor<'a, Self, DB, I>
     where
         DB: Database + 'a,
-        I: Inspector<EvmF::Context<&'a mut State<DB>>> + 'a,
+        EvmF: InspectorFor<&'a mut State<DB>, I>,
+        I: 'a,
     {
         EthBlockExecutor::new(evm, ctx, &self.spec, &self.receipt_builder)
     }

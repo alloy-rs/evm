@@ -5,7 +5,9 @@ pub use env::NextEvmEnvAttributes;
 #[cfg(feature = "op")]
 pub(crate) use env::EvmEnvInput;
 
-use crate::{env::EvmEnv, evm::EvmFactory, precompiles::PrecompilesMap, Database, Evm};
+use crate::{
+    env::EvmEnv, evm::EvmFactory, precompiles::PrecompilesMap, Database, Evm, InspectorFor,
+};
 use alloy_primitives::{Address, Bytes};
 use core::{
     fmt::Debug,
@@ -267,25 +269,18 @@ where
 pub struct EthEvmFactory;
 
 impl EvmFactory for EthEvmFactory {
-    type Evm<DB: Database, I: Inspector<EthEvmContext<DB>>> = EthEvm<DB, I, Self::Precompiles>;
-    type Context<DB: Database> = Context<BlockEnv, TxEnv, CfgEnv, DB>;
     type Tx = TxEnv;
     type Error<DBError: core::error::Error + Send + Sync + 'static> = EVMError<DBError>;
     type HaltReason = HaltReason;
     type Spec = SpecId;
     type BlockEnv = BlockEnv;
     type Precompiles = PrecompilesMap;
+}
 
-    fn create_evm<DB: Database>(&self, db: DB, input: EvmEnv) -> Self::Evm<DB, NoOpInspector> {
-        EthEvmBuilder::new(db, input).build()
-    }
+impl<DB: Database, I: Inspector<EthEvmContext<DB>>> InspectorFor<DB, I> for EthEvmFactory {
+    type Evm = EthEvm<DB, I, PrecompilesMap>;
 
-    fn create_evm_with_inspector<DB: Database, I: Inspector<Self::Context<DB>>>(
-        &self,
-        db: DB,
-        input: EvmEnv,
-        inspector: I,
-    ) -> Self::Evm<DB, I> {
+    fn create_evm_with_inspector(&self, db: DB, input: EvmEnv, inspector: I) -> Self::Evm {
         EthEvmBuilder::new(db, input).activate_inspector(inspector).build()
     }
 }

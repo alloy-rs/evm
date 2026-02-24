@@ -6,12 +6,9 @@ use alloy_primitives::{Address, Bytes, B256};
 use core::{error::Error, fmt::Debug, hash::Hash};
 use revm::{
     context::result::ExecutionResult,
-    context_interface::{
-        result::{HaltReasonTr, ResultAndState},
-        ContextTr,
-    },
-    inspector::{JournalExt, NoOpInspector},
-    DatabaseCommit, Inspector,
+    context_interface::result::{HaltReasonTr, ResultAndState},
+    inspector::NoOpInspector,
+    DatabaseCommit,
 };
 
 /// Helper trait to bound [`revm::Database::Error`] with common requirements.
@@ -254,20 +251,6 @@ impl<T: Evm> EvmExt for T {}
 
 /// A type responsible for creating instances of an ethereum virtual machine given a certain input.
 pub trait EvmFactory {
-    /// The EVM type that this factory creates.
-    type Evm<DB: Database, I: Inspector<Self::Context<DB>>>: Evm<
-        DB = DB,
-        Tx = Self::Tx,
-        HaltReason = Self::HaltReason,
-        Error = Self::Error<DB::Error>,
-        Spec = Self::Spec,
-        BlockEnv = Self::BlockEnv,
-        Precompiles = Self::Precompiles,
-        Inspector = I,
-    >;
-
-    /// The EVM context for inspectors
-    type Context<DB: Database>: ContextTr<Db = DB, Journal: JournalExt>;
     /// Transaction environment.
     type Tx: IntoTxEnv<Self::Tx>;
     /// EVM error. See [`Evm::Error`].
@@ -282,22 +265,57 @@ pub trait EvmFactory {
     type Precompiles;
 
     /// Creates a new instance of an EVM.
+    ///
+    /// Default implementation delegates to
+    /// [`InspectorFor::create_evm_with_inspector`] with a [`NoOpInspector`].
     fn create_evm<DB: Database>(
         &self,
         db: DB,
         evm_env: EvmEnv<Self::Spec, Self::BlockEnv>,
-    ) -> Self::Evm<DB, NoOpInspector>;
+    ) -> <Self as InspectorFor<DB, NoOpInspector>>::Evm
+    where
+        Self: InspectorFor<DB, NoOpInspector>,
+    {
+        self.create_evm_with_inspector(db, evm_env, NoOpInspector)
+    }
+}
+
+/// Defines inspector compatibility for an [`EvmFactory`].
+///
+/// This trait is implemented by [`EvmFactory`] types to declare which inspector types
+/// they accept for a given database type, and to provide EVM construction with that inspector.
+///
+/// For single-context EVM factories (like [`EthEvmFactory`](crate::EthEvmFactory)), this is
+/// typically blanket-implemented for any `I: Inspector<Context<DB>>`.
+///
+/// For multi-context EVM factories (like enum dispatchers wrapping multiple EVM variants),
+/// this can require `I` to implement [`Inspector`] for multiple context types, enabling
+/// generic support for enum-based EVMs without modifying these traits.
+///
+/// [`EthEvmFactory`]: crate::EthEvmFactory
+pub trait InspectorFor<DB: Database, I>: EvmFactory {
+    /// The EVM type produced by this factory for the given database and inspector.
+    type Evm: Evm<
+        DB = DB,
+        Tx = <Self as EvmFactory>::Tx,
+        HaltReason = <Self as EvmFactory>::HaltReason,
+        Error = <Self as EvmFactory>::Error<DB::Error>,
+        Spec = <Self as EvmFactory>::Spec,
+        BlockEnv = <Self as EvmFactory>::BlockEnv,
+        Precompiles = <Self as EvmFactory>::Precompiles,
+        Inspector = I,
+    >;
 
     /// Creates a new instance of an EVM with an inspector.
     ///
     /// Note: It is expected that the [`Inspector`] is usually provided as `&mut Inspector` so that
     /// it remains owned by the call site when [`Evm::transact`] is invoked.
-    fn create_evm_with_inspector<DB: Database, I: Inspector<Self::Context<DB>>>(
+    fn create_evm_with_inspector(
         &self,
         db: DB,
-        input: EvmEnv<Self::Spec, Self::BlockEnv>,
+        input: EvmEnv<<Self as EvmFactory>::Spec, <Self as EvmFactory>::BlockEnv>,
         inspector: I,
-    ) -> Self::Evm<DB, I>;
+    ) -> Self::Evm;
 }
 
 /// An extension trait for [`EvmFactory`] providing useful non-overridable methods.
@@ -308,10 +326,11 @@ pub trait EvmFactoryExt: EvmFactory {
         db: DB,
         input: EvmEnv<Self::Spec, Self::BlockEnv>,
         fused_inspector: I,
-    ) -> TxTracer<Self::Evm<DB, I>>
+    ) -> TxTracer<<Self as InspectorFor<DB, I>>::Evm>
     where
         DB: Database + DatabaseCommit,
-        I: Inspector<Self::Context<DB>> + Clone,
+        Self: InspectorFor<DB, I>,
+        I: Clone,
     {
         TxTracer::new(self.create_evm_with_inspector(db, input, fused_inspector))
     }
