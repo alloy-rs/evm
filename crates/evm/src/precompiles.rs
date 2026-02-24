@@ -469,7 +469,6 @@ where
             let _span = tracing::debug_span!(
                 "precompile",
                 name = precompile.precompile_id().name(),
-                input = %alloy_primitives::hex::display(input_bytes),
             )
             .entered();
             precompile.call(PrecompileInput {
