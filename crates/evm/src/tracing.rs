@@ -20,8 +20,6 @@ pub struct TxTracer<E: Evm> {
 pub struct TracingCtx<'a, T, E: Evm> {
     /// The transaction that was just executed.
     pub tx: T,
-    /// The transaction environment that was used for execution.
-    pub tx_env: E::Tx,
     /// The index of the transaction in the block.
     pub tx_index: usize,
     /// Result of transaction execution.
@@ -45,6 +43,13 @@ impl<'a, T, E: Evm<Inspector: Clone>> TracingCtx<'a, T, E> {
     pub fn take_inspector(&mut self) -> E::Inspector {
         *self.was_fused = true;
         core::mem::replace(self.inspector, self.fused_inspector.clone())
+    }
+}
+
+impl<T: IntoTxEnv<E::Tx> + Clone, E: Evm> TracingCtx<'_, T, E> {
+    /// Reconstructs the transaction environment from the transaction.
+    pub fn tx_env(&self) -> E::Tx {
+        self.tx.clone().into_tx_env()
     }
 }
 
@@ -150,7 +155,7 @@ impl<E: Evm, Txs: Iterator, F> TracerIter<'_, E, Txs, F> {
 
 impl<E, T, Txs, F, O, Err> Iterator for TracerIter<'_, E, Txs, F>
 where
-    E: Evm<DB: DatabaseCommit, Inspector: Clone, Tx: Clone>,
+    E: Evm<DB: DatabaseCommit, Inspector: Clone>,
     T: IntoTxEnv<E::Tx> + Clone,
     Txs: Iterator<Item = T>,
     Err: From<E::Error>,
@@ -160,10 +165,9 @@ where
 
     fn next(&mut self) -> Option<Self::Item> {
         let tx = self.txs.next()?;
-        let tx_env = tx.clone().into_tx_env();
         let tx_index = self.tx_index;
         self.tx_index += 1;
-        let result = self.inner.evm.transact_raw(tx_env.clone());
+        let result = self.inner.evm.transact(tx.clone());
 
         let TxTracer { evm, fused_inspector } = self.inner;
         let (db, inspector, _) = evm.components_mut();
@@ -174,7 +178,6 @@ where
         let mut was_fused = false;
         let output = (self.hook)(TracingCtx {
             tx,
-            tx_env,
             tx_index,
             result,
             state: &state,
