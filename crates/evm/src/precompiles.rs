@@ -469,9 +469,7 @@ where
             let _span = tracing::debug_span!(
                 "precompile",
                 name = precompile.precompile_id().name(),
-                %inputs.bytecode_address,
-                input_size = input_bytes.len(),
-                gas_limit = inputs.gas_limit,
+                input = %alloy_primitives::hex::display(input_bytes),
             )
             .entered();
             precompile.call(PrecompileInput {
