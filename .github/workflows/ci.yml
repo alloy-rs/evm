@@ -24,7 +24,7 @@ jobs:
         rust:
           - "stable"
           - "nightly"
-          - "1.88" # MSRV
+          - "1.91" # MSRV
         flags:
           # No features
           - "--no-default-features"
@@ -34,7 +34,7 @@ jobs:
           - "--all-features"
         exclude:
           # All features on MSRV
-          - rust: "1.88" # MSRV
+          - rust: "1.91" # MSRV
             flags: "--all-features"
           # gmp doesn't compile on Windows
           - os: windows-latest
@@ -57,14 +57,14 @@ jobs:
           cache-on-failure: true
       # Only run tests on latest stable and above
       - name: Install cargo-nextest
-        if: ${{ matrix.rust != '1.88' }} # MSRV
+        if: ${{ matrix.rust != '1.91' }} # MSRV
         uses: taiki-e/install-action@nextest
       - name: build
-        if: ${{ matrix.rust == '1.88' }} # MSRV
+        if: ${{ matrix.rust == '1.91' }} # MSRV
         run: cargo build --workspace ${{ matrix.flags }}
       - name: test
         shell: bash
-        if: ${{ matrix.rust != '1.88' }} # MSRV
+        if: ${{ matrix.rust != '1.91' }} # MSRV
         run: cargo nextest run --workspace ${{ matrix.flags }}
 
   doctest:

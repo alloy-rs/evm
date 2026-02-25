@@ -67,7 +67,16 @@ where
         evm: &mut impl Evm<DB: DatabaseCommit>,
     ) -> Result<Requests, BlockExecutionError> {
         let mut requests = Requests::default();
+        self.append_post_execution_changes(evm, &mut requests)?;
+        Ok(requests)
+    }
 
+    /// Apply post execution changes, appending any requests to the provided container.
+    pub fn append_post_execution_changes(
+        &mut self,
+        evm: &mut impl Evm<DB: DatabaseCommit>,
+        requests: &mut Requests,
+    ) -> Result<(), BlockExecutionError> {
         // Collect all EIP-7685 requests
         let withdrawal_requests = self.apply_withdrawal_requests_contract_call(evm)?;
         if !withdrawal_requests.is_empty() {
@@ -80,7 +89,7 @@ where
             requests.push_request_with_type(CONSOLIDATION_REQUEST_TYPE, consolidation_requests);
         }
 
-        Ok(requests)
+        Ok(())
     }
 
     /// Applies the pre-block call to the EIP-2935 blockhashes contract.
@@ -89,6 +98,7 @@ where
         parent_block_hash: B256,
         evm: &mut impl Evm<DB: DatabaseCommit>,
     ) -> Result<(), BlockExecutionError> {
+        let _span = tracing::debug_span!("eip2935_blockhashes").entered();
         let result_and_state =
             eip2935::transact_blockhashes_contract_call(&self.spec, parent_block_hash, evm)?;
 
@@ -111,6 +121,7 @@ where
         parent_beacon_block_root: Option<B256>,
         evm: &mut impl Evm<DB: DatabaseCommit>,
     ) -> Result<(), BlockExecutionError> {
+        let _span = tracing::debug_span!("eip4788_beacon_root").entered();
         let result_and_state =
             eip4788::transact_beacon_root_contract_call(&self.spec, parent_beacon_block_root, evm)?;
 
@@ -132,6 +143,7 @@ where
         &mut self,
         evm: &mut impl Evm<DB: DatabaseCommit>,
     ) -> Result<Bytes, BlockExecutionError> {
+        let _span = tracing::debug_span!("eip7002_withdrawal_requests").entered();
         let result_and_state = eip7002::transact_withdrawal_requests_contract_call(evm)?;
 
         if let Some(ref mut hook) = &mut self.hook {
@@ -152,6 +164,7 @@ where
         &mut self,
         evm: &mut impl Evm<DB: DatabaseCommit>,
     ) -> Result<Bytes, BlockExecutionError> {
+        let _span = tracing::debug_span!("eip7251_consolidation_requests").entered();
         let result_and_state = eip7251::transact_consolidation_requests_contract_call(evm)?;
 
         if let Some(ref mut hook) = &mut self.hook {

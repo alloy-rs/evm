@@ -30,6 +30,7 @@ op-alloy = { workspace = true, optional = true }
 auto_impl.workspace = true
 derive_more.workspace = true
 thiserror.workspace = true
+tracing.workspace = true
 
 [dev-dependencies]
 alloy-primitives = { workspace = true, features = ["serde"] }
@@ -53,7 +54,8 @@ std = [
 	"thiserror/std",
 	"op-alloy?/std",
 	"alloy-rpc-types-eth?/std",
-	"alloy-rpc-types-engine?/std"
+	"alloy-rpc-types-engine?/std",
+	"tracing/std"
 ]
 gmp = [
     "revm/gmp",
