@@ -1,6 +1,6 @@
 //! Block execution abstraction.
 
-use crate::{Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, RecoveredTx, ToTxEnv};
+use crate::{Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, RecoveredTx, ToTxEnv};
 use alloc::{boxed::Box, vec::Vec};
 use alloy_consensus::transaction::Recovered;
 use alloy_eips::{eip2718::WithEncoded, eip7685::Requests};
@@ -8,7 +8,7 @@ use revm::{
     context::result::{ExecutionResult, ResultAndState},
     context_interface::either::Either,
     inspector::NoOpInspector,
-    DatabaseCommit, Inspector,
+    Inspector,
 };
 
 mod error;
@@ -443,7 +443,7 @@ where
         Transaction = F::Transaction,
         Receipt = F::Receipt,
     >,
-    DB: Database + DatabaseCommit + StateDB + 'a,
+    DB: StateDB + 'a,
     I: Inspector<<F::EvmFactory as EvmFactory>::Context<DB>> + 'a,
 {
 }
@@ -451,7 +451,7 @@ where
 impl<'a, F, DB, I, T> BlockExecutorFor<'a, F, DB, I> for T
 where
     F: BlockExecutorFactory,
-    DB: Database + DatabaseCommit + StateDB + 'a,
+    DB: StateDB + 'a,
     I: Inspector<<F::EvmFactory as EvmFactory>::Context<DB>> + 'a,
     T: BlockExecutor<
         Evm = <F::EvmFactory as EvmFactory>::Evm<DB, I>,
@@ -582,6 +582,6 @@ pub trait BlockExecutorFactory: 'static {
         ctx: Self::ExecutionCtx<'a>,
     ) -> impl BlockExecutorFor<'a, Self, DB, I>
     where
-        DB: Database + DatabaseCommit + StateDB + 'a,
+        DB: StateDB + 'a,
         I: Inspector<<Self::EvmFactory as EvmFactory>::Context<DB>> + 'a;
 }
