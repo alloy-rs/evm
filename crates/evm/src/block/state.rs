@@ -1,5 +1,6 @@
 //! State database abstraction.
 
+use core::fmt::Debug;
 use revm::{
     database::{states::bundle_state::BundleRetention, BundleState, State},
     DatabaseCommit,
@@ -40,7 +41,7 @@ pub trait StateDB: Database + DatabaseCommit {
     fn merge_transitions(&mut self, retention: BundleRetention);
 }
 
-impl<DB: revm::Database + std::fmt::Debug> StateDB for State<DB> {
+impl<DB: revm::Database + Debug> StateDB for State<DB> {
     fn set_state_clear_flag(&mut self, has_state_clear: bool) {
         Self::set_state_clear_flag(self, has_state_clear);
     }
