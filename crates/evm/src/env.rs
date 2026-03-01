@@ -4,7 +4,7 @@ use core::fmt::Debug;
 
 use alloy_primitives::U256;
 use revm::{
-    context::{BlockEnv, CfgEnv},
+    context::{BlockEnv, CfgEnv, TxEnv},
     primitives::hardfork::SpecId,
 };
 
@@ -168,6 +168,39 @@ pub trait BlockEnvironment: revm::context::Block + Clone + Debug + Send + Sync +
 
 impl BlockEnvironment for BlockEnv {
     fn inner_mut(&mut self) -> &mut revm::context::BlockEnv {
+        self
+    }
+}
+
+/// Trait for types that can be used as a transaction environment.
+///
+/// Assumes that the type wraps an inner [`revm::context::TxEnv`].
+pub trait TxEnvironment:
+    revm::context::Transaction + Clone + Debug + Send + Sync + 'static
+{
+    /// Returns a mutable reference to the inner [`revm::context::TxEnv`].
+    fn tx_env_mut(&mut self) -> &mut revm::context::TxEnv;
+}
+
+impl TxEnvironment for TxEnv {
+    fn tx_env_mut(&mut self) -> &mut revm::context::TxEnv {
+        self
+    }
+}
+
+/// Trait for types that can be used as a configuration environment.
+///
+/// Assumes that the type wraps an inner [`revm::context::CfgEnv`].
+pub trait CfgEnvironment: revm::context::Cfg + Clone + Debug + Send + Sync + 'static {
+    /// Returns a mutable reference to the inner [`revm::context::CfgEnv`].
+    fn cfg_env_mut(&mut self) -> &mut CfgEnv<<Self as revm::context::Cfg>::Spec>;
+}
+
+impl<Spec> CfgEnvironment for CfgEnv<Spec>
+where
+    Self: revm::context::Cfg<Spec = Spec> + Clone + Debug + Send + Sync + 'static,
+{
+    fn cfg_env_mut(&mut self) -> &mut Self {
         self
     }
 }
