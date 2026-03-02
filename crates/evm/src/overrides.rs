@@ -360,7 +360,8 @@ mod tests {
         };
 
         type TestDb = State<CacheDB<EmptyDB>>;
-        type TestCtx = Context<revm::context::BlockEnv, TxEnv, revm::context::CfgEnv, TestDb, Journal<TestDb>>;
+        type TestCtx =
+            Context<revm::context::BlockEnv, TxEnv, revm::context::CfgEnv, TestDb, Journal<TestDb>>;
 
         // --- Bytecode construction ---
 
@@ -390,8 +391,7 @@ mod tests {
             0xf3, //             RETURN
         ]; // 18 bytes
         assert_eq!(initcode_instrs.len(), 18);
-        let initcode: Bytes =
-            [initcode_instrs, runtime_code].concat().into(); // 29 bytes
+        let initcode: Bytes = [initcode_instrs, runtime_code].concat().into(); // 29 bytes
 
         let deployer_addr = address!("0x1000000000000000000000000000000000000001");
         let create2_addr = deployer_addr.create2_from_code(B256::ZERO, &initcode);
@@ -426,8 +426,7 @@ mod tests {
             0xf3, //       RETURN
         ]; // 34 bytes
         assert_eq!(deployer_instrs.len(), 34);
-        let deployer_code: Bytes =
-            [deployer_instrs.as_slice(), &initcode].concat().into();
+        let deployer_code: Bytes = [deployer_instrs.as_slice(), &initcode].concat().into();
 
         let caller = address!("0x0000000000000000000000000000000000000099");
 
@@ -551,13 +550,8 @@ mod tests {
         };
 
         // Helper to run inspect_tx with a given inspector and return the output value
-        fn run_inspect_with<I: Inspector<TestCtx>>(
-            db: TestDb,
-            tx: TxEnv,
-            inspector: I,
-        ) -> U256 {
-            let mut evm =
-                TestCtx::new(db, SpecId::CANCUN).build_mainnet_with_inspector(inspector);
+        fn run_inspect_with<I: Inspector<TestCtx>>(db: TestDb, tx: TxEnv, inspector: I) -> U256 {
+            let mut evm = TestCtx::new(db, SpecId::CANCUN).build_mainnet_with_inspector(inspector);
             let result = evm.inspect_tx(tx).unwrap();
             let output = result.result.output().cloned().unwrap_or_default();
             assert!(
@@ -572,29 +566,23 @@ mod tests {
         let transact_basic = run_transact(false);
         assert_eq!(transact_basic, U256::from(0xBEEF), "transact (no bundle): wrong value");
 
-        let inspect_caller = run_inspect_with(
-            build_db(false), build_tx(), LoadCallerOnCreate,
-        );
+        let inspect_caller = run_inspect_with(build_db(false), build_tx(), LoadCallerOnCreate);
         assert_eq!(
             inspect_caller, transact_basic,
             "inspect_tx (load caller, no bundle): SLOAD returned {inspect_caller:#x}, \
              expected {transact_basic:#x}"
         );
 
-        let inspect_target = run_inspect_with(
-            build_db(false), build_tx(),
-            LoadCreatedAddrOnCreate { create2_addr },
-        );
+        let inspect_target =
+            run_inspect_with(build_db(false), build_tx(), LoadCreatedAddrOnCreate { create2_addr });
         assert_eq!(
             inspect_target, transact_basic,
             "inspect_tx (load target, no bundle): SLOAD returned {inspect_target:#x}, \
              expected {transact_basic:#x}"
         );
 
-        let inspect_both = run_inspect_with(
-            build_db(false), build_tx(),
-            LoadBothOnCreate { create2_addr },
-        );
+        let inspect_both =
+            run_inspect_with(build_db(false), build_tx(), LoadBothOnCreate { create2_addr });
         assert_eq!(
             inspect_both, transact_basic,
             "inspect_tx (load both, no bundle): SLOAD returned {inspect_both:#x}, \
@@ -605,29 +593,24 @@ mod tests {
         let transact_bundle = run_transact(true);
         assert_eq!(transact_bundle, U256::from(0xBEEF), "transact (with bundle): wrong value");
 
-        let inspect_caller_bundle = run_inspect_with(
-            build_db(true), build_tx(), LoadCallerOnCreate,
-        );
+        let inspect_caller_bundle =
+            run_inspect_with(build_db(true), build_tx(), LoadCallerOnCreate);
         assert_eq!(
             inspect_caller_bundle, transact_bundle,
             "inspect_tx (load caller, with bundle): SLOAD returned {inspect_caller_bundle:#x}, \
              expected {transact_bundle:#x}"
         );
 
-        let inspect_target_bundle = run_inspect_with(
-            build_db(true), build_tx(),
-            LoadCreatedAddrOnCreate { create2_addr },
-        );
+        let inspect_target_bundle =
+            run_inspect_with(build_db(true), build_tx(), LoadCreatedAddrOnCreate { create2_addr });
         assert_eq!(
             inspect_target_bundle, transact_bundle,
             "inspect_tx (load target, with bundle): SLOAD returned {inspect_target_bundle:#x}, \
              expected {transact_bundle:#x}"
         );
 
-        let inspect_both_bundle = run_inspect_with(
-            build_db(true), build_tx(),
-            LoadBothOnCreate { create2_addr },
-        );
+        let inspect_both_bundle =
+            run_inspect_with(build_db(true), build_tx(), LoadBothOnCreate { create2_addr });
         assert_eq!(
             inspect_both_bundle, transact_bundle,
             "inspect_tx (load both, with bundle): SLOAD returned {inspect_both_bundle:#x}, \
@@ -655,13 +638,11 @@ mod tests {
         type TestDb = State<CacheDB<EmptyDB>>;
 
         // --- Bytecode construction (same as above) ---
-        let runtime_code: &[u8] = &[
-            0x60, 0x00, 0x54, 0x60, 0x00, 0x52, 0x60, 0x20, 0x60, 0x00, 0xf3,
-        ];
+        let runtime_code: &[u8] =
+            &[0x60, 0x00, 0x54, 0x60, 0x00, 0x52, 0x60, 0x20, 0x60, 0x00, 0xf3];
         let initcode_instrs: &[u8] = &[
-            0x61, 0xBE, 0xEF, 0x60, 0x00, 0x55,
-            0x60, 0x0b, 0x60, 0x12, 0x60, 0x00, 0x39,
-            0x60, 0x0b, 0x60, 0x00, 0xf3,
+            0x61, 0xBE, 0xEF, 0x60, 0x00, 0x55, 0x60, 0x0b, 0x60, 0x12, 0x60, 0x00, 0x39, 0x60,
+            0x0b, 0x60, 0x00, 0xf3,
         ];
         let initcode: Bytes = [initcode_instrs, runtime_code].concat().into();
 
@@ -669,14 +650,11 @@ mod tests {
         let create2_addr = deployer_addr.create2_from_code(B256::ZERO, &initcode);
 
         let deployer_instrs: Vec<u8> = vec![
-            0x60, 0x1d, 0x60, 0x22, 0x60, 0x00, 0x39,
-            0x60, 0x00, 0x60, 0x1d, 0x60, 0x00, 0x60, 0x00, 0xf5,
-            0x60, 0x20, 0x60, 0x00, 0x60, 0x00, 0x60, 0x00,
-            0x84, 0x5a, 0xfa,
-            0x50, 0x50, 0x60, 0x20, 0x60, 0x00, 0xf3,
+            0x60, 0x1d, 0x60, 0x22, 0x60, 0x00, 0x39, 0x60, 0x00, 0x60, 0x1d, 0x60, 0x00, 0x60,
+            0x00, 0xf5, 0x60, 0x20, 0x60, 0x00, 0x60, 0x00, 0x60, 0x00, 0x84, 0x5a, 0xfa, 0x50,
+            0x50, 0x60, 0x20, 0x60, 0x00, 0xf3,
         ];
-        let deployer_code: Bytes =
-            [deployer_instrs.as_slice(), &initcode].concat().into();
+        let deployer_code: Bytes = [deployer_instrs.as_slice(), &initcode].concat().into();
 
         let caller = address!("0x0000000000000000000000000000000000000099");
 
@@ -785,23 +763,23 @@ mod tests {
         };
 
         type TestDb = State<CacheDB<EmptyDB>>;
-        type TestCtx = Context<revm::context::BlockEnv, TxEnv, revm::context::CfgEnv, TestDb, Journal<TestDb>>;
+        type TestCtx =
+            Context<revm::context::BlockEnv, TxEnv, revm::context::CfgEnv, TestDb, Journal<TestDb>>;
 
         // Implementation contract code: SSTORE(0, 0xBEEF), STOP
         // When DELEGATECALLed, this writes 0xBEEF to slot 0 of the caller's storage.
         let impl_code: &[u8] = &[
             0x61, 0xBE, 0xEF, // PUSH2 0xBEEF
-            0x60, 0x00,       // PUSH1 0x00 (slot)
-            0x55,             // SSTORE
-            0x00,             // STOP
+            0x60, 0x00, // PUSH1 0x00 (slot)
+            0x55, // SSTORE
+            0x00, // STOP
         ]; // 7 bytes
 
         let impl_addr = address!("0x2000000000000000000000000000000000000002");
 
         // Runtime code: SLOAD(0), MSTORE(0), RETURN(0, 32)
-        let runtime_code: &[u8] = &[
-            0x60, 0x00, 0x54, 0x60, 0x00, 0x52, 0x60, 0x20, 0x60, 0x00, 0xf3,
-        ]; // 11 bytes
+        let runtime_code: &[u8] =
+            &[0x60, 0x00, 0x54, 0x60, 0x00, 0x52, 0x60, 0x20, 0x60, 0x00, 0xf3]; // 11 bytes
 
         // Initcode: DELEGATECALL to impl_addr, then CODECOPY + RETURN runtime code.
         //
@@ -820,8 +798,8 @@ mod tests {
         initcode_v.push(0x5a); // GAS
         initcode_v.push(0xf4); // DELEGATECALL
         initcode_v.push(0x50); // POP result
-        // Now: CODECOPY runtime, RETURN runtime
-        // Remaining instrs = 12 bytes (see below), runtime goes after
+                               // Now: CODECOPY runtime, RETURN runtime
+                               // Remaining instrs = 12 bytes (see below), runtime goes after
         let codecopy_start = initcode_v.len();
         // We need 12 more instruction bytes before runtime_code:
         //   PUSH1 size (2) + PUSH1 offset (2) + PUSH1 0 (2) + CODECOPY (1) = 7
@@ -829,13 +807,18 @@ mod tests {
         // Total = 12
         let runtime_off = codecopy_start + 12;
         initcode_v.extend_from_slice(&[
-            0x60, runtime_code.len() as u8,   // PUSH1 runtime_size
-            0x60, runtime_off as u8,          // PUSH1 runtime_offset_in_initcode
-            0x60, 0x00,                       // PUSH1 0 (memory dest)
-            0x39,                             // CODECOPY
-            0x60, runtime_code.len() as u8,   // PUSH1 runtime_size
-            0x60, 0x00,                       // PUSH1 0 (memory offset)
-            0xf3,                             // RETURN
+            0x60,
+            runtime_code.len() as u8, // PUSH1 runtime_size
+            0x60,
+            runtime_off as u8, // PUSH1 runtime_offset_in_initcode
+            0x60,
+            0x00, // PUSH1 0 (memory dest)
+            0x39, // CODECOPY
+            0x60,
+            runtime_code.len() as u8, // PUSH1 runtime_size
+            0x60,
+            0x00, // PUSH1 0 (memory offset)
+            0xf3, // RETURN
         ]);
         assert_eq!(initcode_v.len(), runtime_off);
         initcode_v.extend_from_slice(runtime_code);
@@ -849,31 +832,43 @@ mod tests {
         let initcode_size = initcode.len();
         let deployer_len: u8 = 34;
         let deployer_instrs: Vec<u8> = vec![
-            0x60, initcode_size as u8,  // PUSH1 initcode_size
-            0x60, deployer_len,         // PUSH1 deployer_len (offset of initcode)
-            0x60, 0x00,                 // PUSH1 0 (dest)
-            0x39,                       // CODECOPY
-            0x60, 0x00,                 // PUSH1 0 (salt)
-            0x60, initcode_size as u8,  // PUSH1 initcode_size
-            0x60, 0x00,                 // PUSH1 0 (offset)
-            0x60, 0x00,                 // PUSH1 0 (value)
-            0xf5,                       // CREATE2
-            0x60, 0x20,                 // PUSH1 32 (retLen)
-            0x60, 0x00,                 // PUSH1 0 (retOff)
-            0x60, 0x00,                 // PUSH1 0 (argsLen)
-            0x60, 0x00,                 // PUSH1 0 (argsOff)
-            0x84,                       // DUP5 (created addr)
-            0x5a,                       // GAS
-            0xfa,                       // STATICCALL
-            0x50,                       // POP (success)
-            0x50,                       // POP (created_addr)
-            0x60, 0x20,                 // PUSH1 32
-            0x60, 0x00,                 // PUSH1 0
-            0xf3,                       // RETURN
+            0x60,
+            initcode_size as u8, // PUSH1 initcode_size
+            0x60,
+            deployer_len, // PUSH1 deployer_len (offset of initcode)
+            0x60,
+            0x00, // PUSH1 0 (dest)
+            0x39, // CODECOPY
+            0x60,
+            0x00, // PUSH1 0 (salt)
+            0x60,
+            initcode_size as u8, // PUSH1 initcode_size
+            0x60,
+            0x00, // PUSH1 0 (offset)
+            0x60,
+            0x00, // PUSH1 0 (value)
+            0xf5, // CREATE2
+            0x60,
+            0x20, // PUSH1 32 (retLen)
+            0x60,
+            0x00, // PUSH1 0 (retOff)
+            0x60,
+            0x00, // PUSH1 0 (argsLen)
+            0x60,
+            0x00, // PUSH1 0 (argsOff)
+            0x84, // DUP5 (created addr)
+            0x5a, // GAS
+            0xfa, // STATICCALL
+            0x50, // POP (success)
+            0x50, // POP (created_addr)
+            0x60,
+            0x20, // PUSH1 32
+            0x60,
+            0x00, // PUSH1 0
+            0xf3, // RETURN
         ];
         assert_eq!(deployer_instrs.len(), deployer_len as usize);
-        let deployer_code: Bytes =
-            [deployer_instrs.as_slice(), &initcode].concat().into();
+        let deployer_code: Bytes = [deployer_instrs.as_slice(), &initcode].concat().into();
 
         let caller = address!("0x0000000000000000000000000000000000000099");
 
@@ -899,9 +894,7 @@ mod tests {
                 impl_addr,
                 AccountInfo {
                     code_hash: keccak256(&impl_bytecode),
-                    code: Some(
-                        revm::state::Bytecode::new_raw_checked(impl_bytecode).unwrap(),
-                    ),
+                    code: Some(revm::state::Bytecode::new_raw_checked(impl_bytecode).unwrap()),
                     nonce: 1,
                     ..Default::default()
                 },
