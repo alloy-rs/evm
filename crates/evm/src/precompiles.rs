@@ -16,6 +16,15 @@ use revm::{
     Context, Journal,
 };
 
+/// Returns whether the given [`PrecompileId`] supports caching.
+///
+/// This returns `false` for precompiles where the cost of computing a cache key (hashing the
+/// input) is comparable to just re-executing the precompile (e.g., the identity precompile which
+/// simply copies input to output).
+fn precompile_id_supports_caching(id: &PrecompileId) -> bool {
+    !matches!(id, PrecompileId::Identity)
+}
+
 /// A mapping of precompile contracts that can be either static (builtin) or dynamic.
 ///
 /// This is an optimization that allows us to keep using the static precompiles
@@ -809,7 +818,7 @@ where
     }
 
     fn supports_caching(&self) -> bool {
-        !matches!(self.0, PrecompileId::Identity)
+        precompile_id_supports_caching(&self.0)
     }
 }
 
@@ -826,7 +835,7 @@ where
     }
 
     fn supports_caching(&self) -> bool {
-        !matches!(self.0, PrecompileId::Identity)
+        precompile_id_supports_caching(self.0)
     }
 }
 
@@ -840,7 +849,7 @@ impl Precompile for revm::precompile::Precompile {
     }
 
     fn supports_caching(&self) -> bool {
-        !matches!(self.id(), PrecompileId::Identity)
+        precompile_id_supports_caching(self.id())
     }
 }
 
