@@ -807,6 +807,10 @@ where
     fn call(&self, input: PrecompileInput<'_>) -> PrecompileResult {
         self.1(input)
     }
+
+    fn supports_caching(&self) -> bool {
+        !matches!(self.0, PrecompileId::Identity)
+    }
 }
 
 impl<F> Precompile for (&PrecompileId, F)
@@ -819,6 +823,10 @@ where
 
     fn call(&self, input: PrecompileInput<'_>) -> PrecompileResult {
         self.1(input)
+    }
+
+    fn supports_caching(&self) -> bool {
+        !matches!(self.0, PrecompileId::Identity)
     }
 }
 
