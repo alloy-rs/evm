@@ -21,7 +21,7 @@ use revm::{
 /// This returns `false` for precompiles where the cost of computing a cache key (hashing the
 /// input) is comparable to just re-executing the precompile (e.g., the identity precompile which
 /// simply copies input to output).
-fn precompile_id_supports_caching(id: &PrecompileId) -> bool {
+const fn precompile_id_supports_caching(id: &PrecompileId) -> bool {
     !matches!(id, PrecompileId::Identity)
 }
 
