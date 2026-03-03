@@ -190,16 +190,6 @@ pub struct EvmLimitParams {
     pub tx_gas_limit_cap: Option<u64>,
 }
 
-impl Default for EvmLimitParams {
-    fn default() -> Self {
-        Self {
-            max_code_size: revm::primitives::eip170::MAX_CODE_SIZE,
-            max_initcode_size: revm::primitives::eip3860::MAX_INITCODE_SIZE,
-            tx_gas_limit_cap: None,
-        }
-    }
-}
-
 impl EvmLimitParams {
     /// Returns the Osaka EVM limit params.
     pub const fn osaka() -> Self {
@@ -232,10 +222,9 @@ mod tests {
     }
 
     #[test]
-    fn test_evm_env_with_default_limits() {
-        // EvmEnv<SpecId>::default() uses SpecId::default() (currently Osaka),
-        // so the fork default gas cap is EIP-7825's value.
-        let limits = EvmLimitParams::default();
+    fn test_evm_env_with_osaka_defaults() {
+        // osaka() provides explicit EIP-7825 gas cap and standard code size limits.
+        let limits = EvmLimitParams::osaka();
         let evm_env: EvmEnv<SpecId> = EvmEnv::default().with_limits(limits);
 
         assert_eq!(evm_env.cfg_env.max_code_size(), revm::primitives::eip170::MAX_CODE_SIZE);
@@ -258,17 +247,4 @@ mod tests {
         assert_eq!(evm_env.cfg_env.tx_gas_limit_cap(), revm::primitives::eip7825::TX_GAS_LIMIT_CAP);
     }
 
-    #[test]
-    fn test_default_respects_osaka_fork_default() {
-        // With Osaka spec and default() limits (tx_gas_limit_cap: None),
-        // the spec's fork-aware default is respected.
-        use revm::context::{BlockEnv, CfgEnv};
-
-        let limits = EvmLimitParams::default(); // tx_gas_limit_cap: None
-        let cfg_env = CfgEnv::new_with_spec(SpecId::OSAKA);
-        let evm_env = EvmEnv::new(cfg_env, BlockEnv::default()).with_limits(limits);
-
-        // None respects Osaka's default (EIP-7825 cap)
-        assert_eq!(evm_env.cfg_env.tx_gas_limit_cap(), revm::primitives::eip7825::TX_GAS_LIMIT_CAP);
-    }
 }
