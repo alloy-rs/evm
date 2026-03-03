@@ -55,8 +55,8 @@ op-alloy = { version = "0.23", default-features = false, features = [
 ] }
 
 # revm
-revm = { version = "34.0.0", default-features = false }
-op-revm = { version = "15.0.0", default-features = false }
+revm = { version = "35.0.0", default-features = false }
+op-revm = { version = "16.0.0", default-features = false }
 
 # tracing
 tracing = { version = "0.1", default-features = false }

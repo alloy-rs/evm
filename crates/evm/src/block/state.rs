@@ -13,7 +13,8 @@ pub trait StateDB: Database + DatabaseCommit {
 }
 
 impl<DB: Database> StateDB for State<DB> {
-    fn set_state_clear_flag(&mut self, has_state_clear: bool) {
-        self.cache.set_state_clear_flag(has_state_clear);
+    fn set_state_clear_flag(&mut self, _has_state_clear: bool) {
+        // No-op: revm's State now always applies post-EIP-161 commit semantics.
+        // The journal handles pre-EIP-161 behavior in `finalize()`.
     }
 }
