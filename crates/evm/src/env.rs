@@ -246,5 +246,4 @@ mod tests {
 
         assert_eq!(evm_env.cfg_env.tx_gas_limit_cap(), revm::primitives::eip7825::TX_GAS_LIMIT_CAP);
     }
-
 }
