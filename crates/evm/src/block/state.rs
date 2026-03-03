@@ -1,7 +1,12 @@
 //! State database abstraction.
 
+use core::fmt::Debug;
+use revm::{
+    database::{states::bundle_state::BundleRetention, BundleState, State},
+    DatabaseCommit,
+};
+
 use crate::Database;
-use revm::{database::State, DatabaseCommit};
 
 /// A type which has the state of the blockchain.
 ///
@@ -10,10 +15,46 @@ use revm::{database::State, DatabaseCommit};
 pub trait StateDB: Database + DatabaseCommit {
     /// State clear EIP-161 is enabled in Spurious Dragon hardfork.
     fn set_state_clear_flag(&mut self, has_state_clear: bool);
+
+    /// Gets a reference to the internal [`BundleState`]
+    fn bundle_state(&self) -> &BundleState;
+
+    /// Gets a mutable reference to the internal [`BundleState`]
+    fn bundle_state_mut(&mut self) -> &mut BundleState;
+
+    /// This will not apply any pending [`revm::database::TransitionState`].
+    ///
+    /// It is recommended to call [`StateDB::merge_transitions`] before taking the bundle.
+    ///
+    /// If the `State` has been built with the
+    /// [`revm::database::StateBuilder::with_bundle_prestate`] option, the pre-state will be
+    /// taken along with any changes made by [`StateDB::merge_transitions`].
+    fn take_bundle(&mut self) -> BundleState {
+        core::mem::take(self.bundle_state_mut())
+    }
+
+    /// Take all transitions and merge them inside [`BundleState`].
+    ///
+    /// This action will create final post state and all reverts so that
+    /// we at any time revert state of bundle to the state before transition
+    /// is applied.
+    fn merge_transitions(&mut self, retention: BundleRetention);
 }
 
-impl<DB: Database> StateDB for State<DB> {
+impl<DB: revm::Database + Debug> StateDB for State<DB> {
     fn set_state_clear_flag(&mut self, has_state_clear: bool) {
-        self.cache.set_state_clear_flag(has_state_clear);
+        Self::set_state_clear_flag(self, has_state_clear);
+    }
+
+    fn bundle_state(&self) -> &BundleState {
+        &self.bundle_state
+    }
+
+    fn bundle_state_mut(&mut self) -> &mut BundleState {
+        &mut self.bundle_state
+    }
+
+    fn merge_transitions(&mut self, retention: BundleRetention) {
+        Self::merge_transitions(self, retention);
     }
 }
