@@ -12,12 +12,17 @@ use thiserror::Error;
 /// Converts `self` into `T`.
 ///
 /// Should create an executable transaction environment using [`TransactionRequest`].
-pub trait TryIntoTxEnv<T, BlockEnv = revm::context::BlockEnv> {
+pub trait TryIntoTxEnv<
+    T,
+    Spec = revm::primitives::hardfork::SpecId,
+    BlockEnv = revm::context::BlockEnv,
+>
+{
     /// An associated error that can occur during the conversion.
     type Err;
 
     /// Performs the conversion.
-    fn try_into_tx_env<Spec>(self, evm_env: &EvmEnv<Spec, BlockEnv>) -> Result<T, Self::Err>;
+    fn try_into_tx_env(self, evm_env: &EvmEnv<Spec, BlockEnv>) -> Result<T, Self::Err>;
 }
 
 /// An Ethereum specific transaction environment error than can occur during conversion from
@@ -32,10 +37,10 @@ pub enum EthTxEnvError {
     Input(#[from] TransactionInputError),
 }
 
-impl<Block: BlockEnvironment> TryIntoTxEnv<TxEnv, Block> for TransactionRequest {
+impl<Spec, Block: BlockEnvironment> TryIntoTxEnv<TxEnv, Spec, Block> for TransactionRequest {
     type Err = EthTxEnvError;
 
-    fn try_into_tx_env<Spec>(self, evm_env: &EvmEnv<Spec, Block>) -> Result<TxEnv, Self::Err> {
+    fn try_into_tx_env(self, evm_env: &EvmEnv<Spec, Block>) -> Result<TxEnv, Self::Err> {
         // Ensure that if versioned hashes are set, they're not empty
         if self.blob_versioned_hashes.as_ref().is_some_and(|hashes| hashes.is_empty()) {
             return Err(CallFeesError::BlobTransactionMissingBlobHashes.into());

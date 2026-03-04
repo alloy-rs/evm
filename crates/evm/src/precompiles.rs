@@ -1,13 +1,13 @@
 //! Helpers for dealing with Precompiles.
 
 use crate::{Database, EvmInternals};
-use alloc::{borrow::Cow, boxed::Box, string::String, sync::Arc};
+use alloc::{borrow::Cow, boxed::Box, string::String, sync::Arc, vec::Vec};
 use alloy_consensus::transaction::Either;
 use alloy_primitives::{
     map::{AddressMap, AddressSet},
     Address, Bytes, U256,
 };
-use core::fmt::Debug;
+use core::fmt::{self, Debug, Display};
 use revm::{
     context::{ContextTr, LocalContextTr},
     handler::{EthPrecompiles, PrecompileProvider},
@@ -15,6 +15,15 @@ use revm::{
     precompile::{PrecompileError, PrecompileFn, PrecompileId, PrecompileResult, Precompiles},
     Context, Journal,
 };
+
+/// Returns whether the given [`PrecompileId`] supports caching.
+///
+/// This returns `false` for precompiles where the cost of computing a cache key (hashing the
+/// input) is comparable to just re-executing the precompile (e.g., the identity precompile which
+/// simply copies input to output).
+const fn precompile_id_supports_caching(id: &PrecompileId) -> bool {
+    !matches!(id, PrecompileId::Identity)
+}
 
 /// A mapping of precompile contracts that can be either static (builtin) or dynamic.
 ///
@@ -64,15 +73,15 @@ impl PrecompilesMap {
         self.map_precompiles_filtered(f, |_, _| true);
     }
 
-    /// Maps all pure precompiles using the provided function.
+    /// Maps all cacheable precompiles using the provided function.
     ///
     /// This is a variant of [`Self::map_precompiles`] that only applies the transformation
-    /// to precompiles that are pure, see [`Precompile::is_pure`].
-    pub fn map_pure_precompiles<F>(&mut self, f: F)
+    /// to precompiles that support caching, see [`Precompile::supports_caching`].
+    pub fn map_cacheable_precompiles<F>(&mut self, f: F)
     where
         F: FnMut(&Address, DynPrecompile) -> DynPrecompile,
     {
-        self.map_precompiles_filtered(f, |_, precompile| precompile.is_pure());
+        self.map_precompiles_filtered(f, |_, precompile| precompile.supports_caching());
     }
 
     /// Internal helper to map precompiles with an optional filter.
@@ -255,6 +264,97 @@ impl PrecompilesMap {
     {
         self.extend_precompiles(precompiles);
         self
+    }
+
+    /// Moves precompiles from source addresses to destination addresses.
+    ///
+    /// For each `(source, dest)` pair in the iterator:
+    /// - If `source == dest`, the pair is skipped (no-op).
+    /// - If the source address is not a precompile, returns an error.
+    /// - Otherwise, the precompile is removed from the source address and installed at the
+    ///   destination address.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`MovePrecompileError::NotAPrecompile`] if any source address does not have a
+    /// precompile installed.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// // Move ECRECOVER from 0x01 to a custom address
+    /// let moves = [(
+    ///     address!("0x0000000000000000000000000000000000000001"),
+    ///     address!("0x0000000000000000000000000000000000000100"),
+    /// )];
+    /// precompiles.move_precompiles(moves)?;
+    /// ```
+    pub fn move_precompiles<I>(&mut self, moves: I) -> Result<(), MovePrecompileError>
+    where
+        I: IntoIterator<Item = (Address, Address)>,
+    {
+        let moves: Vec<_> = moves.into_iter().filter(|(src, dest)| src != dest).collect();
+
+        if moves.is_empty() {
+            return Ok(());
+        }
+
+        // Validate all source addresses are precompiles before making any changes
+        for (source, _dest) in &moves {
+            if self.get(source).is_none() {
+                return Err(MovePrecompileError::NotAPrecompile(*source));
+            }
+        }
+
+        // Extract precompiles from source addresses
+        let mut extracted: Vec<(Address, DynPrecompile)> = Vec::with_capacity(moves.len());
+
+        for (source, dest) in moves {
+            let mut found_precompile: Option<DynPrecompile> = None;
+            self.apply_precompile(&source, |existing| {
+                found_precompile = existing;
+                None
+            });
+
+            if let Some(precompile) = found_precompile {
+                extracted.push((dest, precompile));
+            }
+        }
+
+        // Install precompiles at destination addresses
+        for (dest, precompile) in extracted {
+            self.apply_precompile(&dest, |_| Some(precompile));
+        }
+
+        Ok(())
+    }
+
+    /// Builder-style method that moves precompiles from source addresses to destination addresses.
+    ///
+    /// This is a consuming version of [`move_precompiles`](Self::move_precompiles) that returns
+    /// `Self` on success.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`MovePrecompileError::NotAPrecompile`] if any source address does not have a
+    /// precompile installed.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// let moves = [(
+    ///     address!("0x0000000000000000000000000000000000000001"),
+    ///     address!("0x0000000000000000000000000000000000000100"),
+    /// )];
+    /// let map = PrecompilesMap::new(precompiles_cow)
+    ///     .with_moved_precompiles(moves)?;
+    /// ```
+    pub fn with_moved_precompiles<I>(mut self, moves: I) -> Result<Self, MovePrecompileError>
+    where
+        I: IntoIterator<Item = (Address, Address)>,
+    {
+        self.move_precompiles(moves)?;
+        Ok(self)
     }
 
     /// Sets a dynamic precompile lookup function that is called for addresses not found
@@ -465,16 +565,21 @@ where
             CallInput::Bytes(bytes) => bytes.as_ref(),
         };
 
-        let precompile_result = precompile.call(PrecompileInput {
-            data: input_bytes,
-            gas: inputs.gas_limit,
-            caller: inputs.caller,
-            value: inputs.call_value(),
-            is_static: inputs.is_static,
-            internals: EvmInternals::new(journaled_state, block, cfg, tx),
-            target_address: inputs.target_address,
-            bytecode_address: inputs.bytecode_address,
-        });
+        let precompile_result = {
+            let _span =
+                tracing::debug_span!("precompile", name = precompile.precompile_id().name(),)
+                    .entered();
+            precompile.call(PrecompileInput {
+                data: input_bytes,
+                gas: inputs.gas_limit,
+                caller: inputs.caller,
+                value: inputs.call_value(),
+                is_static: inputs.is_static,
+                internals: EvmInternals::new(journaled_state, block, cfg, tx),
+                target_address: inputs.target_address,
+                bytecode_address: inputs.bytecode_address,
+            })
+        };
 
         match precompile_result {
             Ok(output) => {
@@ -534,8 +639,8 @@ impl DynPrecompile {
         Self(Arc::new((id, f)))
     }
 
-    /// Creates a new [`DynPrecompiles`] with the given closure and [`Precompile::is_pure`]
-    /// returning `false`.
+    /// Creates a new [`DynPrecompiles`] with the given closure and
+    /// [`Precompile::supports_caching`] returning `false`.
     pub fn new_stateful<F>(id: PrecompileId, f: F) -> Self
     where
         F: Fn(PrecompileInput<'_>) -> PrecompileResult + Send + Sync + 'static,
@@ -543,7 +648,7 @@ impl DynPrecompile {
         Self(Arc::new(StatefulPrecompile((id, f))))
     }
 
-    /// Flips [`Precompile::is_pure`] to `false`.
+    /// Flips [`Precompile::supports_caching`] to `false`.
     pub fn stateful(self) -> Self {
         Self(Arc::new(StatefulPrecompile(self.0)))
     }
@@ -665,33 +770,37 @@ pub trait Precompile {
     /// Execute the precompile with the given input data, gas limit, and caller address.
     fn call(&self, input: PrecompileInput<'_>) -> PrecompileResult;
 
-    /// Returns whether the precompile is pure.
+    /// Returns whether this precompile's results should be cached.
     ///
-    /// A pure precompile has deterministic output based solely on its input.
-    /// Non-pure precompiles may produce different outputs for the same input
-    /// based on the current state or other external factors.
+    /// A cacheable precompile has deterministic output based solely on its input,
+    /// and the cost of execution is high enough that caching the result is beneficial.
     ///
     /// # Default
     ///
-    /// Returns `true` by default, indicating the precompile is pure
-    /// and its results should be cached as this is what most of the precompiles are.
+    /// Returns `true` by default, indicating the precompile supports caching,
+    /// as this is what most precompiles benefit from.
+    ///
+    /// # When to return `false`
+    ///
+    /// - **Non-deterministic precompiles**: If the output depends on state or external factors
+    /// - **Cheap precompiles**: If the cost of computing a cache key (hashing the input) is
+    ///   comparable to just re-executing the precompile (e.g., the identity precompile which simply
+    ///   copies input to output)
     ///
     /// # Examples
     ///
-    /// Override this method to return `false` for non-deterministic precompiles:
-    ///
     /// ```ignore
-    /// impl Precompile for MyDeterministicPrecompile {
+    /// impl Precompile for MyPrecompile {
     ///     fn call(&self, input: PrecompileInput<'_>) -> PrecompileResult {
-    ///         // non-deterministic computation dependent on state
+    ///         // ...
     ///     }
     ///
-    ///     fn is_pure(&self) -> bool {
-    ///         false // This precompile might produce different output for the same input
+    ///     fn supports_caching(&self) -> bool {
+    ///         false
     ///     }
     /// }
     /// ```
-    fn is_pure(&self) -> bool {
+    fn supports_caching(&self) -> bool {
         true
     }
 }
@@ -707,6 +816,10 @@ where
     fn call(&self, input: PrecompileInput<'_>) -> PrecompileResult {
         self.1(input)
     }
+
+    fn supports_caching(&self) -> bool {
+        precompile_id_supports_caching(&self.0)
+    }
 }
 
 impl<F> Precompile for (&PrecompileId, F)
@@ -720,6 +833,10 @@ where
     fn call(&self, input: PrecompileInput<'_>) -> PrecompileResult {
         self.1(input)
     }
+
+    fn supports_caching(&self) -> bool {
+        precompile_id_supports_caching(self.0)
+    }
 }
 
 impl Precompile for revm::precompile::Precompile {
@@ -729,6 +846,10 @@ impl Precompile for revm::precompile::Precompile {
 
     fn call(&self, input: PrecompileInput<'_>) -> PrecompileResult {
         self.precompile()(input.data, input.gas)
+    }
+
+    fn supports_caching(&self) -> bool {
+        precompile_id_supports_caching(self.id())
     }
 }
 
@@ -773,8 +894,8 @@ impl Precompile for DynPrecompile {
         self.0.call(input)
     }
 
-    fn is_pure(&self) -> bool {
-        self.0.is_pure()
+    fn supports_caching(&self) -> bool {
+        self.0.supports_caching()
     }
 }
 
@@ -793,10 +914,10 @@ impl<A: Precompile, B: Precompile> Precompile for Either<A, B> {
         }
     }
 
-    fn is_pure(&self) -> bool {
+    fn supports_caching(&self) -> bool {
         match self {
-            Self::Left(p) => p.is_pure(),
-            Self::Right(p) => p.is_pure(),
+            Self::Left(p) => p.supports_caching(),
+            Self::Right(p) => p.supports_caching(),
         }
     }
 }
@@ -812,7 +933,7 @@ impl<P: Precompile> Precompile for StatefulPrecompile<P> {
         self.0.call(input)
     }
 
-    fn is_pure(&self) -> bool {
+    fn supports_caching(&self) -> bool {
         false
     }
 }
@@ -839,6 +960,25 @@ where
     }
 }
 
+/// Error that can occur when moving precompiles.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum MovePrecompileError {
+    /// The source address is not a precompile.
+    NotAPrecompile(Address),
+}
+
+impl Display for MovePrecompileError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NotAPrecompile(addr) => {
+                write!(f, "source address {addr} is not a precompile")
+            }
+        }
+    }
+}
+
+impl core::error::Error for MovePrecompileError {}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -848,11 +988,12 @@ mod tests {
         context::Block,
         database::EmptyDB,
         precompile::{PrecompileId, PrecompileOutput},
+        primitives::hardfork::SpecId,
     };
 
     #[test]
     fn test_map_precompile() {
-        let eth_precompiles = EthPrecompiles::default();
+        let eth_precompiles = EthPrecompiles::new(SpecId::default());
         let mut spec_precompiles = PrecompilesMap::from(eth_precompiles);
 
         let mut ctx = EthEvmContext::new(EmptyDB::default(), Default::default());
@@ -961,30 +1102,42 @@ mod tests {
     }
 
     #[test]
-    fn test_is_pure() {
-        // Test default behavior (should be false)
+    fn test_supports_caching() {
         let closure_precompile = |_input: PrecompileInput<'_>| -> PrecompileResult {
             Ok(PrecompileOutput::new(10, Bytes::from_static(b"output")))
         };
 
         let dyn_precompile: DynPrecompile = closure_precompile.into();
-        assert!(dyn_precompile.is_pure(), "should be pure by default");
+        assert!(dyn_precompile.supports_caching(), "should support caching by default");
 
-        // Test custom precompile with overridden is_pure
         let stateful_precompile =
             DynPrecompile::new_stateful(PrecompileId::Custom("closure".into()), closure_precompile);
-        assert!(!stateful_precompile.is_pure(), "PurePrecompile should return true for is_pure");
+        assert!(
+            !stateful_precompile.supports_caching(),
+            "stateful precompile should not support caching"
+        );
 
         let either_left = Either::<DynPrecompile, DynPrecompile>::Left(stateful_precompile);
-        assert!(!either_left.is_pure(), "Either::Left with non-pure should return false");
+        assert!(
+            !either_left.supports_caching(),
+            "Either::Left with non-cacheable should return false"
+        );
 
         let either_right = Either::<DynPrecompile, DynPrecompile>::Right(dyn_precompile);
-        assert!(either_right.is_pure(), "Either::Right with pure should return true");
+        assert!(either_right.supports_caching(), "Either::Right with cacheable should return true");
+
+        // Identity precompile should not support caching
+        let identity = revm::precompile::identity::FUN;
+        assert!(!identity.supports_caching(), "identity precompile should not support caching");
+
+        // Other builtin precompiles should support caching
+        let sha256 = revm::precompile::hash::SHA256;
+        assert!(sha256.supports_caching(), "sha256 precompile should support caching");
     }
 
     #[test]
     fn test_precompile_lookup() {
-        let eth_precompiles = EthPrecompiles::default();
+        let eth_precompiles = EthPrecompiles::new(SpecId::default());
         let mut spec_precompiles = PrecompilesMap::from(eth_precompiles);
 
         let mut ctx = EthEvmContext::new(EmptyDB::default(), Default::default());
@@ -1041,7 +1194,7 @@ mod tests {
 
     #[test]
     fn test_get_precompile() {
-        let eth_precompiles = EthPrecompiles::default();
+        let eth_precompiles = EthPrecompiles::new(SpecId::default());
         let spec_precompiles = PrecompilesMap::from(eth_precompiles);
 
         let mut ctx = EthEvmContext::new(EmptyDB::default(), Default::default());
@@ -1100,5 +1253,102 @@ mod tests {
             result.bytes, test_input,
             "Identity precompile should return the input data after conversion to dynamic"
         );
+    }
+
+    #[test]
+    fn test_move_precompiles() {
+        let eth_precompiles = EthPrecompiles::new(SpecId::default());
+        let mut spec_precompiles = PrecompilesMap::from(eth_precompiles);
+
+        let mut ctx = EthEvmContext::new(EmptyDB::default(), Default::default());
+
+        // Identity precompile at address 0x04
+        let identity_address = address!("0x0000000000000000000000000000000000000004");
+        let new_address = address!("0x0000000000000000000000000000000000001000");
+        let test_input = Bytes::from_static(b"test data");
+        let gas_limit = 1000;
+
+        // Verify the precompile exists at original address
+        assert!(spec_precompiles.get(&identity_address).is_some());
+        assert!(spec_precompiles.get(&new_address).is_none());
+
+        // Move the precompile
+        spec_precompiles.move_precompiles([(identity_address, new_address)]).unwrap();
+
+        // Verify the precompile moved
+        assert!(
+            spec_precompiles.get(&identity_address).is_none(),
+            "Precompile should no longer exist at original address"
+        );
+        assert!(
+            spec_precompiles.get(&new_address).is_some(),
+            "Precompile should exist at new address"
+        );
+
+        // Verify the moved precompile works correctly
+        let result = spec_precompiles
+            .get(&new_address)
+            .unwrap()
+            .call(PrecompileInput {
+                data: &test_input,
+                gas: gas_limit,
+                caller: Address::ZERO,
+                value: U256::ZERO,
+                is_static: false,
+                internals: EvmInternals::from_context(&mut ctx),
+                target_address: new_address,
+                bytecode_address: new_address,
+            })
+            .unwrap();
+        assert_eq!(result.bytes, test_input, "Moved identity precompile should return input data");
+    }
+
+    #[test]
+    fn test_move_precompiles_not_a_precompile() {
+        let eth_precompiles = EthPrecompiles::new(SpecId::default());
+        let mut spec_precompiles = PrecompilesMap::from(eth_precompiles);
+
+        let non_precompile = address!("0x0000000000000000000000000000000000000099");
+        let dest = address!("0x0000000000000000000000000000000000001000");
+
+        let result = spec_precompiles.move_precompiles([(non_precompile, dest)]);
+        assert_eq!(result, Err(MovePrecompileError::NotAPrecompile(non_precompile)));
+    }
+
+    #[test]
+    fn test_move_precompiles_same_address_noop() {
+        let eth_precompiles = EthPrecompiles::new(SpecId::default());
+        let mut spec_precompiles = PrecompilesMap::from(eth_precompiles);
+
+        let identity_address = address!("0x0000000000000000000000000000000000000004");
+
+        // Moving to same address should be a no-op and not error
+        spec_precompiles.move_precompiles([(identity_address, identity_address)]).unwrap();
+
+        // Precompile should still exist
+        assert!(spec_precompiles.get(&identity_address).is_some());
+    }
+
+    #[test]
+    fn test_move_precompiles_multiple() {
+        let eth_precompiles = EthPrecompiles::new(SpecId::default());
+        let mut spec_precompiles = PrecompilesMap::from(eth_precompiles);
+
+        let ecrecover = address!("0x0000000000000000000000000000000000000001");
+        let sha256 = address!("0x0000000000000000000000000000000000000002");
+        let new_ecrecover = address!("0x0000000000000000000000000000000000001001");
+        let new_sha256 = address!("0x0000000000000000000000000000000000001002");
+
+        spec_precompiles
+            .move_precompiles([(ecrecover, new_ecrecover), (sha256, new_sha256)])
+            .unwrap();
+
+        // Original addresses should be empty
+        assert!(spec_precompiles.get(&ecrecover).is_none());
+        assert!(spec_precompiles.get(&sha256).is_none());
+
+        // New addresses should have the precompiles
+        assert!(spec_precompiles.get(&new_ecrecover).is_some());
+        assert!(spec_precompiles.get(&new_sha256).is_some());
     }
 }

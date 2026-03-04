@@ -1,13 +1,12 @@
 //! Block execution abstraction.
 
-use crate::{Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, RecoveredTx, ToTxEnv};
+use crate::{Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, RecoveredTx, ToTxEnv};
 use alloc::{boxed::Box, vec::Vec};
 use alloy_consensus::transaction::Recovered;
 use alloy_eips::{eip2718::WithEncoded, eip7685::Requests, eip7928::BlockAccessList};
 use revm::{
     context::result::{ExecutionResult, ResultAndState},
     context_interface::either::Either,
-    database::State,
     inspector::NoOpInspector,
     Inspector,
 };
@@ -443,22 +442,22 @@ pub trait TxResult {
 pub trait BlockExecutorFor<'a, F: BlockExecutorFactory + ?Sized, DB, I = NoOpInspector>
 where
     Self: BlockExecutor<
-        Evm = <F::EvmFactory as EvmFactory>::Evm<&'a mut State<DB>, I>,
+        Evm = <F::EvmFactory as EvmFactory>::Evm<DB, I>,
         Transaction = F::Transaction,
         Receipt = F::Receipt,
     >,
-    DB: Database + 'a,
-    I: Inspector<<F::EvmFactory as EvmFactory>::Context<&'a mut State<DB>>> + 'a,
+    DB: StateDB + 'a,
+    I: Inspector<<F::EvmFactory as EvmFactory>::Context<DB>> + 'a,
 {
 }
 
 impl<'a, F, DB, I, T> BlockExecutorFor<'a, F, DB, I> for T
 where
     F: BlockExecutorFactory,
-    DB: Database + 'a,
-    I: Inspector<<F::EvmFactory as EvmFactory>::Context<&'a mut State<DB>>> + 'a,
+    DB: StateDB + 'a,
+    I: Inspector<<F::EvmFactory as EvmFactory>::Context<DB>> + 'a,
     T: BlockExecutor<
-        Evm = <F::EvmFactory as EvmFactory>::Evm<&'a mut State<DB>, I>,
+        Evm = <F::EvmFactory as EvmFactory>::Evm<DB, I>,
         Transaction = F::Transaction,
         Receipt = F::Receipt,
     >,
@@ -582,10 +581,10 @@ pub trait BlockExecutorFactory: 'static {
     /// ```
     fn create_executor<'a, DB, I>(
         &'a self,
-        evm: <Self::EvmFactory as EvmFactory>::Evm<&'a mut State<DB>, I>,
+        evm: <Self::EvmFactory as EvmFactory>::Evm<DB, I>,
         ctx: Self::ExecutionCtx<'a>,
     ) -> impl BlockExecutorFor<'a, Self, DB, I>
     where
-        DB: Database + 'a,
-        I: Inspector<<Self::EvmFactory as EvmFactory>::Context<&'a mut State<DB>>> + 'a;
+        DB: StateDB + 'a,
+        I: Inspector<<Self::EvmFactory as EvmFactory>::Context<DB>> + 'a;
 }

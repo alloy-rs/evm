@@ -8,10 +8,12 @@ use op_alloy::rpc_types::OpTransactionRequest;
 use op_revm::OpTransaction;
 use revm::context::TxEnv;
 
-impl<Block: BlockEnvironment> TryIntoTxEnv<OpTransaction<TxEnv>, Block> for OpTransactionRequest {
+impl<Spec, Block: BlockEnvironment> TryIntoTxEnv<OpTransaction<TxEnv>, Spec, Block>
+    for OpTransactionRequest
+{
     type Err = EthTxEnvError;
 
-    fn try_into_tx_env<Spec>(
+    fn try_into_tx_env(
         self,
         evm_env: &EvmEnv<Spec, Block>,
     ) -> Result<OpTransaction<TxEnv>, Self::Err> {

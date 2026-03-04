@@ -11,20 +11,18 @@ use crate::{
         state_changes::{balance_increment_state, post_block_balance_increments},
         BlockExecutionError, BlockExecutionResult, BlockExecutor, BlockExecutorFactory,
         BlockExecutorFor, BlockValidationError, ExecutableTx, OnStateHook,
-        StateChangePostBlockSource, StateChangeSource, SystemCaller, TxResult,
+        StateChangePostBlockSource, StateChangeSource, StateDB, SystemCaller, TxResult,
     },
-    Database, Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, RecoveredTx,
+    Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, RecoveredTx,
 };
 use alloc::{borrow::Cow, boxed::Box, vec::Vec};
 use alloy_consensus::{Header, Transaction, TransactionEnvelope, TxReceipt};
-use alloy_eips::{eip4895::Withdrawals, eip7685::Requests, Encodable2718};
+use alloy_eips::{eip4895::Withdrawal, eip7685::Requests, Encodable2718};
 use alloy_hardforks::EthereumHardfork;
 use alloy_primitives::{Bytes, Log, B256};
 use core::cmp::max;
 use revm::{
-    context::Block,
-    context_interface::result::ResultAndState,
-    database::{DatabaseCommitExt, State},
+    context::Block, context_interface::result::ResultAndState, database::DatabaseCommitExt,
     DatabaseCommit, Inspector,
 };
 
@@ -38,7 +36,7 @@ pub struct EthBlockExecutionCtx<'a> {
     /// Block ommers
     pub ommers: &'a [Header],
     /// Block withdrawals.
-    pub withdrawals: Option<Cow<'a, Withdrawals>>,
+    pub withdrawals: Option<Cow<'a, [Withdrawal]>>,
     /// Block extra data.
     pub extra_data: Bytes,
     /// Block transactions count hint. Used to preallocate the receipts vector.
@@ -122,13 +120,9 @@ where
     }
 }
 
-impl<'db, DB, E, Spec, R> BlockExecutor for EthBlockExecutor<'_, E, Spec, R>
+impl<E, Spec, R> BlockExecutor for EthBlockExecutor<'_, E, Spec, R>
 where
-    DB: Database + 'db,
-    E: Evm<
-        DB = &'db mut State<DB>,
-        Tx: FromRecoveredTx<R::Transaction> + FromTxWithEncoded<R::Transaction>,
-    >,
+    E: Evm<DB: StateDB, Tx: FromRecoveredTx<R::Transaction> + FromTxWithEncoded<R::Transaction>>,
     Spec: EthExecutorSpec,
     R: ReceiptBuilder<Transaction: Transaction + Encodable2718, Receipt: TxReceipt<Log = Log>>,
 {
@@ -426,12 +420,12 @@ where
 
     fn create_executor<'a, DB, I>(
         &'a self,
-        evm: EvmF::Evm<&'a mut State<DB>, I>,
+        evm: EvmF::Evm<DB, I>,
         ctx: Self::ExecutionCtx<'a>,
     ) -> impl BlockExecutorFor<'a, Self, DB, I>
     where
-        DB: Database + 'a,
-        I: Inspector<EvmF::Context<&'a mut State<DB>>> + 'a,
+        DB: StateDB + 'a,
+        I: Inspector<EvmF::Context<DB>> + 'a,
     {
         EthBlockExecutor::new(evm, ctx, &self.spec, &self.receipt_builder)
     }

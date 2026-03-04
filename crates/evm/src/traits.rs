@@ -6,7 +6,7 @@ use alloy_primitives::{Address, Log, B256, U256};
 use core::{error::Error, fmt, fmt::Debug};
 use revm::{
     context::{
-        journaled_state::{account::JournaledAccountTr, TransferError},
+        journaled_state::{account::JournaledAccountTr, JournalCheckpoint, TransferError},
         Block, Cfg, ContextTr, DBErrorMarker, JournalTr, Transaction,
     },
     interpreter::{SStoreResult, StateLoad},
@@ -162,6 +162,12 @@ trait EvmInternalsTr: Database<Error = ErasedError> + Debug {
     fn tload(&mut self, address: Address, key: StorageKey) -> StorageValue;
 
     fn tstore(&mut self, address: Address, key: StorageKey, value: StorageValue);
+
+    fn checkpoint(&mut self) -> JournalCheckpoint;
+
+    fn checkpoint_commit(&mut self);
+
+    fn checkpoint_revert(&mut self, checkpoint: JournalCheckpoint);
 }
 
 /// Helper internal struct for implementing [`EvmInternals`].
@@ -237,6 +243,18 @@ where
 
     fn tstore(&mut self, address: Address, key: StorageKey, value: StorageValue) {
         self.0.tstore(address, key, value);
+    }
+
+    fn checkpoint(&mut self) -> JournalCheckpoint {
+        self.0.checkpoint()
+    }
+
+    fn checkpoint_commit(&mut self) {
+        self.0.checkpoint_commit()
+    }
+
+    fn checkpoint_revert(&mut self, checkpoint: JournalCheckpoint) {
+        self.0.checkpoint_revert(checkpoint)
     }
 }
 
@@ -447,6 +465,21 @@ impl<'a> EvmInternals<'a> {
     /// Stores a transient storage value.
     pub fn tstore(&mut self, address: Address, key: StorageKey, value: StorageValue) {
         self.internals.tstore(address, key, value);
+    }
+
+    /// Creates a journal checkpoint.
+    pub fn checkpoint(&mut self) -> JournalCheckpoint {
+        self.internals.checkpoint()
+    }
+
+    /// Commits the last journal checkpoint.
+    pub fn checkpoint_commit(&mut self) {
+        self.internals.checkpoint_commit()
+    }
+
+    /// Reverts to a previously created journal checkpoint.
+    pub fn checkpoint_revert(&mut self, checkpoint: JournalCheckpoint) {
+        self.internals.checkpoint_revert(checkpoint)
     }
 }
 

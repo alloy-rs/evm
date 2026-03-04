@@ -5,10 +5,78 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.29.2](https://github.com/alloy-rs/evm/releases/tag/v0.29.2) - 2026-03-04
+
+### Dependencies
+
+- Bump revm 36 ([#307](https://github.com/alloy-rs/evm/issues/307))
+
+## [0.29.1](https://github.com/alloy-rs/evm/releases/tag/v0.29.1) - 2026-03-04
+
+### Miscellaneous Tasks
+
+- Release 0.29.1
+
+### Refactor
+
+- Make Spec a generic on TryIntoTxEnv trait ([#306](https://github.com/alloy-rs/evm/issues/306))
+
+## [0.29.0](https://github.com/alloy-rs/evm/releases/tag/v0.29.0) - 2026-03-03
+
+### Bug Fixes
+
+- Disable caching for identity precompile in tuple impls ([#305](https://github.com/alloy-rs/evm/issues/305))
+
+### Dependencies
+
+- Bump revm 35 ([#299](https://github.com/alloy-rs/evm/issues/299))
+
+### Miscellaneous Tasks
+
+- Release 0.29.0
+
+## [0.28.1](https://github.com/alloy-rs/evm/releases/tag/v0.28.1) - 2026-03-02
+
+### Bug Fixes
+
+- Rpc bug ([#303](https://github.com/alloy-rs/evm/issues/303))
+
+### Miscellaneous Tasks
+
+- Release 0.28.1
+
+## [0.28.0](https://github.com/alloy-rs/evm/releases/tag/v0.28.0) - 2026-02-27
+
+### Dependencies
+
+- Bump op-alloy to 0.24 ([#301](https://github.com/alloy-rs/evm/issues/301))
+- Bump MSRV to 1.91 ([#292](https://github.com/alloy-rs/evm/issues/292))
+
+### Features
+
+- [evm] Expose checkpoint methods in `EvmInternals` ([#300](https://github.com/alloy-rs/evm/issues/300))
+- Complete migration to StateDB ([#236](https://github.com/alloy-rs/evm/issues/236))
+- [precompiles] Add move_precompiles method ([#270](https://github.com/alloy-rs/evm/issues/270))
+- Add tracing span for individual precompile execution ([#298](https://github.com/alloy-rs/evm/issues/298))
+- Replace `is_pure` with `supports_caching` on Precompile trait ([#284](https://github.com/alloy-rs/evm/issues/284))
+- Add tracing debug spans for system contract calls ([#288](https://github.com/alloy-rs/evm/issues/288))
+
+### Miscellaneous Tasks
+
+- Release 0.28.0
+- Release 0.27.4
+- Remove `alloy-op-evm` crate ([#266](https://github.com/alloy-rs/evm/issues/266))
+
+### Refactor
+
+- Use `Cow<[Withdrawal]>` in `EthBlockExecutionCtx` ([#293](https://github.com/alloy-rs/evm/issues/293))
+- Replace `Cow<Withdrawals>` with `Vec<Withdrawal>` in `EthBlockExecutionCtx` ([#291](https://github.com/alloy-rs/evm/issues/291))
+
 ## [0.27.2](https://github.com/alloy-rs/evm/releases/tag/v0.27.2) - 2026-02-03
 
 ### Miscellaneous Tasks
 
+- Release 0.27.2
 - Use ..Default pattern for BlockOverrides ([#267](https://github.com/alloy-rs/evm/issues/267))
 
 ### Performance

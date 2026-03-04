@@ -3,7 +3,7 @@
 use super::{calc, BlockExecutionError};
 use alloc::boxed::Box;
 use alloy_consensus::BlockHeader;
-use alloy_eips::eip4895::{Withdrawal, Withdrawals};
+use alloy_eips::eip4895::Withdrawal;
 use alloy_hardforks::EthereumHardforks;
 use alloy_primitives::{map::AddressMap, Address};
 use revm::{
@@ -21,7 +21,7 @@ pub fn post_block_balance_increments<H>(
     spec: impl EthereumHardforks,
     block_env: impl Block,
     ommers: &[H],
-    withdrawals: Option<&Withdrawals>,
+    withdrawals: Option<&[Withdrawal]>,
 ) -> AddressMap<u128>
 where
     H: BlockHeader,
@@ -53,7 +53,7 @@ where
     insert_post_block_withdrawals_balance_increments(
         spec,
         block_env.timestamp().saturating_to(),
-        withdrawals.map(|w| w.as_slice()),
+        withdrawals,
         &mut balance_increments,
     );
 
