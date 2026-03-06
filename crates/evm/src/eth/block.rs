@@ -137,13 +137,10 @@ where
             .spec
             .is_amsterdam_active_at_timestamp(self.evm.block().timestamp().saturating_to());
         if !is_amsterdam_active {
-            self.evm.db_mut().bal_state.bal_builder = None;
+            self.evm.db_mut().set_bal(None);
         } else {
-            self.evm.db_mut().bal_state.bal_builder = Some(revm::state::bal::Bal::new());
+            self.evm.db_mut().set_bal(Some(revm::state::bal::Bal::new()));
         }
-        let state_clear_flag =
-            self.spec.is_spurious_dragon_active_at_block(self.evm.block().number().saturating_to());
-        self.evm.db_mut().set_state_clear_flag(state_clear_flag);
 
         self.system_caller.apply_blockhashes_contract_call(self.ctx.parent_hash, &mut self.evm)?;
         self.system_caller
