@@ -13,9 +13,6 @@ use crate::Database;
 /// This trait encapsulates some of the functionality found in [`State`]
 #[auto_impl::auto_impl(&mut, Box)]
 pub trait StateDB: Database + DatabaseCommit {
-    /// State clear EIP-161 is enabled in Spurious Dragon hardfork.
-    fn set_state_clear_flag(&mut self, has_state_clear: bool);
-
     /// Gets a reference to the internal [`BundleState`]
     fn bundle_state(&self) -> &BundleState;
 
@@ -42,10 +39,6 @@ pub trait StateDB: Database + DatabaseCommit {
 }
 
 impl<DB: revm::Database + Debug> StateDB for State<DB> {
-    fn set_state_clear_flag(&mut self, has_state_clear: bool) {
-        Self::set_state_clear_flag(self, has_state_clear);
-    }
-
     fn bundle_state(&self) -> &BundleState {
         &self.bundle_state
     }
