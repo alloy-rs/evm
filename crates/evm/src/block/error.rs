@@ -4,6 +4,7 @@ use alloc::{
     string::{String, ToString},
 };
 use alloy_primitives::B256;
+use revm::context_interface::result::EVMError;
 
 /// Block validation error.
 #[derive(Debug, thiserror::Error)]
@@ -134,6 +135,24 @@ impl BlockExecutionError {
         }
     }
 
+    /// Returns the inner [`InternalBlockExecutionError`] if this is an internal error.
+    pub const fn as_internal(&self) -> Option<&InternalBlockExecutionError> {
+        match self {
+            Self::Internal(err) => Some(err),
+            _ => None,
+        }
+    }
+
+    /// Attempts to downcast the EVM error to [`EVMError<DBError>`].
+    ///
+    /// This is a convenience method that combines [`Self::as_internal`] and
+    /// [`InternalBlockExecutionError::downcast_evm_error`].
+    pub fn downcast_evm_error<DBError: core::error::Error + 'static>(
+        &self,
+    ) -> Option<&EVMError<DBError>> {
+        self.as_internal()?.downcast_evm_error()
+    }
+
     /// Handles an EVM error occurred when executing a transaction.
     ///
     /// If an error matches [`EvmError::InvalidTransaction`], it will be wrapped into
@@ -153,15 +172,24 @@ impl BlockExecutionError {
 /// Internal (i.e., not validation or consensus related) `BlockExecutor` Errors
 #[derive(Debug, thiserror::Error)]
 pub enum InternalBlockExecutionError {
-    /// EVM error occurred when executing transaction. This is different from
+    /// EVM error occurred when executing a transaction. This is different from
     /// [`BlockValidationError::InvalidTx`] because it will only contain EVM errors which are not
     /// transaction validation errors and are assumed to be fatal.
+    ///
+    /// Common errors that end up here:
+    /// - `EVMError::Database` — database access failures
+    /// - `EVMError::Header` — header validation failures
+    /// - `EVMError::Custom` — custom errors, including fatal precompile errors
+    ///   (`PrecompileErrors::Fatal` surfaces as `EVMError::Custom(String)`)
+    ///
+    /// Downcasting via [`InternalBlockExecutionError::downcast_evm`] requires knowing the concrete
+    /// `EVMError<DBError, TxError>` type parameters.
     #[error("internal EVM error occurred when executing transaction {hash}: {error}")]
     EVM {
         /// The hash of the transaction
         hash: B256,
         /// The EVM error.
-        error: Box<dyn core::error::Error + Send + Sync>,
+        error: Box<dyn core::error::Error + Send + Sync + 'static>,
     },
     /// Arbitrary Block Executor Errors
     #[error(transparent)]
@@ -210,11 +238,43 @@ impl InternalBlockExecutionError {
     pub fn is_other<T: core::error::Error + 'static>(&self) -> bool {
         self.as_other().map(|err| err.is::<T>()).unwrap_or(false)
     }
+
+    /// Returns the EVM error and transaction hash if this is
+    /// [`InternalBlockExecutionError::EVM`].
+    pub fn as_evm(&self) -> Option<(&B256, &(dyn core::error::Error + Send + Sync + 'static))> {
+        match self {
+            Self::EVM { hash, error } => Some((hash, &**error)),
+            _ => None,
+        }
+    }
+
+    /// Returns a reference to the inner EVM error if it is of type `T`.
+    pub fn downcast_evm<T: core::error::Error + 'static>(&self) -> Option<&T> {
+        let (_, err) = self.as_evm()?;
+        err.downcast_ref()
+    }
+
+    /// Returns true if this is an [`InternalBlockExecutionError::EVM`] error of type `T`.
+    pub fn is_evm<T: core::error::Error + 'static>(&self) -> bool {
+        self.as_evm().map(|(_, err)| err.is::<T>()).unwrap_or(false)
+    }
+
+    /// Attempts to downcast the EVM error to [`EVMError<DBError>`].
+    ///
+    /// Uses the default `TransactionError = InvalidTransaction` type parameter on [`EVMError`],
+    /// which matches the common case where transaction errors are
+    /// [`InvalidTransaction`](revm::context_interface::result::InvalidTransaction).
+    pub fn downcast_evm_error<DBError: core::error::Error + 'static>(
+        &self,
+    ) -> Option<&EVMError<DBError>> {
+        self.downcast_evm()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use revm::context_interface::result::InvalidTransaction;
 
     #[derive(thiserror::Error, Debug)]
     #[error("err")]
@@ -227,5 +287,37 @@ mod tests {
 
         assert!(err.downcast_other::<E>().is_some());
         assert!(err.downcast::<E>().is_ok());
+    }
+
+    #[test]
+    fn evm_downcast() {
+        let hash = B256::with_last_byte(1);
+        let evm_err: EVMError<E, InvalidTransaction> =
+            EVMError::Custom("fatal precompile error".to_string());
+        let err = BlockExecutionError::evm(evm_err, hash);
+
+        // Lands in Internal(EVM { .. })
+        let internal = err.as_internal().expect("should be internal");
+
+        // Type checks
+        assert!(internal.is_evm::<EVMError<E, InvalidTransaction>>());
+        assert!(!internal.is_evm::<E>());
+
+        // Downcast and inspect
+        let downcasted =
+            internal.downcast_evm::<EVMError<E, InvalidTransaction>>().expect("should downcast");
+        assert!(matches!(downcasted, EVMError::Custom(msg) if msg == "fatal precompile error"));
+
+        // Hash preserved
+        let (h, _) = internal.as_evm().expect("should be evm");
+        assert_eq!(*h, hash);
+
+        // downcast_evm_error convenience on InternalBlockExecutionError
+        let downcasted = internal.downcast_evm_error::<E>().expect("should downcast");
+        assert!(matches!(downcasted, EVMError::Custom(msg) if msg == "fatal precompile error"));
+
+        // downcast_evm_error convenience on BlockExecutionError
+        let downcasted = err.downcast_evm_error::<E>().expect("should downcast");
+        assert!(matches!(downcasted, EVMError::Custom(msg) if msg == "fatal precompile error"));
     }
 }
