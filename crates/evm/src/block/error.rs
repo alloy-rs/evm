@@ -262,7 +262,8 @@ impl InternalBlockExecutionError {
     /// Attempts to downcast the EVM error to [`EVMError<DBError>`].
     ///
     /// Uses the default `TransactionError = InvalidTransaction` type parameter on [`EVMError`],
-    /// which matches the common case where transaction errors are [`InvalidTransaction`].
+    /// which matches the common case where transaction errors are
+    /// [`InvalidTransaction`](revm::context_interface::result::InvalidTransaction).
     pub fn downcast_evm_error<DBError: core::error::Error + 'static>(
         &self,
     ) -> Option<&EVMError<DBError>> {
