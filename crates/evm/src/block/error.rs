@@ -4,6 +4,7 @@ use alloc::{
     string::{String, ToString},
 };
 use alloy_primitives::B256;
+use revm::context_interface::result::EVMError;
 
 /// Block validation error.
 #[derive(Debug, thiserror::Error)]
@@ -142,6 +143,16 @@ impl BlockExecutionError {
         }
     }
 
+    /// Attempts to downcast the EVM error to [`EVMError<DBError>`].
+    ///
+    /// This is a convenience method that combines [`Self::as_internal`] and
+    /// [`InternalBlockExecutionError::downcast_evm_error`].
+    pub fn downcast_evm_error<DBError: core::error::Error + 'static>(
+        &self,
+    ) -> Option<&EVMError<DBError>> {
+        self.as_internal()?.downcast_evm_error()
+    }
+
     /// Handles an EVM error occurred when executing a transaction.
     ///
     /// If an error matches [`EvmError::InvalidTransaction`], it will be wrapped into
@@ -247,12 +258,22 @@ impl InternalBlockExecutionError {
     pub fn is_evm<T: core::error::Error + 'static>(&self) -> bool {
         self.as_evm().map(|(_, err)| err.is::<T>()).unwrap_or(false)
     }
+
+    /// Attempts to downcast the EVM error to [`EVMError<DBError>`].
+    ///
+    /// Uses the default `TransactionError = InvalidTransaction` type parameter on [`EVMError`],
+    /// which matches the common case where transaction errors are [`InvalidTransaction`].
+    pub fn downcast_evm_error<DBError: core::error::Error + 'static>(
+        &self,
+    ) -> Option<&EVMError<DBError>> {
+        self.downcast_evm()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use revm::context_interface::result::{EVMError, InvalidTransaction};
+    use revm::context_interface::result::InvalidTransaction;
 
     #[derive(thiserror::Error, Debug)]
     #[error("err")]
@@ -289,5 +310,13 @@ mod tests {
         // Hash preserved
         let (h, _) = internal.as_evm().expect("should be evm");
         assert_eq!(*h, hash);
+
+        // downcast_evm_error convenience on InternalBlockExecutionError
+        let downcasted = internal.downcast_evm_error::<E>().expect("should downcast");
+        assert!(matches!(downcasted, EVMError::Custom(msg) if msg == "fatal precompile error"));
+
+        // downcast_evm_error convenience on BlockExecutionError
+        let downcasted = err.downcast_evm_error::<E>().expect("should downcast");
+        assert!(matches!(downcasted, EVMError::Custom(msg) if msg == "fatal precompile error"));
     }
 }
