@@ -10,11 +10,13 @@ use alloy_consensus::{
     TxEip4844, TxEip4844Variant, TxEip7702, TxLegacy,
 };
 use alloy_eips::{
-    eip2718::WithEncoded,
+    eip2718::{WithEncoded, EIP2930_TX_TYPE_ID, LEGACY_TX_TYPE_ID},
+    eip2930::AccessList,
     eip7702::{RecoveredAuthority, RecoveredAuthorization},
     Typed2718,
 };
 use alloy_primitives::{Address, Bytes, TxKind};
+use core::fmt::Debug;
 use revm::{context::TxEnv, context_interface::either::Either};
 
 /// Trait marking types that can be converted into a transaction environment.
@@ -509,6 +511,69 @@ impl<Eip4844: AsRef<TxEip4844>> FromRecoveredTx<EthereumTxEnvelope<Eip4844>> for
             EthereumTxEnvelope::Eip2930(tx) => Self::from_recovered_tx(tx.tx(), sender),
             EthereumTxEnvelope::Eip4844(tx) => Self::from_recovered_tx(tx.tx().as_ref(), sender),
             EthereumTxEnvelope::Eip7702(tx) => Self::from_recovered_tx(tx.tx(), sender),
+        }
+    }
+}
+
+/// Abstraction over transaction environment providing setters for common fields.
+///
+/// This trait extends [`revm::context_interface::Transaction`] with methods to modify
+/// transaction fields, which is needed for gas estimation, access list creation, and
+/// other RPC operations that need to adjust transaction parameters before execution.
+pub trait TransactionEnv:
+    revm::context_interface::Transaction + Debug + Clone + Send + Sync + 'static
+{
+    /// Sets the gas limit.
+    fn set_gas_limit(&mut self, gas_limit: u64);
+
+    /// Sets the gas limit, returning `self`.
+    fn with_gas_limit(mut self, gas_limit: u64) -> Self {
+        self.set_gas_limit(gas_limit);
+        self
+    }
+
+    /// Returns the configured nonce.
+    fn nonce(&self) -> u64;
+
+    /// Sets the nonce.
+    fn set_nonce(&mut self, nonce: u64);
+
+    /// Sets the nonce, returning `self`.
+    fn with_nonce(mut self, nonce: u64) -> Self {
+        self.set_nonce(nonce);
+        self
+    }
+
+    /// Sets the access list.
+    fn set_access_list(&mut self, access_list: AccessList);
+
+    /// Sets the access list, returning `self`.
+    fn with_access_list(mut self, access_list: AccessList) -> Self {
+        self.set_access_list(access_list);
+        self
+    }
+}
+
+impl TransactionEnv for TxEnv {
+    fn set_gas_limit(&mut self, gas_limit: u64) {
+        self.gas_limit = gas_limit;
+    }
+
+    fn nonce(&self) -> u64 {
+        self.nonce
+    }
+
+    fn set_nonce(&mut self, nonce: u64) {
+        self.nonce = nonce;
+    }
+
+    fn set_access_list(&mut self, access_list: AccessList) {
+        self.access_list = access_list;
+
+        if self.tx_type == LEGACY_TX_TYPE_ID {
+            // if this was previously marked as legacy tx, this must be upgraded to eip2930 with an
+            // access list
+            self.tx_type = EIP2930_TX_TYPE_ID;
         }
     }
 }
