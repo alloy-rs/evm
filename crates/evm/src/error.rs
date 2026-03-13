@@ -91,13 +91,3 @@ where
         }
     }
 }
-
-#[cfg(feature = "op")]
-impl InvalidTxError for op_revm::OpTransactionError {
-    fn as_invalid_tx_err(&self) -> Option<&InvalidTransaction> {
-        match self {
-            Self::Base(tx) => Some(tx),
-            _ => None,
-        }
-    }
-}

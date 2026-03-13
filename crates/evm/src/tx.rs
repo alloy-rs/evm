@@ -79,16 +79,6 @@ where
     }
 }
 
-#[cfg(feature = "op")]
-impl<T> IntoTxEnv<Self> for op_revm::OpTransaction<T>
-where
-    T: revm::context_interface::transaction::Transaction,
-{
-    fn into_tx_env(self) -> Self {
-        self
-    }
-}
-
 /// Helper trait for building a transaction environment from a recovered transaction.
 ///
 /// This trait enables the conversion of consensus transaction types (which have been recovered

@@ -24,8 +24,6 @@ pub mod traits;
 pub use traits::*;
 #[cfg(feature = "call-util")]
 pub mod call;
-#[cfg(feature = "op")]
-pub mod op;
 #[cfg(feature = "overrides")]
 pub mod overrides;
 pub mod precompiles;
@@ -36,9 +34,7 @@ pub mod tracing;
 
 mod either;
 
-// re-export revm and op-revm
-#[cfg(feature = "op")]
-pub use op_revm;
+// re-export revm
 pub use revm;
 
 pub use eth::spec_id::{spec, spec_by_timestamp_and_block_number};
