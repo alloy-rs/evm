@@ -583,9 +583,7 @@ where
 
         match precompile_result {
             Ok(output) => {
-                // TODO(state-gas) new function needs it was output.used_gas previously.
-                let underflow = result.gas.record_regular_cost(output.gas.remaining());
-                assert!(underflow, "Gas underflow is not possible");
+                *result.gas.tracker_mut() = output.gas;
                 result.result = if output.reverted {
                     InstructionResult::Revert
                 } else {
@@ -595,6 +593,7 @@ where
             }
             Err(PrecompileError::Fatal(e)) => return Err(e),
             Err(e) => {
+                // TODO(state-gas) needs refill but requires changes to revm.
                 result.result = if e.is_oog() {
                     InstructionResult::PrecompileOOG
                 } else {

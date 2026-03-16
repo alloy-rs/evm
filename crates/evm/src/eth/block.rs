@@ -109,10 +109,17 @@ where
             receipt_builder,
         }
     }
+}
 
-    /// Returns the total regular gas used by transactions in this block.
+impl<'a, Evm, Spec, R: ReceiptBuilder> EthBlockExecutor<'a, Evm, Spec, R> {
+    /// Returns the maximum of regular and state gas used by transactions in this block.
+    #[inline]
     pub const fn gas_used(&self) -> u64 {
-        self.regular_gas_used
+        if self.regular_gas_used > self.state_gas_used {
+            self.regular_gas_used
+        } else {
+            self.state_gas_used
+        }
     }
 }
 
@@ -143,7 +150,7 @@ where
 
         // The sum of the transaction's gas limit, Tg, and the gas utilized in this block prior,
         // must be no greater than the block's gasLimit.
-        let block_available_gas = self.evm.block().gas_limit() - self.regular_gas_used;
+        let block_available_gas = self.evm.block().gas_limit() - self.gas_used();
 
         if tx.tx().gas_limit() > block_available_gas {
             return Err(BlockValidationError::TransactionGasLimitMoreThanAvailableBlockGas {
