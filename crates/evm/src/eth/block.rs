@@ -157,16 +157,18 @@ where
         })
     }
 
-    fn commit_transaction(&mut self, output: Self::Result) -> Result<u64, BlockExecutionError> {
+    fn commit_transaction(&mut self, output: Self::Result) -> Result<crate::block::GasOutput, BlockExecutionError> {
         let EthTxResult { result: ResultAndState { result, state }, blob_gas_used, tx_type } =
             output;
 
         self.system_caller.on_state(StateChangeSource::Transaction(self.receipts.len()), &state);
 
-        let gas_used = result.gas_used();
+        let regular_gas_used = result.gas_used();
+        // Extract state gas used from the result (EIP-8037). Only available when Amsterdam is active.
+        let state_gas_used = result.gas().state_gas_spent();
 
         // append gas used
-        self.gas_used += gas_used;
+        self.gas_used += regular_gas_used;
 
         // only determine cancun fields when active
         if self.spec.is_cancun_active_at_timestamp(self.evm.block().timestamp().saturating_to()) {
@@ -185,7 +187,7 @@ where
         // Commit the state changes.
         self.evm.db_mut().commit(state);
 
-        Ok(gas_used)
+        Ok(crate::block::GasOutput::with_state_gas(regular_gas_used, state_gas_used))
     }
 
     fn finish(

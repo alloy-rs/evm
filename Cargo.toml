@@ -55,8 +55,8 @@ op-alloy = { version = "0.24", default-features = false, features = [
 ] }
 
 # revm
-revm = { version = "36.0.0", default-features = false }
-op-revm = { version = "17.0.0", default-features = false }
+revm = { git = "https://github.com/bluealloy/revm.git", rev = "556602bc", default-features = false }
+op-revm = { git = "https://github.com/bluealloy/revm.git", rev = "556602bc", default-features = false }
 
 # tracing
 tracing = { version = "0.1", default-features = false }
