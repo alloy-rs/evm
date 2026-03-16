@@ -333,7 +333,7 @@ pub trait BlockExecutor {
             f(res);
             CommitChanges::Yes
         })
-        .map(|opt| opt.unwrap_or_default())
+        .map(Option::unwrap_or_default)
     }
 
     /// Executes a single transaction and applies execution result to internal state. Invokes the
@@ -400,7 +400,10 @@ pub trait BlockExecutor {
     ///
     /// # Parameters
     /// - `output`: The transaction output containing execution result and state changes
-    fn commit_transaction(&mut self, output: Self::Result) -> Result<GasOutput, BlockExecutionError>;
+    fn commit_transaction(
+        &mut self,
+        output: Self::Result,
+    ) -> Result<GasOutput, BlockExecutionError>;
 
     /// Applies any necessary changes after executing the block's transactions, completes execution
     /// and returns the underlying EVM along with execution result.

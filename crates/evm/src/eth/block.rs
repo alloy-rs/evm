@@ -10,7 +10,7 @@ use crate::{
     block::{
         state_changes::{balance_increment_state, post_block_balance_increments},
         BlockExecutionError, BlockExecutionResult, BlockExecutor, BlockExecutorFactory,
-        BlockExecutorFor, BlockValidationError, ExecutableTx, OnStateHook,
+        BlockExecutorFor, BlockValidationError, ExecutableTx, GasOutput, OnStateHook,
         StateChangePostBlockSource, StateChangeSource, StateDB, SystemCaller, TxResult,
     },
     Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, RecoveredTx,
@@ -169,13 +169,13 @@ where
     fn commit_transaction(
         &mut self,
         output: Self::Result,
-    ) -> Result<crate::block::GasOutput, BlockExecutionError> {
+    ) -> Result<GasOutput, BlockExecutionError> {
         let EthTxResult { result: ResultAndState { result, state }, blob_gas_used, tx_type } =
             output;
 
         self.system_caller.on_state(StateChangeSource::Transaction(self.receipts.len()), &state);
 
-        let regular_gas_used = result.gas_used();
+        let regular_gas_used = result.gas().used();
         // Extract state gas used from the result (EIP-8037). Only available when Amsterdam is active.
         let state_gas_used = result.gas().state_gas_spent();
 
@@ -199,7 +199,7 @@ where
         // Commit the state changes.
         self.evm.db_mut().commit(state);
 
-        Ok(crate::block::GasOutput::with_state_gas(regular_gas_used, state_gas_used))
+        Ok(GasOutput::with_state_gas(regular_gas_used, state_gas_used))
     }
 
     fn finish(
