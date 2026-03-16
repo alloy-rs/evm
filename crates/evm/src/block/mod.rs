@@ -30,7 +30,8 @@ pub mod calc;
 /// Gas used by a transaction, split into regular and state gas components.
 ///
 /// EIP-8037 introduces dual-limit gas accounting with a separate state gas reservation
-/// that tracks gas spent on state creation operations (SSTORE, CREATE, account creation, code deposit).
+/// that tracks gas spent on state creation operations (SSTORE, CREATE, account creation, code
+/// deposit).
 ///
 /// - Regular gas: Standard EVM gas consumption (CPU work)
 /// - State gas: State-specific gas tracking (storage and contract creation)

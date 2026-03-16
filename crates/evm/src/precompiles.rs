@@ -1151,7 +1151,11 @@ mod tests {
         spec_precompiles.set_precompile_lookup(move |address: &Address| {
             if address.as_slice().starts_with(&dynamic_prefix) {
                 Some(DynPrecompile::new(PrecompileId::Custom("dynamic".into()), |input| {
-                    Ok(PrecompileOutput::new(input.gas, 100, Bytes::from("dynamic precompile response")))
+                    Ok(PrecompileOutput::new(
+                        input.gas,
+                        100,
+                        Bytes::from("dynamic precompile response"),
+                    ))
                 }))
             } else {
                 None

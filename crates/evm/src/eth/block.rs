@@ -111,7 +111,7 @@ where
     }
 
     /// Returns the total regular gas used by transactions in this block.
-    pub fn gas_used(&self) -> u64 {
+    pub const fn gas_used(&self) -> u64 {
         self.regular_gas_used
     }
 }
@@ -176,7 +176,8 @@ where
         self.system_caller.on_state(StateChangeSource::Transaction(self.receipts.len()), &state);
 
         let regular_gas_used = result.gas().used();
-        // Extract state gas used from the result (EIP-8037). Only available when Amsterdam is active.
+        // Extract state gas used from the result (EIP-8037). Only available when Amsterdam is
+        // active.
         let state_gas_used = result.gas().state_gas_spent();
 
         // append gas used
