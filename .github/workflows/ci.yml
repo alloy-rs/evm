@@ -43,10 +43,10 @@ jobs:
           # Windows: all features except gmp
           - os: windows-latest
             rust: stable
-            flags: "--features std,secp256k1,op,overrides,call-util,engine,asm-keccak,rpc"
+            flags: "--features std,secp256k1,overrides,call-util,engine,asm-keccak,rpc"
           - os: windows-latest
             rust: nightly
-            flags: "--features std,secp256k1,op,overrides,call-util,engine,asm-keccak,rpc"
+            flags: "--features std,secp256k1,overrides,call-util,engine,asm-keccak,rpc"
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@master

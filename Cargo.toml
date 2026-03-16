@@ -48,12 +48,6 @@ alloy-hardforks = { version = "0.4.7" }
 alloy-rpc-types-eth = { version = "1.5.2", default-features = false }
 alloy-rpc-types-engine = { version = "1.5.2", default-features = false }
 
-# op-alloy
-alloy-op-hardforks = { version = "0.4.7" }
-op-alloy = { version = "0.24", default-features = false, features = [
-    "consensus",
-] }
-
 # revm
 revm = { git = "https://github.com/bluealloy/revm.git", rev = "1e9fe4ae", default-features = false }
 op-revm = { git = "https://github.com/bluealloy/revm.git", rev = "1e9fe4ae", default-features = false }
