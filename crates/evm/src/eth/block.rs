@@ -59,8 +59,11 @@ pub struct EthBlockExecutor<'a, Evm, Spec, R: ReceiptBuilder> {
 
     /// Receipts of executed transactions.
     pub receipts: Vec<R::Receipt>,
+
     /// Total gas used by transactions in this block.
-    pub gas_used: u64,
+    pub regular_gas_used: u64,
+    /// State gas used by transactions in this block.
+    pub state_gas_used: u64,
 
     /// Blob gas used by the block.
     /// Before cancun activation, this is always 0.
@@ -98,12 +101,18 @@ where
             evm,
             ctx,
             receipts: Vec::with_capacity(tx_count_hint),
-            gas_used: 0,
+            regular_gas_used: 0,
+            state_gas_used: 0,
             blob_gas_used: 0,
             system_caller: SystemCaller::new(spec.clone()),
             spec,
             receipt_builder,
         }
+    }
+
+    /// Returns the total regular gas used by transactions in this block.
+    pub fn gas_used(&self) -> u64 {
+        self.regular_gas_used
     }
 }
 
@@ -134,7 +143,7 @@ where
 
         // The sum of the transaction's gas limit, Tg, and the gas utilized in this block prior,
         // must be no greater than the block's gasLimit.
-        let block_available_gas = self.evm.block().gas_limit() - self.gas_used;
+        let block_available_gas = self.evm.block().gas_limit() - self.regular_gas_used;
 
         if tx.tx().gas_limit() > block_available_gas {
             return Err(BlockValidationError::TransactionGasLimitMoreThanAvailableBlockGas {
@@ -157,7 +166,10 @@ where
         })
     }
 
-    fn commit_transaction(&mut self, output: Self::Result) -> Result<crate::block::GasOutput, BlockExecutionError> {
+    fn commit_transaction(
+        &mut self,
+        output: Self::Result,
+    ) -> Result<crate::block::GasOutput, BlockExecutionError> {
         let EthTxResult { result: ResultAndState { result, state }, blob_gas_used, tx_type } =
             output;
 
@@ -168,7 +180,7 @@ where
         let state_gas_used = result.gas().state_gas_spent();
 
         // append gas used
-        self.gas_used += regular_gas_used;
+        self.regular_gas_used += regular_gas_used;
 
         // only determine cancun fields when active
         if self.spec.is_cancun_active_at_timestamp(self.evm.block().timestamp().saturating_to()) {
@@ -181,7 +193,7 @@ where
             evm: &self.evm,
             result,
             state: &state,
-            cumulative_gas_used: self.gas_used,
+            cumulative_gas_used: self.regular_gas_used,
         }));
 
         // Commit the state changes.
@@ -259,7 +271,7 @@ where
             BlockExecutionResult {
                 receipts: self.receipts,
                 requests,
-                gas_used: self.gas_used,
+                gas_used: self.regular_gas_used,
                 blob_gas_used: self.blob_gas_used,
             },
         ))
