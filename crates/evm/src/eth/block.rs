@@ -61,6 +61,8 @@ pub struct EthBlockExecutor<'a, Evm, Spec, R: ReceiptBuilder> {
     pub receipts: Vec<R::Receipt>,
 
     /// Total gas used by transactions in this block.
+    pub total_gas_used: u64,
+    /// Total gas used by transactions in this block.
     pub regular_gas_used: u64,
     /// State gas used by transactions in this block.
     pub state_gas_used: u64,
@@ -103,6 +105,7 @@ where
             receipts: Vec::with_capacity(tx_count_hint),
             regular_gas_used: 0,
             state_gas_used: 0,
+            total_gas_used: 0,
             blob_gas_used: 0,
             system_caller: SystemCaller::new(spec.clone()),
             spec,
@@ -114,7 +117,7 @@ where
 impl<'a, Evm, Spec, R: ReceiptBuilder> EthBlockExecutor<'a, Evm, Spec, R> {
     /// Returns the maximum of regular and state gas used by transactions in this block.
     #[inline]
-    pub const fn gas_used(&self) -> u64 {
+    pub const fn max_gas_used(&self) -> u64 {
         if self.regular_gas_used > self.state_gas_used {
             self.regular_gas_used
         } else {
@@ -150,7 +153,7 @@ where
 
         // The sum of the transaction's gas limit, Tg, and the gas utilized in this block prior,
         // must be no greater than the block's gasLimit.
-        let block_available_gas = self.evm.block().gas_limit() - self.gas_used();
+        let block_available_gas = self.evm.block().gas_limit() - self.max_gas_used();
 
         if tx.tx().gas_limit() > block_available_gas {
             return Err(BlockValidationError::TransactionGasLimitMoreThanAvailableBlockGas {
@@ -182,13 +185,16 @@ where
 
         self.system_caller.on_state(StateChangeSource::Transaction(self.receipts.len()), &state);
 
-        let regular_gas_used = result.gas().used();
+        // tx_gas_used = max(regular_gas-refunded, floor)
+        let tx_gas_used = result.gas().tx_gas_used();
+        let regular_gas_used = result.gas().block_regular_gas_used();
         // Extract state gas used from the result (EIP-8037). Only available when Amsterdam is
         // active.
-        let state_gas_used = result.gas().state_gas_spent();
+        let state_gas_used = result.gas().block_state_gas_used();
 
         // append gas used
         self.regular_gas_used += regular_gas_used;
+        self.total_gas_used += tx_gas_used;
 
         // only determine cancun fields when active
         if self.spec.is_cancun_active_at_timestamp(self.evm.block().timestamp().saturating_to()) {
@@ -201,7 +207,7 @@ where
             evm: &self.evm,
             result,
             state: &state,
-            cumulative_gas_used: self.regular_gas_used,
+            cumulative_gas_used: self.total_gas_used,
         }));
 
         // Commit the state changes.
