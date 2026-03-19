@@ -594,10 +594,7 @@ where
                 };
                 result.output = output.bytes;
             }
-            Err(PrecompileFailure {
-                error: PrecompileError::Fatal(e),
-                ..
-            }) => return Err(e),
+            Err(PrecompileFailure { error: PrecompileError::Fatal(e), .. }) => return Err(e),
             Err(PrecompileFailure { error, gas }) => {
                 if let Some(gas_tracker) = gas {
                     *result.gas.tracker_mut() = gas_tracker;
