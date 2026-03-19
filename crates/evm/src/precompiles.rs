@@ -12,7 +12,10 @@ use revm::{
     context::{ContextTr, LocalContextTr},
     handler::{EthPrecompiles, PrecompileProvider},
     interpreter::{CallInput, CallInputs, Gas, InstructionResult, InterpreterResult},
-    precompile::{PrecompileError, PrecompileFn, PrecompileId, PrecompileResult, Precompiles},
+    precompile::{
+        PrecompileError, PrecompileFailure, PrecompileFn, PrecompileId, PrecompileResult,
+        Precompiles,
+    },
     Context, Journal,
 };
 
@@ -591,10 +594,15 @@ where
                 };
                 result.output = output.bytes;
             }
-            Err(PrecompileError::Fatal(e)) => return Err(e),
-            Err(e) => {
-                // TODO(state-gas) needs refill but requires changes to revm.
-                result.result = if e.is_oog() {
+            Err(PrecompileFailure {
+                error: PrecompileError::Fatal(e),
+                ..
+            }) => return Err(e),
+            Err(PrecompileFailure { error, gas }) => {
+                if let Some(gas_tracker) = gas {
+                    *result.gas.tracker_mut() = gas_tracker;
+                }
+                result.result = if error.is_oog() {
                     InstructionResult::PrecompileOOG
                 } else {
                     InstructionResult::PrecompileError
