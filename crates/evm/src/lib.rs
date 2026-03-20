@@ -28,9 +28,11 @@ pub mod call;
 pub mod overrides;
 pub mod precompiles;
 pub use precompiles::MovePrecompileError;
+pub mod factory_ext;
 #[cfg(feature = "rpc")]
 pub mod rpc;
 pub mod tracing;
+pub use factory_ext::*;
 
 mod either;
 
