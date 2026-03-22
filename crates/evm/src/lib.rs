@@ -15,7 +15,7 @@ pub use evm::{Database, Evm, EvmFactory};
 pub mod eth;
 pub use eth::{EthEvm, EthEvmFactory};
 pub mod env;
-pub use env::{EvmEnv, EvmLimitParams};
+pub use env::{CfgEnvironment, EvmEnv, EvmLimitParams, TxEnvironment};
 pub mod error;
 pub use error::*;
 pub mod tx;
