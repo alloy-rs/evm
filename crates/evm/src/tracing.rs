@@ -1,6 +1,7 @@
 //! Helpers for tracing.
 
 use crate::{Evm, IntoTxEnv};
+use alloc::vec::Vec;
 use core::{fmt::Debug, iter::Peekable};
 use revm::{
     context::result::{ExecutionResult, ResultAndState},
