@@ -433,9 +433,6 @@ pub trait TxResult {
 
     /// Returns the inner EVM result.
     fn result(&self) -> &ResultAndState<Self::HaltReason>;
-
-    /// Consumes self and returns the inner EVM result.
-    fn into_result(self) -> ResultAndState<Self::HaltReason>;
 }
 
 /// Extension helpers for [`BlockExecutor`] — composed operations commonly
