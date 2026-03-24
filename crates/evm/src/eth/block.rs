@@ -96,6 +96,10 @@ impl<H, T> TxResult for EthTxResult<H, T> {
     fn result(&self) -> &ResultAndState<Self::HaltReason> {
         &self.result
     }
+
+    fn into_result(self) -> ResultAndState<Self::HaltReason> {
+        self.result
+    }
 }
 
 impl<'a, Evm, Spec, R> EthBlockExecutor<'a, Evm, Spec, R>

@@ -19,13 +19,10 @@ alloy-primitives.workspace = true
 alloy-sol-types.workspace = true
 alloy-eips.workspace = true
 alloy-hardforks.workspace = true
-alloy-op-hardforks = { workspace = true, optional = true }
 alloy-rpc-types-eth = { workspace = true, optional = true }
 alloy-rpc-types-engine = { workspace = true, optional = true }
 
 revm.workspace = true
-op-revm = { workspace = true, optional = true }
-op-alloy = { workspace = true, optional = true }
 
 auto_impl.workspace = true
 derive_more.workspace = true
@@ -47,17 +44,14 @@ std = [
 	"alloy-eips/std",
 	"alloy-sol-types/std",
 	"derive_more/std",
-	"op-revm?/std",
 	"thiserror/std",
-	"op-alloy?/std",
 	"alloy-rpc-types-eth?/std",
 	"alloy-rpc-types-engine?/std",
-	"tracing/std"
+	"tracing/std",
 ]
 gmp = ["revm/gmp"]
-op = ["op-revm", "op-alloy", "alloy-op-hardforks"]
 overrides = ["dep:alloy-rpc-types-eth"]
 call-util = ["overrides"]
-engine = ["dep:alloy-rpc-types-engine", "op-alloy?/rpc-types-engine"]
+engine = ["dep:alloy-rpc-types-engine"]
 asm-keccak = ["alloy-primitives/asm-keccak", "revm/asm-keccak"]
-rpc = ["dep:alloy-rpc-types-eth", "op-alloy?/rpc-types"]
+rpc = ["dep:alloy-rpc-types-eth"]
