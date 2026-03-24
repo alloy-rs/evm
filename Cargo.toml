@@ -48,6 +48,12 @@ alloy-hardforks = { version = "0.4.7" }
 alloy-rpc-types-eth = { version = "1.7.3", default-features = false }
 alloy-rpc-types-engine = { version = "1.7.3", default-features = false }
 
+# op-alloy
+alloy-op-hardforks = { version = "0.4.7" }
+op-alloy = { version = "0.23.1", default-features = false, features = [
+    "consensus",
+] }
+
 # revm
 revm = { version = "36.0.0", default-features = false }
 
@@ -63,8 +69,8 @@ serde_json = "1"
 test-case = "3"
 
 [patch.crates-io]
-revm = { git = "https://github.com/bluealloy/revm", branch = "main" }
-op-revm = { git = "https://github.com/bluealloy/revm", branch = "main" }
+revm = { git = "https://github.com/bluealloy/revm", rev = "fa5a6914398c9b178422efc1edd1d2ab33dad923" }
+op-revm = { git = "https://github.com/bluealloy/revm", rev = "fa5a6914398c9b178422efc1edd1d2ab33dad923" }
 
 # alloy bal-devnet2 patches
 alloy-eips = { git = "https://github.com/alloy-rs/alloy", branch = "bal-devnet2" }
