@@ -2,12 +2,15 @@
 
 use crate::Database;
 use alloc::boxed::Box;
-use alloy_primitives::{Address, Log, B256, U256};
+use alloy_primitives::{Address, Bytes, Log, TxKind, B256, U256};
 use core::{error::Error, fmt, fmt::Debug};
 use revm::{
     context::{
-        journaled_state::{account::JournaledAccountTr, JournalCheckpoint, TransferError},
-        Block, Cfg, ContextTr, DBErrorMarker, JournalTr, Transaction,
+        journaled_state::{
+            account::JournaledAccountTr, JournalCheckpoint, JournalLoadError, TransferError,
+        },
+        result::InvalidTransaction,
+        Block, Cfg, ContextTr, DBErrorMarker, JournalTr,
     },
     interpreter::{SStoreResult, StateLoad},
     primitives::{StorageKey, StorageValue},
@@ -43,6 +46,208 @@ impl EvmInternalsError {
     }
 }
 
+/// Dyn-compatible wrapper around [`revm::context::Transaction`].
+///
+/// [`revm::context::Transaction`] is not dyn-compatible because of methods returning
+/// associated types (e.g. `access_list`, `authorization_list`). This trait mirrors
+/// the dyn-compatible subset of those methods, allowing transaction data to be
+/// accessed through `&dyn TransactionTr` in [`EvmInternals`].
+pub trait TransactionTr {
+    /// Returns the transaction type.
+    ///
+    /// Depending on this field other functions should be called.
+    fn tx_type(&self) -> u8;
+
+    /// Caller aka Author aka transaction signer.
+    ///
+    /// Note : Common field for all transactions.
+    fn caller(&self) -> Address;
+
+    /// The maximum amount of gas the transaction can use.
+    ///
+    /// Note : Common field for all transactions.
+    fn gas_limit(&self) -> u64;
+
+    /// The value sent to the receiver of [`TxKind::Call`].
+    ///
+    /// Note : Common field for all transactions.
+    fn value(&self) -> U256;
+
+    /// Returns the input data of the transaction.
+    ///
+    /// Note : Common field for all transactions.
+    fn input(&self) -> &Bytes;
+
+    /// The nonce of the transaction.
+    ///
+    /// Note : Common field for all transactions.
+    fn nonce(&self) -> u64;
+
+    /// Transaction kind. It can be Call or Create.
+    ///
+    /// Kind is applicable for: Legacy, EIP-2930, EIP-1559
+    /// And is Call for EIP-4844 and EIP-7702 transactions.
+    fn kind(&self) -> TxKind;
+
+    /// Chain Id is optional for legacy transactions.
+    ///
+    /// As it was introduced in EIP-155.
+    fn chain_id(&self) -> Option<u64>;
+
+    /// Gas price for the transaction.
+    /// It is only applicable for Legacy and EIP-2930 transactions.
+    /// For Eip1559 it is max_fee_per_gas.
+    fn gas_price(&self) -> u128;
+
+    /// Returns vector of fixed size hash(32 bytes)
+    ///
+    /// Note : EIP-4844 transaction field.
+    fn blob_versioned_hashes(&self) -> &[B256];
+
+    /// Max fee per data gas
+    ///
+    /// Note : EIP-4844 transaction field.
+    fn max_fee_per_blob_gas(&self) -> u128;
+
+    /// Total gas for all blobs. Max number of blocks is already checked
+    /// so we dont need to check for overflow.
+    fn total_blob_gas(&self) -> u64;
+
+    /// Calculates the maximum [EIP-4844] `data_fee` of the transaction.
+    ///
+    /// This is used for ensuring that the user has at least enough funds to pay the
+    /// `max_fee_per_blob_gas * total_blob_gas`, on top of regular gas costs.
+    ///
+    /// See EIP-4844:
+    /// <https://github.com/ethereum/EIPs/blob/master/EIPS/eip-4844.md#execution-layer-validation>
+    fn calc_max_data_fee(&self) -> U256;
+
+    /// Returns length of the authorization list.
+    ///
+    /// # Note
+    ///
+    /// Transaction is considered invalid if list is empty.
+    fn authorization_list_len(&self) -> usize;
+
+    /// Returns maximum fee that can be paid for the transaction.
+    fn max_fee_per_gas(&self) -> u128;
+
+    /// Maximum priority fee per gas.
+    fn max_priority_fee_per_gas(&self) -> Option<u128>;
+
+    /// Returns effective gas price is gas price field for Legacy and Eip2930 transaction.
+    ///
+    /// While for transactions after Eip1559 it is minimum of max_fee and `base + max_priority_fee`.
+    fn effective_gas_price(&self, base_fee: u128) -> u128;
+
+    /// Returns the maximum balance that can be spent by the transaction.
+    ///
+    /// Return U256 or error if all values overflow U256 number.
+    fn max_balance_spending(&self) -> Result<U256, InvalidTransaction>;
+
+    /// Returns the effective balance that is going to be spent that depends on base_fee
+    /// Multiplication for gas are done in u128 type (saturated) and value is added as U256 type.
+    ///
+    /// # Reason
+    ///
+    /// This is done for performance reasons and it is known to be safe as there is no more that
+    /// u128::MAX value of eth in existence.
+    ///
+    /// This is always strictly less than [`Self::max_balance_spending`].
+    ///
+    /// Return U256 or error if all values overflow U256 number.
+    fn effective_balance_spending(
+        &self,
+        base_fee: u128,
+        blob_price: u128,
+    ) -> Result<U256, InvalidTransaction>;
+}
+
+impl<T> TransactionTr for T
+where
+    T: revm::context::Transaction,
+{
+    fn tx_type(&self) -> u8 {
+        revm::context::Transaction::tx_type(self)
+    }
+
+    fn caller(&self) -> Address {
+        revm::context::Transaction::caller(self)
+    }
+
+    fn gas_limit(&self) -> u64 {
+        revm::context::Transaction::gas_limit(self)
+    }
+
+    fn value(&self) -> U256 {
+        revm::context::Transaction::value(self)
+    }
+
+    fn input(&self) -> &Bytes {
+        revm::context::Transaction::input(self)
+    }
+
+    fn nonce(&self) -> u64 {
+        revm::context::Transaction::nonce(self)
+    }
+
+    fn kind(&self) -> TxKind {
+        revm::context::Transaction::kind(self)
+    }
+
+    fn chain_id(&self) -> Option<u64> {
+        revm::context::Transaction::chain_id(self)
+    }
+
+    fn gas_price(&self) -> u128 {
+        revm::context::Transaction::gas_price(self)
+    }
+
+    fn blob_versioned_hashes(&self) -> &[B256] {
+        revm::context::Transaction::blob_versioned_hashes(self)
+    }
+
+    fn max_fee_per_blob_gas(&self) -> u128 {
+        revm::context::Transaction::max_fee_per_blob_gas(self)
+    }
+
+    fn total_blob_gas(&self) -> u64 {
+        revm::context::Transaction::total_blob_gas(self)
+    }
+
+    fn calc_max_data_fee(&self) -> U256 {
+        revm::context::Transaction::calc_max_data_fee(self)
+    }
+
+    fn authorization_list_len(&self) -> usize {
+        revm::context::Transaction::authorization_list_len(self)
+    }
+
+    fn max_fee_per_gas(&self) -> u128 {
+        revm::context::Transaction::max_fee_per_gas(self)
+    }
+
+    fn max_priority_fee_per_gas(&self) -> Option<u128> {
+        revm::context::Transaction::max_priority_fee_per_gas(self)
+    }
+
+    fn effective_gas_price(&self, base_fee: u128) -> u128 {
+        revm::context::Transaction::effective_gas_price(self, base_fee)
+    }
+
+    fn max_balance_spending(&self) -> Result<U256, InvalidTransaction> {
+        revm::context::Transaction::max_balance_spending(self)
+    }
+
+    fn effective_balance_spending(
+        &self,
+        base_fee: u128,
+        blob_price: u128,
+    ) -> Result<U256, InvalidTransaction> {
+        revm::context::Transaction::effective_balance_spending(self, base_fee, blob_price)
+    }
+}
+
 /// dyn-compatible trait for accessing and modifying EVM internals, particularly the journal.
 ///
 /// This trait provides an abstraction over journal operations without exposing
@@ -54,14 +259,16 @@ trait EvmInternalsTr: Database<Error = ErasedError> + Debug {
         &'a mut self,
         address: Address,
         skip_cold_load: bool,
-    ) -> Result<StateLoad<Box<dyn JournaledAccountTr + 'a>>, EvmInternalsError>;
+    ) -> Result<StateLoad<Box<dyn JournaledAccountTr + 'a>>, JournalLoadError<EvmInternalsError>>;
 
     /// Loads an account mutably.
     fn load_account_mut<'a>(
         &'a mut self,
         address: Address,
     ) -> Result<StateLoad<Box<dyn JournaledAccountTr + 'a>>, EvmInternalsError> {
+        // safe to unwrap as skip_cold_load is false.
         self.load_account_mut_skip_cold_load(address, false)
+            .map_err(JournalLoadError::unwrap_db_error)
     }
 
     fn load_account_code<'a>(
@@ -213,7 +420,8 @@ where
         &'a mut self,
         address: Address,
         skip_cold_load: bool,
-    ) -> Result<StateLoad<Box<dyn JournaledAccountTr + 'a>>, EvmInternalsError> {
+    ) -> Result<StateLoad<Box<dyn JournaledAccountTr + 'a>>, JournalLoadError<EvmInternalsError>>
+    {
         self.0
             .load_account_mut_skip_cold_load(address, skip_cold_load)
             .map(|state_load| {
@@ -221,7 +429,7 @@ where
                     Box::new(journaled_account) as Box<dyn JournaledAccountTr + 'a>
                 })
             })
-            .map_err(EvmInternalsError::database)
+            .map_err(|e| e.map(EvmInternalsError::database))
     }
 
     fn transfer(
@@ -264,6 +472,7 @@ pub struct EvmInternals<'a> {
     block_env: &'a (dyn Block + 'a),
     chain_id: u64,
     tx_origin: Address,
+    tx_env: &'a dyn TransactionTr,
 }
 
 impl<'a> EvmInternals<'a> {
@@ -272,7 +481,7 @@ impl<'a> EvmInternals<'a> {
         journal: &'a mut T,
         block_env: &'a dyn Block,
         cfg_env: &'a impl Cfg,
-        tx_env: &'a impl Transaction,
+        tx_env: &'a dyn TransactionTr,
     ) -> Self
     where
         T: JournalTr<Database: Database> + Debug,
@@ -282,6 +491,7 @@ impl<'a> EvmInternals<'a> {
             block_env,
             chain_id: cfg_env.chain_id(),
             tx_origin: tx_env.caller(),
+            tx_env,
         }
     }
 
@@ -321,6 +531,11 @@ impl<'a> EvmInternals<'a> {
         self.tx_origin
     }
 
+    /// Returns the current transaction information.
+    pub fn tx_env(&self) -> &dyn TransactionTr {
+        self.tx_env
+    }
+
     /// Returns a mutable reference to [`Database`] implementation with erased error type.
     ///
     /// Users should prefer using other methods for accessing state that rely on cached state in the
@@ -350,7 +565,8 @@ impl<'a> EvmInternals<'a> {
         &'b mut self,
         address: Address,
         skip_cold_load: bool,
-    ) -> Result<StateLoad<Box<dyn JournaledAccountTr + 'b>>, EvmInternalsError> {
+    ) -> Result<StateLoad<Box<dyn JournaledAccountTr + 'b>>, JournalLoadError<EvmInternalsError>>
+    {
         self.internals.load_account_mut_skip_cold_load(address, skip_cold_load)
     }
 

@@ -27,6 +27,56 @@ pub use state::*;
 
 pub mod calc;
 
+/// Gas used by a transaction, split into regular and state gas components.
+///
+/// EIP-8037 introduces dual-limit gas accounting with a separate state gas reservation
+/// that tracks gas spent on state creation operations (SSTORE, CREATE, account creation, code
+/// deposit).
+///
+/// - State gas: State-specific gas tracking (storage and contract creation)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct GasOutput {
+    /// Gas used by the transaction. This value is find in Receipt.
+    tx_gas_used: u64,
+    /// State gas used by the transaction.
+    state_gas_used: u64,
+}
+
+impl GasOutput {
+    /// Creates a new `GasOutput` with the given regular gas used.
+    pub const fn new(tx_gas_used: u64) -> Self {
+        Self { tx_gas_used, state_gas_used: 0 }
+    }
+
+    /// Creates a new `GasOutput` with both regular and state gas.
+    pub const fn with_state_gas(tx_gas_used: u64, state_gas_used: u64) -> Self {
+        Self { tx_gas_used, state_gas_used }
+    }
+
+    /// Returns the regular gas used (execution gas).
+    pub const fn tx_gas_used(&self) -> u64 {
+        self.tx_gas_used
+    }
+
+    /// Returns the state gas used (gas for state creation operations).
+    /// Only non-zero when Amsterdam is active.
+    pub const fn state_gas_used(&self) -> u64 {
+        self.state_gas_used
+    }
+}
+
+impl From<u64> for GasOutput {
+    fn from(gas: u64) -> Self {
+        Self::new(gas)
+    }
+}
+
+impl From<GasOutput> for u64 {
+    fn from(gas: GasOutput) -> Self {
+        gas.tx_gas_used()
+    }
+}
+
 /// The result of executing a block.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BlockExecutionResult<T> {
@@ -257,7 +307,7 @@ pub trait BlockExecutor {
     fn execute_transaction(
         &mut self,
         tx: impl ExecutableTx<Self>,
-    ) -> Result<u64, BlockExecutionError> {
+    ) -> Result<GasOutput, BlockExecutionError> {
         self.execute_transaction_with_result_closure(tx, |_| ())
     }
 
@@ -275,7 +325,7 @@ pub trait BlockExecutor {
         &mut self,
         tx: impl ExecutableTx<Self>,
         f: impl FnOnce(&ExecutionResult<<Self::Evm as Evm>::HaltReason>),
-    ) -> Result<u64, BlockExecutionError> {
+    ) -> Result<GasOutput, BlockExecutionError> {
         self.execute_transaction_with_commit_condition(tx, |res| {
             f(res);
             CommitChanges::Yes
@@ -307,7 +357,7 @@ pub trait BlockExecutor {
         &mut self,
         tx: impl ExecutableTx<Self>,
         f: impl FnOnce(&ExecutionResult<<Self::Evm as Evm>::HaltReason>) -> CommitChanges,
-    ) -> Result<Option<u64>, BlockExecutionError> {
+    ) -> Result<Option<GasOutput>, BlockExecutionError> {
         // Execute transaction without committing
         let output = self.execute_transaction_without_commit(tx)?;
 
@@ -343,11 +393,14 @@ pub trait BlockExecutor {
     /// [`execute_transaction_without_commit`](Self::execute_transaction_without_commit)
     /// and applies the state changes, updates gas accounting, and generates a receipt.
     ///
-    /// Returns the gas used by the transaction.
+    /// Returns the gas used by the transaction (including both regular and state gas).
     ///
     /// # Parameters
     /// - `output`: The transaction output containing execution result and state changes
-    fn commit_transaction(&mut self, output: Self::Result) -> Result<u64, BlockExecutionError>;
+    fn commit_transaction(
+        &mut self,
+        output: Self::Result,
+    ) -> Result<GasOutput, BlockExecutionError>;
 
     /// Applies any necessary changes after executing the block's transactions, completes execution
     /// and returns the underlying EVM along with execution result.

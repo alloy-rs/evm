@@ -12,7 +12,10 @@ use revm::{
     context::{ContextTr, LocalContextTr},
     handler::{EthPrecompiles, PrecompileProvider},
     interpreter::{CallInput, CallInputs, Gas, InstructionResult, InterpreterResult},
-    precompile::{PrecompileError, PrecompileFn, PrecompileId, PrecompileResult, Precompiles},
+    precompile::{
+        PrecompileError, PrecompileFailure, PrecompileFn, PrecompileId, PrecompileResult,
+        Precompiles,
+    },
     Context, Journal,
 };
 
@@ -583,8 +586,7 @@ where
 
         match precompile_result {
             Ok(output) => {
-                let underflow = result.gas.record_cost(output.gas_used);
-                assert!(underflow, "Gas underflow is not possible");
+                *result.gas.tracker_mut() = output.gas;
                 result.result = if output.reverted {
                     InstructionResult::Revert
                 } else {
@@ -592,9 +594,12 @@ where
                 };
                 result.output = output.bytes;
             }
-            Err(PrecompileError::Fatal(e)) => return Err(e),
-            Err(e) => {
-                result.result = if e.is_oog() {
+            Err(PrecompileFailure { error: PrecompileError::Fatal(e), .. }) => return Err(e),
+            Err(PrecompileFailure { error, gas }) => {
+                if let Some(gas_tracker) = gas {
+                    *result.gas.tracker_mut() = gas_tracker;
+                }
+                result.result = if error.is_oog() {
                     InstructionResult::PrecompileOOG
                 } else {
                     InstructionResult::PrecompileError
@@ -1035,8 +1040,8 @@ mod tests {
         // define a function to modify the precompile to always return a constant value
         spec_precompiles.map_precompile(&identity_address, move |_original_dyn| {
             // create a new DynPrecompile that always returns our constant
-            (|_input: PrecompileInput<'_>| -> PrecompileResult {
-                Ok(PrecompileOutput::new(10, Bytes::from_static(b"constant value")))
+            (|input: PrecompileInput<'_>| -> PrecompileResult {
+                Ok(PrecompileOutput::new(input.gas, 10, Bytes::from_static(b"constant value")))
             })
             .into()
         });
@@ -1080,7 +1085,7 @@ mod tests {
             let _timestamp = input.internals.block_env().timestamp();
             let mut output = b"processed: ".to_vec();
             output.extend_from_slice(input.data.as_ref());
-            Ok(PrecompileOutput::new(15, Bytes::from(output)))
+            Ok(PrecompileOutput::new(input.gas, 15, Bytes::from(output)))
         };
 
         let dyn_precompile: DynPrecompile = closure_precompile.into();
@@ -1097,14 +1102,15 @@ mod tests {
                 bytecode_address: Address::ZERO,
             })
             .unwrap();
-        assert_eq!(result.gas_used, 15);
+        let gas_used = gas_limit - result.gas.remaining();
+        assert_eq!(gas_used, 15);
         assert_eq!(result.bytes, expected_output);
     }
 
     #[test]
     fn test_supports_caching() {
-        let closure_precompile = |_input: PrecompileInput<'_>| -> PrecompileResult {
-            Ok(PrecompileOutput::new(10, Bytes::from_static(b"output")))
+        let closure_precompile = |input: PrecompileInput<'_>| -> PrecompileResult {
+            Ok(PrecompileOutput::new(input.gas, 10, Bytes::from_static(b"output")))
         };
 
         let dyn_precompile: DynPrecompile = closure_precompile.into();
@@ -1148,13 +1154,12 @@ mod tests {
         // Set up the lookup function
         spec_precompiles.set_precompile_lookup(move |address: &Address| {
             if address.as_slice().starts_with(&dynamic_prefix) {
-                Some(DynPrecompile::new(PrecompileId::Custom("dynamic".into()), |_input| {
-                    Ok(PrecompileOutput {
-                        gas_used: 100,
-                        gas_refunded: 0,
-                        bytes: Bytes::from("dynamic precompile response"),
-                        reverted: false,
-                    })
+                Some(DynPrecompile::new(PrecompileId::Custom("dynamic".into()), |input| {
+                    Ok(PrecompileOutput::new(
+                        input.gas,
+                        100,
+                        Bytes::from("dynamic precompile response"),
+                    ))
                 }))
             } else {
                 None
@@ -1171,11 +1176,12 @@ mod tests {
         assert!(dynamic_precompile.is_some(), "Dynamic precompile should be found");
 
         // Execute the dynamic precompile
+        let gas_limit = 1000;
         let result = dynamic_precompile
             .unwrap()
             .call(PrecompileInput {
                 data: &[],
-                gas: 1000,
+                gas: gas_limit,
                 caller: Address::ZERO,
                 value: U256::ZERO,
                 is_static: false,
@@ -1184,7 +1190,8 @@ mod tests {
                 bytecode_address: dynamic_address,
             })
             .unwrap();
-        assert_eq!(result.gas_used, 100);
+        let gas_used = gas_limit - result.gas.remaining();
+        assert_eq!(gas_used, 100);
         assert_eq!(result.bytes, Bytes::from("dynamic precompile response"));
 
         // Test non-matching address returns None
