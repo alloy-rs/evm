@@ -7,9 +7,13 @@ use super::{
     EthEvmFactory,
 };
 use crate::{
-    Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, RecoveredTx, block::{
-        BlockExecutionError, BlockExecutionResult, BlockExecutor, BlockExecutorFactory, BlockExecutorFor, BlockValidationError, ExecutableTx, GasOutput, OnStateHook, StateChangePostBlockSource, StateChangeSource, StateDB, SystemCaller, TxResult, state_changes::{balance_increment_state, post_block_balance_increments}
-    }
+    block::{
+        state_changes::{balance_increment_state, post_block_balance_increments},
+        BlockExecutionError, BlockExecutionResult, BlockExecutor, BlockExecutorFactory,
+        BlockExecutorFor, BlockValidationError, ExecutableTx, GasOutput, OnStateHook,
+        StateChangePostBlockSource, StateChangeSource, StateDB, SystemCaller, TxResult,
+    },
+    Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, RecoveredTx,
 };
 use alloc::{borrow::Cow, boxed::Box, vec::Vec};
 use alloy_consensus::{Header, Transaction, TransactionEnvelope, TxReceipt};
@@ -57,7 +61,7 @@ pub struct EthBlockExecutor<'a, Evm, Spec, R: ReceiptBuilder> {
 
     /// Receipts of executed transactions.
     pub receipts: Vec<R::Receipt>,
-     /// Gas used by transactions in this block.
+    /// Gas used by transactions in this block.
     pub tx_gas_used: u64,
     // Total gas spent by transactions in this block (after refunds, what users pay).
     //
@@ -65,13 +69,12 @@ pub struct EthBlockExecutor<'a, Evm, Spec, R: ReceiptBuilder> {
     // Before Osaka, this is always `None`.
     //pub gas_spent: Option<u64>,
     /// Total gas used by transactions in this block.
-     pub block_regular_gas_used: u64,
+    pub block_regular_gas_used: u64,
     /// State gas used by transactions in this block.
     pub block_state_gas_used: u64,
     /// Blob gas used by the block.
     /// Before cancun activation, this is always 0.
     pub blob_gas_used: u64,
-    
 }
 
 /// The result of executing an Ethereum transaction.
@@ -105,7 +108,7 @@ where
             evm,
             ctx,
             receipts: Vec::with_capacity(tx_count_hint),
-             block_regular_gas_used: 0,
+            block_regular_gas_used: 0,
             block_state_gas_used: 0,
             tx_gas_used: 0,
             blob_gas_used: 0,
@@ -175,11 +178,10 @@ where
         })
     }
 
-   fn commit_transaction(
+    fn commit_transaction(
         &mut self,
         output: Self::Result,
     ) -> Result<GasOutput, BlockExecutionError> {
-
         let EthTxResult { result: ResultAndState { result, state }, blob_gas_used, tx_type } =
             output;
 
@@ -191,10 +193,18 @@ where
         let regular_gas_used = result.gas().block_regular_gas_used();
         let state_gas_used = result.gas().block_state_gas_used();
 
-         // append used gas used
+        tracing::info!("tx gas used:{:?}", tx_gas_used);
+        tracing::info!("regular gas used:{:?}", regular_gas_used);
+        tracing::info!("state gas used:{:?}", state_gas_used);
+
+        // append used gas used
         self.block_regular_gas_used += regular_gas_used;
         self.block_state_gas_used += state_gas_used;
         self.tx_gas_used += tx_gas_used;
+
+        tracing::info!("block regular gas used:{:?}", self.block_regular_gas_used);
+        tracing::info!("block state gas used:{:?}", self.block_state_gas_used);
+        tracing::info!("tx gas used:{:?}", self.tx_gas_used);
 
         // EIP-7778 (Amsterdam):
         // - block gas accounting uses gas BEFORE refunds, floored
@@ -227,7 +237,8 @@ where
         //     // EIP-7778: max(calldata_floor, gas_before_refund)
         //     let tx_block_gas_used = max(gas_before_refund, floor_gas);
         //     self.gas_used = self.gas_used.saturating_add(tx_block_gas_used);
-        //     let cumulative_gas_spent = self.gas_spent.get_or_insert(0).saturating_add(tx_gas_spent);
+        //     let cumulative_gas_spent =
+        // self.gas_spent.get_or_insert(0).saturating_add(tx_gas_spent);
         //     *self.gas_spent.as_mut().unwrap() = cumulative_gas_spent;
 
         //     (self.gas_used, Some(cumulative_gas_spent))
@@ -250,7 +261,7 @@ where
             evm: &self.evm,
             result,
             state: &state,
-             cumulative_gas_used: self.tx_gas_used,
+            cumulative_gas_used: self.tx_gas_used,
         }));
 
         // Commit the state changes.
@@ -323,6 +334,7 @@ where
             })
         })?;
         let max_gas_used = self.max_block_gas_used();
+        tracing::info!("max gas used:{:?}", max_gas_used);
         Ok((
             self.evm,
             BlockExecutionResult {

@@ -55,7 +55,7 @@ impl ReceiptBuilder for AlloyReceiptBuilder {
     fn build_receipt<E: Evm>(&self, ctx: ReceiptBuilderCtx<'_, TxType, E>) -> Self::Receipt {
         let receipt = alloy_consensus::Receipt {
             status: Eip658Value::Eip658(ctx.result.is_success()),
-            cumulative_gas_used:ctx.cumulative_gas_used,
+            cumulative_gas_used: ctx.cumulative_gas_used,
             logs: ctx.result.into_logs(),
         }
         .with_bloom();
