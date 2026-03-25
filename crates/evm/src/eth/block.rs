@@ -170,7 +170,7 @@ where
             }
             .into());
         }
-        tracing::info!("Tx Sender is  {:?}", tx.tx().signer());
+        tracing::info!("Tx Sender is  {:?}", tx.signer());
         // Execute transaction and return the result
         let result = self.evm.transact(tx_env).map_err(|err| {
             let hash = tx.tx().trie_hash();
