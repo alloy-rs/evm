@@ -170,7 +170,7 @@ where
             }
             .into());
         }
-        tracing::info!("Tx Sender is  {:?}", tx.signer());
+
         // Execute transaction and return the result
         let result = self.evm.transact(tx_env).map_err(|err| {
             let hash = tx.tx().trie_hash();
@@ -198,62 +198,10 @@ where
         let regular_gas_used = result.gas().block_regular_gas_used();
         let state_gas_used = result.gas().block_state_gas_used();
 
-        tracing::info!("tx gas used:{:?}", tx_gas_used);
-        tracing::info!("regular gas used:{:?}", regular_gas_used);
-        tracing::info!("state gas used:{:?}", state_gas_used);
-
         // append used gas used
         self.block_regular_gas_used += regular_gas_used;
         self.block_state_gas_used += state_gas_used;
         self.tx_gas_used += tx_gas_used;
-
-        tracing::info!("block regular gas used:{:?}", self.block_regular_gas_used);
-        tracing::info!("block state gas used:{:?}", self.block_state_gas_used);
-        tracing::info!("tx gas used:{:?}", self.tx_gas_used);
-
-        // EIP-7778 (Amsterdam):
-        // - block gas accounting uses gas BEFORE refunds, floored
-        // - user pays gas AFTER refunds, floored (EIP-7623)
-        // let is_amsterdam = self
-        //     .spec
-        //     .is_amsterdam_active_at_timestamp(self.evm.block().timestamp().saturating_to());
-
-        // let (cumulative_gas_used, gas_spent) = if is_amsterdam {
-        //     // Refunds exist for both successful executions and reverts.
-        //     let (gas_spent, gas_refunded, floor_gas) = match &result {
-        //         ExecutionResult::Success { gas, .. } => {
-        //             (gas.spent(), gas.inner_refunded(), gas.floor_gas())
-        //         }
-        //         ExecutionResult::Revert { gas, .. } => {
-        //             (gas.spent(), gas.inner_refunded(), gas.floor_gas())
-        //         }
-        //         ExecutionResult::Halt { gas, .. } => {
-        //             (gas.spent(), gas.inner_refunded(), gas.floor_gas())
-        //         }
-        //     };
-
-        //     let gas_before_refund = gas_spent;
-        //     let tx_gas_used_after_refund = gas_before_refund.saturating_sub(gas_refunded);
-        //     // --- User pays (receipt gas) ---
-        //     // EIP-7623: max(calldata_floor, gas_after_refund)
-        //     let tx_gas_spent = max(tx_gas_used_after_refund, floor_gas);
-
-        //     // --- Block accounting ---
-        //     // EIP-7778: max(calldata_floor, gas_before_refund)
-        //     let tx_block_gas_used = max(gas_before_refund, floor_gas);
-        //     self.gas_used = self.gas_used.saturating_add(tx_block_gas_used);
-        //     let cumulative_gas_spent =
-        // self.gas_spent.get_or_insert(0).saturating_add(tx_gas_spent);
-        //     *self.gas_spent.as_mut().unwrap() = cumulative_gas_spent;
-
-        //     (self.gas_used, Some(cumulative_gas_spent))
-        // } else {
-        //     // Pre-Amsterdam:
-        //     // - gas_used already includes refund semantics
-
-        //     self.gas_used = self.gas_used.saturating_add(gas_after_refund);
-        //     (self.gas_used, None)
-        // };
 
         // only determine cancun fields when active
         if self.spec.is_cancun_active_at_timestamp(self.evm.block().timestamp().saturating_to()) {
@@ -339,7 +287,7 @@ where
             })
         })?;
         let max_gas_used = self.max_block_gas_used();
-        tracing::info!("max gas used:{:?}", max_gas_used);
+
         Ok((
             self.evm,
             BlockExecutionResult {
