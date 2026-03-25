@@ -14,9 +14,7 @@ use revm::{
     interpreter::{
         gas::GasTracker, CallInput, CallInputs, Gas, InstructionResult, InterpreterResult,
     },
-    precompile::{
-        PrecompileError, PrecompileFn, PrecompileId, PrecompileOutput, Precompiles,
-    },
+    precompile::{PrecompileError, PrecompileFn, PrecompileId, PrecompileOutput, Precompiles},
     Context, Journal,
 };
 
@@ -574,6 +572,7 @@ where
             precompile.call(PrecompileInput {
                 data: input_bytes,
                 gas: inputs.gas_limit,
+                reservoir: inputs.reservoir,
                 caller: inputs.caller,
                 value: inputs.call_value(),
                 is_static: inputs.is_static,
@@ -768,6 +767,8 @@ pub struct PrecompileInput<'a> {
     pub data: &'a [u8],
     /// Gas limit.
     pub gas: u64,
+    /// State gas reservoir (EIP-8037). Zero on mainnet.
+    pub reservoir: u64,
     /// Caller address.
     pub caller: Address,
     /// Value sent with the call.
@@ -922,11 +923,11 @@ impl Precompile for revm::precompile::Precompile {
     fn call(&self, input: PrecompileInput<'_>) -> PrecompileResultExt {
         match self.precompile()(input.data, input.gas) {
             Ok(output) => {
-                Ok(PrecompileOutputExt::from_precompile_output(output, input.gas, 0))
+                Ok(PrecompileOutputExt::from_precompile_output(output, input.gas, input.reservoir))
             }
             Err(error) => Err(PrecompileErrorExt::from_precompile_error(
                 error,
-                GasTracker::new(input.gas, 0, 0),
+                GasTracker::new(input.gas, 0, input.reservoir),
             )),
         }
     }
@@ -949,12 +950,14 @@ impl From<PrecompileFn> for DynPrecompile {
     fn from(f: PrecompileFn) -> Self {
         let p = move |input: PrecompileInput<'_>| -> PrecompileResultExt {
             match f(input.data, input.gas) {
-                Ok(output) => {
-                    Ok(PrecompileOutputExt::from_precompile_output(output, input.gas, 0))
-                }
+                Ok(output) => Ok(PrecompileOutputExt::from_precompile_output(
+                    output,
+                    input.gas,
+                    input.reservoir,
+                )),
                 Err(error) => Err(PrecompileErrorExt::from_precompile_error(
                     error,
-                    GasTracker::new(input.gas, 0, 0),
+                    GasTracker::new(input.gas, 0, input.reservoir),
                 )),
             }
         };
@@ -975,9 +978,7 @@ impl From<(PrecompileId, PrecompileFn)> for DynPrecompile {
     fn from((id, f): (PrecompileId, PrecompileFn)) -> Self {
         let p = move |input: PrecompileInput<'_>| -> PrecompileResultExt {
             match f(input.data, input.gas) {
-                Ok(output) => {
-                    Ok(PrecompileOutputExt::from_precompile_output(output, input.gas, 0))
-                }
+                Ok(output) => Ok(PrecompileOutputExt::from_precompile_output(output, input.gas, 0)),
                 Err(error) => Err(PrecompileErrorExt::from_precompile_error(
                     error,
                     GasTracker::new(input.gas, 0, 0),
@@ -1121,6 +1122,7 @@ mod tests {
             .call(PrecompileInput {
                 data: &test_input,
                 gas: gas_limit,
+                reservoir: 0,
                 caller: Address::ZERO,
                 value: U256::ZERO,
                 is_static: false,
@@ -1160,6 +1162,7 @@ mod tests {
             .call(PrecompileInput {
                 data: &test_input,
                 gas: gas_limit,
+                reservoir: 0,
                 caller: Address::ZERO,
                 value: U256::ZERO,
                 is_static: false,
@@ -1200,6 +1203,7 @@ mod tests {
             .call(PrecompileInput {
                 data: &test_input,
                 gas: gas_limit,
+                reservoir: 0,
                 caller: Address::ZERO,
                 value: U256::ZERO,
                 is_static: false,
@@ -1292,6 +1296,7 @@ mod tests {
             .call(PrecompileInput {
                 data: &[],
                 gas: gas_limit,
+                reservoir: 0,
                 caller: Address::ZERO,
                 value: U256::ZERO,
                 is_static: false,
@@ -1328,6 +1333,7 @@ mod tests {
             .call(PrecompileInput {
                 data: &test_input,
                 gas: gas_limit,
+                reservoir: 0,
                 caller: Address::ZERO,
                 value: U256::ZERO,
                 is_static: false,
@@ -1358,6 +1364,7 @@ mod tests {
             .call(PrecompileInput {
                 data: &test_input,
                 gas: gas_limit,
+                reservoir: 0,
                 caller: Address::ZERO,
                 value: U256::ZERO,
                 is_static: false,
@@ -1409,6 +1416,7 @@ mod tests {
             .call(PrecompileInput {
                 data: &test_input,
                 gas: gas_limit,
+                reservoir: 0,
                 caller: Address::ZERO,
                 value: U256::ZERO,
                 is_static: false,
