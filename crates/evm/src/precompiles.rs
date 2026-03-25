@@ -654,6 +654,14 @@ impl PrecompileErrorExt {
     }
 }
 
+impl Display for PrecompileErrorExt {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        Display::fmt(&self.precompile_error, f)
+    }
+}
+
+impl core::error::Error for PrecompileErrorExt {}
+
 impl From<PrecompileError> for PrecompileErrorExt {
     #[inline]
     fn from(error: PrecompileError) -> Self {
