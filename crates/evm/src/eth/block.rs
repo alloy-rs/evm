@@ -162,6 +162,7 @@ where
         // The sum of the transaction's gas limit, Tg, and the gas utilized in this block prior,
         // must be no greater than the block's gasLimit.
         let block_available_gas = self.evm.block().gas_limit() - self.max_block_gas_used();
+        tracing::info!("Tx gas limit:{:?}", tx.tx().gas_limit());
 
         if tx.tx().gas_limit() > block_available_gas {
             return Err(BlockValidationError::TransactionGasLimitMoreThanAvailableBlockGas {
