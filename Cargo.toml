@@ -69,9 +69,8 @@ serde_json = "1"
 test-case = "3"
 
 [patch.crates-io]
-revm = { git = "https://github.com/bluealloy/revm", rev = "fa5a6914398c9b178422efc1edd1d2ab33dad923" }
-op-revm = { git = "https://github.com/bluealloy/revm", rev = "fa5a6914398c9b178422efc1edd1d2ab33dad923" }
-
+revm = { git = "https://github.com/bluealloy/revm.git", rev = "0abb42b23" }
+# op-revm = { git = "https://github.com/bluealloy/revm.git", rev = "712dac7a", default-features = false }
 # alloy bal-devnet2 patches
 alloy-eips = { git = "https://github.com/alloy-rs/alloy", branch = "bal-devnet2" }
 alloy-serde = { git = "https://github.com/alloy-rs/alloy", branch = "bal-devnet2" }
@@ -81,5 +80,5 @@ alloy-rpc-types-engine = { git = "https://github.com/alloy-rs/alloy", branch = "
 alloy-network-primitives = { git = "https://github.com/alloy-rs/alloy", branch = "bal-devnet2" }
 
 # op-alloy bal-devnet2 patches
-op-alloy-consensus = { git = "https://github.com/alloy-rs/op-alloy", branch = "bal-devnet2" }
-op-alloy-rpc-types-engine = { git = "https://github.com/alloy-rs/op-alloy", branch = "bal-devnet2" }
+# op-alloy-consensus = { git = "https://github.com/alloy-rs/op-alloy", branch = "bal-devnet2" }
+# op-alloy-rpc-types-engine = { git = "https://github.com/alloy-rs/op-alloy", branch = "bal-devnet2" }
