@@ -632,7 +632,7 @@ pub struct PrecompileErrorExt {
 impl PrecompileErrorExt {
     /// Creates a new [`PrecompileErrorExt`] from a [`PrecompileError`].
     #[inline]
-    pub fn from_precompile_error(error: PrecompileError, gas_tracker: GasTracker) -> Self {
+    pub const fn from_precompile_error(error: PrecompileError, gas_tracker: GasTracker) -> Self {
         Self { precompile_error: error, gas_tracker }
     }
 
