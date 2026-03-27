@@ -33,12 +33,6 @@ pub trait InvalidTxError: Error + Send + Sync + Any + 'static {
         })
     }
 
-    /// Returns whether the error is due to the max initcode size being higher than max.
-    fn is_initcode_larger_than_max(&self) -> bool {
-        self.as_invalid_tx_err()
-            .is_some_and(|err| matches!(err, InvalidTransaction::CreateInitCodeSizeLimit))
-    }
-
     /// Returns the underlying [`InvalidTransaction`] if any.
     ///
     /// This is primarily used for error conversions, e.g. for rpc responses.
