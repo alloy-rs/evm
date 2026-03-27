@@ -60,8 +60,8 @@ pub struct EthBlockExecutor<'a, Evm, Spec, R: ReceiptBuilder> {
     /// Receipts of executed transactions.
     pub receipts: Vec<R::Receipt>,
 
-    /// Gas used by transactions in this block.
-    pub tx_gas_used: u64,
+    /// Cumulative gas used by transactions in this block.
+    pub cumulative_tx_gas_used: u64,
     /// Total gas used by transactions in this block.
     pub block_regular_gas_used: u64,
     /// State gas used by transactions in this block.
@@ -105,7 +105,7 @@ where
             receipts: Vec::with_capacity(tx_count_hint),
             block_regular_gas_used: 0,
             block_state_gas_used: 0,
-            tx_gas_used: 0,
+            cumulative_tx_gas_used: 0,
             blob_gas_used: 0,
             system_caller: SystemCaller::new(spec.clone()),
             spec,
@@ -191,7 +191,7 @@ where
         // append used gas used
         self.block_regular_gas_used += regular_gas_used;
         self.block_state_gas_used += state_gas_used;
-        self.tx_gas_used += tx_gas_used;
+        self.cumulative_tx_gas_used += tx_gas_used;
 
         // only determine cancun fields when active
         if self.spec.is_cancun_active_at_timestamp(self.evm.block().timestamp().saturating_to()) {
@@ -204,7 +204,7 @@ where
             evm: &self.evm,
             result,
             state: &state,
-            cumulative_gas_used: self.tx_gas_used,
+            cumulative_gas_used: self.cumulative_tx_gas_used,
         }));
 
         // Commit the state changes.
