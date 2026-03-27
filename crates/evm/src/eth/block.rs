@@ -60,8 +60,8 @@ pub struct EthBlockExecutor<'a, Evm, Spec, R: ReceiptBuilder> {
     /// Receipts of executed transactions.
     pub receipts: Vec<R::Receipt>,
 
-    /// Gas used by transactions in this block.
-    pub tx_gas_used: u64,
+    /// Cumulative gas used by transactions in this block.
+    pub cumulative_tx_gas_used: u64,
     /// Total gas used by transactions in this block.
     pub block_regular_gas_used: u64,
     /// State gas used by transactions in this block.
@@ -105,7 +105,7 @@ where
             receipts: Vec::with_capacity(tx_count_hint),
             block_regular_gas_used: 0,
             block_state_gas_used: 0,
-            tx_gas_used: 0,
+            cumulative_tx_gas_used: 0,
             blob_gas_used: 0,
             system_caller: SystemCaller::new(spec.clone()),
             spec,
@@ -152,7 +152,21 @@ where
 
         // The sum of the transaction's gas limit, Tg, and the gas utilized in this block prior,
         // must be no greater than the block's gasLimit.
-        let block_available_gas = self.evm.block().gas_limit() - self.max_block_gas_used();
+        //
+        // Pre-Amsterdam: use tx_gas_used (gas after refunds) as cumulative gas, matching
+        // the original behavior where gas_used = spent - refunded.
+        //
+        // Amsterdam+: use max(block_regular_gas_used, block_state_gas_used) which tracks
+        // gas without refunds, as required by EIP-8037 dual-limit accounting.
+        let block_gas_used = if self
+            .spec
+            .is_amsterdam_active_at_timestamp(self.evm.block().timestamp().saturating_to())
+        {
+            self.max_block_gas_used()
+        } else {
+            self.cumulative_tx_gas_used
+        };
+        let block_available_gas = self.evm.block().gas_limit() - block_gas_used;
 
         if tx.tx().gas_limit() > block_available_gas {
             return Err(BlockValidationError::TransactionGasLimitMoreThanAvailableBlockGas {
@@ -191,7 +205,7 @@ where
         // append used gas used
         self.block_regular_gas_used += regular_gas_used;
         self.block_state_gas_used += state_gas_used;
-        self.tx_gas_used += tx_gas_used;
+        self.cumulative_tx_gas_used += tx_gas_used;
 
         // only determine cancun fields when active
         if self.spec.is_cancun_active_at_timestamp(self.evm.block().timestamp().saturating_to()) {
@@ -204,7 +218,7 @@ where
             evm: &self.evm,
             result,
             state: &state,
-            cumulative_gas_used: self.tx_gas_used,
+            cumulative_gas_used: self.cumulative_tx_gas_used,
         }));
 
         // Commit the state changes.
@@ -277,14 +291,23 @@ where
             })
         })?;
 
-        let max_gas_used = self.max_block_gas_used();
+        // Pre-Amsterdam: use tx_gas_used (with refunds) for the block gas total.
+        // Amsterdam+: use max(regular, state) gas without refunds (EIP-8037).
+        let gas_used = if self
+            .spec
+            .is_amsterdam_active_at_timestamp(self.evm.block().timestamp().saturating_to())
+        {
+            self.max_block_gas_used()
+        } else {
+            self.cumulative_tx_gas_used
+        };
 
         Ok((
             self.evm,
             BlockExecutionResult {
                 receipts: self.receipts,
                 requests,
-                gas_used: max_gas_used,
+                gas_used,
                 blob_gas_used: self.blob_gas_used,
             },
         ))
