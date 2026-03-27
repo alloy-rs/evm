@@ -152,7 +152,21 @@ where
 
         // The sum of the transaction's gas limit, Tg, and the gas utilized in this block prior,
         // must be no greater than the block's gasLimit.
-        let block_available_gas = self.evm.block().gas_limit() - self.max_block_gas_used();
+        //
+        // Pre-Amsterdam: use tx_gas_used (gas after refunds) as cumulative gas, matching
+        // the original behavior where gas_used = spent - refunded.
+        //
+        // Amsterdam+: use max(block_regular_gas_used, block_state_gas_used) which tracks
+        // gas without refunds, as required by EIP-8037 dual-limit accounting.
+        let block_gas_used = if self
+            .spec
+            .is_amsterdam_active_at_timestamp(self.evm.block().timestamp().saturating_to())
+        {
+            self.max_block_gas_used()
+        } else {
+            self.tx_gas_used
+        };
+        let block_available_gas = self.evm.block().gas_limit() - block_gas_used;
 
         if tx.tx().gas_limit() > block_available_gas {
             return Err(BlockValidationError::TransactionGasLimitMoreThanAvailableBlockGas {
@@ -277,14 +291,23 @@ where
             })
         })?;
 
-        let max_gas_used = self.max_block_gas_used();
+        // Pre-Amsterdam: use tx_gas_used (with refunds) for the block gas total.
+        // Amsterdam+: use max(regular, state) gas without refunds (EIP-8037).
+        let gas_used = if self
+            .spec
+            .is_amsterdam_active_at_timestamp(self.evm.block().timestamp().saturating_to())
+        {
+            self.max_block_gas_used()
+        } else {
+            self.tx_gas_used
+        };
 
         Ok((
             self.evm,
             BlockExecutionResult {
                 receipts: self.receipts,
                 requests,
-                gas_used: max_gas_used,
+                gas_used,
                 blob_gas_used: self.blob_gas_used,
             },
         ))
