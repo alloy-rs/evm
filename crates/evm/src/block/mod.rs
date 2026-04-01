@@ -307,7 +307,7 @@ pub trait BlockExecutor {
     fn execute_transaction(
         &mut self,
         tx: impl ExecutableTx<Self>,
-    ) -> Result<GasOutput, BlockExecutionError> {
+    ) -> Result<(), BlockExecutionError> {
         self.execute_transaction_with_result_closure(tx, |_| ())
     }
 
@@ -325,12 +325,11 @@ pub trait BlockExecutor {
         &mut self,
         tx: impl ExecutableTx<Self>,
         f: impl FnOnce(&ExecutionResult<<Self::Evm as Evm>::HaltReason>),
-    ) -> Result<GasOutput, BlockExecutionError> {
+    ) -> Result<(), BlockExecutionError> {
         self.execute_transaction_with_commit_condition(tx, |res| {
             f(res);
             CommitChanges::Yes
         })
-        .map(Option::unwrap_or_default)
     }
 
     /// Executes a single transaction and applies execution result to internal state. Invokes the
@@ -357,16 +356,15 @@ pub trait BlockExecutor {
         &mut self,
         tx: impl ExecutableTx<Self>,
         f: impl FnOnce(&ExecutionResult<<Self::Evm as Evm>::HaltReason>) -> CommitChanges,
-    ) -> Result<Option<GasOutput>, BlockExecutionError> {
+    ) -> Result<(), BlockExecutionError> {
         // Execute transaction without committing
         let output = self.execute_transaction_without_commit(tx)?;
 
         if !f(&output.result().result).should_commit() {
-            return Ok(None);
+            return Ok(());
         }
 
-        let gas_used = self.commit_transaction(output)?;
-        Ok(Some(gas_used))
+        self.commit_transaction(output)
     }
 
     /// Executes a single transaction without committing state changes.
@@ -397,10 +395,7 @@ pub trait BlockExecutor {
     ///
     /// # Parameters
     /// - `output`: The transaction output containing execution result and state changes
-    fn commit_transaction(
-        &mut self,
-        output: Self::Result,
-    ) -> Result<GasOutput, BlockExecutionError>;
+    fn commit_transaction(&mut self, output: Self::Result) -> Result<(), BlockExecutionError>;
 
     /// Applies any necessary changes after executing the block's transactions, completes execution
     /// and returns the underlying EVM along with execution result.
