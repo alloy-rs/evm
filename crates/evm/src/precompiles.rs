@@ -662,13 +662,6 @@ impl Display for PrecompileErrorExt {
 
 impl core::error::Error for PrecompileErrorExt {}
 
-impl From<PrecompileError> for PrecompileErrorExt {
-    #[inline]
-    fn from(error: PrecompileError) -> Self {
-        Self { precompile_error: error, gas_tracker: GasTracker::new(0, 0, 0) }
-    }
-}
-
 /// Output of a precompile call.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PrecompileOutputExt {
