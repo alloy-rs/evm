@@ -986,10 +986,14 @@ impl From<(PrecompileId, PrecompileFn)> for DynPrecompile {
     fn from((id, f): (PrecompileId, PrecompileFn)) -> Self {
         let p = move |input: PrecompileInput<'_>| -> PrecompileResultExt {
             match f(input.data, input.gas) {
-                Ok(output) => Ok(PrecompileOutputExt::from_precompile_output(output, input.gas, 0)),
+                Ok(output) => Ok(PrecompileOutputExt::from_precompile_output(
+                    output,
+                    input.gas,
+                    input.reservoir,
+                )),
                 Err(error) => Err(PrecompileErrorExt::from_precompile_error(
                     error,
-                    GasTracker::new(input.gas, 0, 0),
+                    GasTracker::new(input.gas, 0, input.reservoir),
                 )),
             }
         };
