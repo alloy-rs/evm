@@ -165,13 +165,13 @@ where
         // Pre-Amsterdam: use tx_gas_used (gas after refunds) as cumulative gas, matching
         // the original behavior where gas_used = spent - refunded.
         //
-        // Amsterdam+: use max(block_regular_gas_used, block_state_gas_used) which tracks
+        // Amsterdam+: use block_regular_gas_used which tracks
         // gas without refunds, as required by EIP-8037 dual-limit accounting.
         let block_gas_used = if self
             .spec
             .is_amsterdam_active_at_timestamp(self.evm.block().timestamp().saturating_to())
         {
-            self.max_block_gas_used()
+            self.block_regular_gas_used
         } else {
             self.cumulative_tx_gas_used
         };
@@ -206,6 +206,11 @@ where
 
         self.system_caller.on_state(StateChangeSource::Transaction(self.receipts.len()), &state);
 
+        //check whether amsterdam is active
+        let amsterdam_active = self
+            .spec
+            .is_amsterdam_active_at_timestamp(self.evm.block().timestamp().saturating_to());
+
         // gas_used returned by revm is AFTER refunds
         //let gas_after_refund = result.gas_used();
         let tx_gas_used = result.gas().tx_gas_used();
@@ -216,6 +221,12 @@ where
         self.block_regular_gas_used += regular_gas_used;
         self.block_state_gas_used += state_gas_used;
         self.cumulative_tx_gas_used += tx_gas_used;
+
+        // Check block gas limit after each transaction if Amsterdam is active, as required by
+        // EIP-8037.
+        if amsterdam_active && self.max_block_gas_used() > self.evm.block().gas_limit() {
+            return Err(BlockValidationError::BlockGasExceeded.into());
+        }
 
         // only determine cancun fields when active
         if self.spec.is_cancun_active_at_timestamp(self.evm.block().timestamp().saturating_to()) {
