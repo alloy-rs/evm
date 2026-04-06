@@ -21,9 +21,13 @@ use alloy_eips::{eip4895::Withdrawal, eip7685::Requests, Encodable2718};
 use alloy_hardforks::EthereumHardfork;
 use alloy_primitives::{Bytes, Log, B256};
 use revm::{
-    context::Block, context_interface::result::ResultAndState, database::DatabaseCommitExt,
+    context::{result::min, Block},
+    context_interface::result::ResultAndState,
+    database::DatabaseCommitExt,
     DatabaseCommit, Inspector,
 };
+
+use revm::primitives::eip7825::TX_GAS_LIMIT_CAP;
 
 /// Context for Ethereum block execution.
 #[derive(Debug, Clone)]
@@ -176,8 +180,8 @@ where
             self.cumulative_tx_gas_used
         };
         let block_available_gas = self.evm.block().gas_limit() - block_gas_used;
-
-        if tx.tx().gas_limit() > block_available_gas {
+        let tx_min_gas_limit = min(tx.tx().gas_limit(), TX_GAS_LIMIT_CAP);
+        if tx_min_gas_limit > block_available_gas {
             return Err(BlockValidationError::TransactionGasLimitMoreThanAvailableBlockGas {
                 transaction_gas_limit: tx.tx().gas_limit(),
                 block_available_gas,
