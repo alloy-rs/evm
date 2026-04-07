@@ -118,7 +118,7 @@ where
     }
 }
 
-impl<'a, Evm, Spec, R: ReceiptBuilder> EthBlockExecutor<'a, Evm, Spec, R> {
+impl<Evm, Spec, R: ReceiptBuilder> EthBlockExecutor<'_, Evm, Spec, R> {
     /// Returns the maximum of regular and state gas used by transactions in this block.
     #[inline]
     pub const fn max_block_gas_used(&self) -> u64 {

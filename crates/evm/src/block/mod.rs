@@ -65,18 +65,6 @@ impl GasOutput {
     }
 }
 
-impl From<u64> for GasOutput {
-    fn from(gas: u64) -> Self {
-        Self::new(gas)
-    }
-}
-
-impl From<GasOutput> for u64 {
-    fn from(gas: GasOutput) -> Self {
-        gas.tx_gas_used()
-    }
-}
-
 /// The result of executing a block.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BlockExecutionResult<T> {

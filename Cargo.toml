@@ -49,7 +49,7 @@ alloy-rpc-types-eth = { version = "1.5.2", default-features = false }
 alloy-rpc-types-engine = { version = "1.5.2", default-features = false }
 
 # revm
-revm = { git = "https://github.com/bluealloy/revm.git", rev = "44a4233dbce8c283421cb568051fbba9d37894b0", default-features = false }
+revm = { git = "https://github.com/bluealloy/revm.git", rev = "a357a608d3ac327326abaaf70b1ec1a5d2c57542", default-features = false }
 
 # tracing
 tracing = { version = "0.1", default-features = false }
