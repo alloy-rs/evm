@@ -21,9 +21,13 @@ use alloy_eips::{eip4895::Withdrawal, eip7685::Requests, Encodable2718};
 use alloy_hardforks::EthereumHardfork;
 use alloy_primitives::{Bytes, Log, B256};
 use revm::{
-    context::Block, context_interface::result::ResultAndState, database::DatabaseCommitExt,
+    context::{result::min, Block},
+    context_interface::result::ResultAndState,
+    database::DatabaseCommitExt,
     DatabaseCommit, Inspector,
 };
+
+use revm::primitives::eip7825::TX_GAS_LIMIT_CAP;
 
 /// Context for Ethereum block execution.
 #[derive(Debug, Clone)]
@@ -165,19 +169,19 @@ where
         // Pre-Amsterdam: use tx_gas_used (gas after refunds) as cumulative gas, matching
         // the original behavior where gas_used = spent - refunded.
         //
-        // Amsterdam+: use max(block_regular_gas_used, block_state_gas_used) which tracks
+        // Amsterdam+: use block_regular_gas_used which tracks
         // gas without refunds, as required by EIP-8037 dual-limit accounting.
         let block_gas_used = if self
             .spec
             .is_amsterdam_active_at_timestamp(self.evm.block().timestamp().saturating_to())
         {
-            self.max_block_gas_used()
+            self.block_regular_gas_used
         } else {
             self.cumulative_tx_gas_used
         };
         let block_available_gas = self.evm.block().gas_limit() - block_gas_used;
-
-        if tx.tx().gas_limit() > block_available_gas {
+        let tx_min_gas_limit = min(tx.tx().gas_limit(), TX_GAS_LIMIT_CAP);
+        if tx_min_gas_limit > block_available_gas {
             return Err(BlockValidationError::TransactionGasLimitMoreThanAvailableBlockGas {
                 transaction_gas_limit: tx.tx().gas_limit(),
                 block_available_gas,
@@ -206,6 +210,11 @@ where
 
         self.system_caller.on_state(StateChangeSource::Transaction(self.receipts.len()), &state);
 
+        //check whether amsterdam is active
+        let amsterdam_active = self
+            .spec
+            .is_amsterdam_active_at_timestamp(self.evm.block().timestamp().saturating_to());
+
         // gas_used returned by revm is AFTER refunds
         //let gas_after_refund = result.gas_used();
         let tx_gas_used = result.gas().tx_gas_used();
@@ -216,6 +225,12 @@ where
         self.block_regular_gas_used += regular_gas_used;
         self.block_state_gas_used += state_gas_used;
         self.cumulative_tx_gas_used += tx_gas_used;
+
+        // Check block gas limit after each transaction if Amsterdam is active, as required by
+        // EIP-8037.
+        if amsterdam_active && self.max_block_gas_used() > self.evm.block().gas_limit() {
+            return Err(BlockValidationError::BlockGasExceeded.into());
+        }
 
         // only determine cancun fields when active
         if self.spec.is_cancun_active_at_timestamp(self.evm.block().timestamp().saturating_to()) {
