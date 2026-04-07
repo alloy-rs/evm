@@ -5,21 +5,22 @@ use alloc::{borrow::Cow, boxed::Box, string::String, sync::Arc, vec::Vec};
 use alloy_consensus::transaction::Either;
 use alloy_primitives::{
     map::{AddressMap, AddressSet},
-    Address, Bytes, U256,
+    Address, U256,
 };
 use core::fmt::{self, Debug, Display};
 use revm::{
-    context::{ContextTr, LocalContextTr},
-    handler::{EthPrecompiles, PrecompileProvider},
-    interpreter::{
-        gas::GasTracker, CallInput, CallInputs, Gas, InstructionResult, InterpreterResult,
-    },
-    precompile::{
-        PrecompileError, PrecompileFn, PrecompileHalt, PrecompileId, PrecompileOutput,
-        PrecompileStatus, Precompiles,
-    },
+    context::ContextTr,
+    handler::{precompile_output_to_interpreter_result, EthPrecompiles, PrecompileProvider},
+    interpreter::{CallInputs, InterpreterResult},
+    precompile::{PrecompileError, PrecompileFn, PrecompileId, PrecompileOutput, Precompiles},
     Context, Journal,
 };
+
+/// Result of a precompile call.
+///
+/// Returns [`PrecompileOutput`] on success (which may be Success, Revert, or Halt via its status),
+/// or [`PrecompileError`] for fatal errors that abort EVM execution.
+pub type PrecompileResultExt = Result<PrecompileOutput, PrecompileError>;
 
 /// Returns whether the given [`PrecompileId`] supports caching.
 ///
@@ -542,35 +543,14 @@ where
             return Ok(None);
         };
 
-        let mut result = InterpreterResult {
-            result: InstructionResult::Return,
-            gas: Gas::new(inputs.gas_limit),
-            output: Bytes::new(),
-        };
-
         let (block, tx, cfg, journaled_state, _, local) = context.all_mut();
 
-        // Resolve input bytes from shared memory buffer or direct bytes.
-        let r;
-        let input_bytes = match &inputs.input {
-            CallInput::SharedBuffer(range) => {
-                #[allow(clippy::option_if_let_else)]
-                if let Some(slice) = local.shared_memory_buffer_slice(range.clone()) {
-                    r = slice;
-                    &*r
-                } else {
-                    &[]
-                }
-            }
-            CallInput::Bytes(bytes) => bytes.as_ref(),
-        };
-
-        let precompile_result = {
+        let precompile_output = {
             let _span =
                 tracing::debug_span!("precompile", name = precompile.precompile_id().name(),)
                     .entered();
             precompile.call(PrecompileInput {
-                data: input_bytes,
+                data: inputs.input.as_bytes_local(local).as_ref(),
                 gas: inputs.gas_limit,
                 reservoir: inputs.reservoir,
                 caller: inputs.caller,
@@ -580,30 +560,10 @@ where
                 target_address: inputs.target_address,
                 bytecode_address: inputs.bytecode_address,
             })
-        };
+        }
+        .map_err(|e| e.to_string())?;
 
-        match precompile_result {
-            Ok(output) => {
-                *result.gas.tracker_mut() = output.gas;
-                result.result = if output.reverted {
-                    InstructionResult::Revert
-                } else {
-                    InstructionResult::Return
-                };
-                result.output = output.bytes;
-            }
-            Err(error) => {
-                if error.is_fatal() {
-                    return Err(error.into_fatal());
-                }
-                *result.gas.tracker_mut() = error.gas_tracker;
-                result.result = if error.is_oog() {
-                    InstructionResult::PrecompileOOG
-                } else {
-                    InstructionResult::PrecompileError
-                };
-            }
-        };
+        let result = precompile_output_to_interpreter_result(precompile_output, inputs.gas_limit);
 
         Ok(Some(result))
     }
@@ -614,112 +574,6 @@ where
 
     fn contains(&self, address: &Address) -> bool {
         self.get(address).is_some()
-    }
-}
-
-/// Result of a precompile call.
-pub type PrecompileResultExt = Result<PrecompileOutputExt, PrecompileErrorExt>;
-
-/// The kind of precompile error: either a fatal error or a non-fatal halt.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum PrecompileErrorKind {
-    /// Fatal error that aborts the entire EVM execution.
-    Fatal(PrecompileError),
-    /// Non-fatal halt (e.g., out-of-gas, invalid input).
-    Halt(PrecompileHalt),
-}
-
-/// Extended precompile error with gas tracking information.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PrecompileErrorExt {
-    /// The precompile error kind.
-    pub kind: PrecompileErrorKind,
-    /// Gas tracker.
-    pub gas_tracker: GasTracker,
-}
-
-impl PrecompileErrorExt {
-    /// Creates a new [`PrecompileErrorExt`] from a [`PrecompileError`].
-    #[inline]
-    pub const fn from_precompile_error(error: PrecompileError, gas_tracker: GasTracker) -> Self {
-        Self { kind: PrecompileErrorKind::Fatal(error), gas_tracker }
-    }
-
-    /// Creates a new [`PrecompileErrorExt`] from a [`PrecompileHalt`].
-    #[inline]
-    pub const fn from_precompile_halt(halt: PrecompileHalt, gas_tracker: GasTracker) -> Self {
-        Self { kind: PrecompileErrorKind::Halt(halt), gas_tracker }
-    }
-
-    /// Returns `true` if the error is fatal.
-    pub const fn is_fatal(&self) -> bool {
-        matches!(self.kind, PrecompileErrorKind::Fatal(_))
-    }
-
-    /// Returns `true` if the error is an out-of-gas halt.
-    pub fn is_oog(&self) -> bool {
-        matches!(&self.kind, PrecompileErrorKind::Halt(h) if h.is_oog())
-    }
-
-    /// Consumes self and returns the fatal error string.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the error is not fatal.
-    pub fn into_fatal(self) -> String {
-        match self.kind {
-            PrecompileErrorKind::Fatal(PrecompileError::Fatal(e)) => e,
-            _ => panic!("expected fatal error"),
-        }
-    }
-}
-
-impl Display for PrecompileErrorExt {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.kind {
-            PrecompileErrorKind::Fatal(e) => Display::fmt(e, f),
-            PrecompileErrorKind::Halt(h) => write!(f, "precompile halt: {h}"),
-        }
-    }
-}
-
-impl core::error::Error for PrecompileErrorExt {}
-
-/// Output of a precompile call.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PrecompileOutputExt {
-    /// Gas tracker with remaining gas and reservoir info.
-    pub gas: GasTracker,
-    /// Whether the precompile reverted.
-    pub reverted: bool,
-    /// Output bytes.
-    pub bytes: Bytes,
-}
-
-impl PrecompileOutputExt {
-    /// Creates a new [`PrecompileOutputExt`] from a [`PrecompileOutput`] and a reservoir.
-    #[inline]
-    pub fn from_precompile_output(
-        output: PrecompileOutput,
-        gas_limit: u64,
-        reservoir: u64,
-    ) -> PrecompileResultExt {
-        match output.status {
-            PrecompileStatus::Success => Ok(Self {
-                gas: GasTracker::new(gas_limit, gas_limit - output.gas_used, reservoir),
-                reverted: false,
-                bytes: output.bytes,
-            }),
-            PrecompileStatus::Revert => Ok(Self {
-                gas: GasTracker::new(gas_limit, gas_limit - output.gas_used, reservoir),
-                reverted: true,
-                bytes: output.bytes,
-            }),
-            PrecompileStatus::Halt(halt) => Err(PrecompileErrorExt::from_precompile_halt(
-                halt,
-                GasTracker::new(gas_limit, 0, reservoir),
-            )),
-        }
     }
 }
 
@@ -956,8 +810,7 @@ impl Precompile for revm::precompile::Precompile {
     }
 
     fn call(&self, input: PrecompileInput<'_>) -> PrecompileResultExt {
-        let output = self.execute(input.data, input.gas, input.reservoir);
-        PrecompileOutputExt::from_precompile_output(output, input.gas, input.reservoir)
+        Ok(self.execute(input.data, input.gas, input.reservoir))
     }
 
     fn supports_caching(&self) -> bool {
@@ -977,8 +830,7 @@ where
 impl From<PrecompileFn> for DynPrecompile {
     fn from(f: PrecompileFn) -> Self {
         let p = move |input: PrecompileInput<'_>| -> PrecompileResultExt {
-            let output = f(input.data, input.gas, input.reservoir);
-            PrecompileOutputExt::from_precompile_output(output, input.gas, input.reservoir)
+            Ok(f(input.data, input.gas, input.reservoir))
         };
         p.into()
     }
@@ -996,8 +848,7 @@ where
 impl From<(PrecompileId, PrecompileFn)> for DynPrecompile {
     fn from((id, f): (PrecompileId, PrecompileFn)) -> Self {
         let p = move |input: PrecompileInput<'_>| -> PrecompileResultExt {
-            let output = f(input.data, input.gas, input.reservoir);
-            PrecompileOutputExt::from_precompile_output(output, input.gas, input.reservoir)
+            Ok(f(input.data, input.gas, input.reservoir))
         };
         (id, p).into()
     }
@@ -1154,12 +1005,8 @@ mod tests {
         // define a function to modify the precompile to always return a constant value
         spec_precompiles.map_precompile(&identity_address, move |_original_dyn| {
             // create a new DynPrecompile that always returns our constant
-            (|input: PrecompileInput<'_>| -> PrecompileResultExt {
-                PrecompileOutputExt::from_precompile_output(
-                    PrecompileOutput::new(10, Bytes::from_static(b"constant value"), 0),
-                    input.gas,
-                    0,
-                )
+            (|_input: PrecompileInput<'_>| -> PrecompileResultExt {
+                Ok(PrecompileOutput::new(10, Bytes::from_static(b"constant value"), 0))
             })
             .into()
         });
@@ -1204,11 +1051,7 @@ mod tests {
             let _timestamp = input.internals.block_env().timestamp();
             let mut output = b"processed: ".to_vec();
             output.extend_from_slice(input.data.as_ref());
-            PrecompileOutputExt::from_precompile_output(
-                PrecompileOutput::new(15, Bytes::from(output), 0),
-                input.gas,
-                0,
-            )
+            Ok(PrecompileOutput::new(15, Bytes::from(output), 0))
         };
 
         let dyn_precompile: DynPrecompile = closure_precompile.into();
@@ -1226,19 +1069,15 @@ mod tests {
                 bytecode_address: Address::ZERO,
             })
             .unwrap();
-        let gas_used = gas_limit - result.gas.remaining();
+        let gas_used = result.gas_used;
         assert_eq!(gas_used, 15);
         assert_eq!(result.bytes, expected_output);
     }
 
     #[test]
     fn test_supports_caching() {
-        let closure_precompile = |input: PrecompileInput<'_>| -> PrecompileResultExt {
-            PrecompileOutputExt::from_precompile_output(
-                PrecompileOutput::new(10, Bytes::from_static(b"output"), 0),
-                input.gas,
-                0,
-            )
+        let closure_precompile = |_input: PrecompileInput<'_>| -> PrecompileResultExt {
+            Ok(PrecompileOutput::new(10, Bytes::from_static(b"output"), 0))
         };
 
         let dyn_precompile: DynPrecompile = closure_precompile.into();
@@ -1282,12 +1121,8 @@ mod tests {
         // Set up the lookup function
         spec_precompiles.set_precompile_lookup(move |address: &Address| {
             if address.as_slice().starts_with(&dynamic_prefix) {
-                Some(DynPrecompile::new(PrecompileId::Custom("dynamic".into()), |input| {
-                    PrecompileOutputExt::from_precompile_output(
-                        PrecompileOutput::new(100, Bytes::from("dynamic precompile response"), 0),
-                        input.gas,
-                        0,
-                    )
+                Some(DynPrecompile::new(PrecompileId::Custom("dynamic".into()), |_input| {
+                    Ok(PrecompileOutput::new(100, Bytes::from("dynamic precompile response"), 0))
                 }))
             } else {
                 None
@@ -1319,7 +1154,7 @@ mod tests {
                 bytecode_address: dynamic_address,
             })
             .unwrap();
-        let gas_used = gas_limit - result.gas.remaining();
+        let gas_used = result.gas_used;
         assert_eq!(gas_used, 100);
         assert_eq!(result.bytes, Bytes::from("dynamic precompile response"));
 
