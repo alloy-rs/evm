@@ -12,15 +12,9 @@ use revm::{
     context::ContextTr,
     handler::{precompile_output_to_interpreter_result, EthPrecompiles, PrecompileProvider},
     interpreter::{CallInputs, InterpreterResult},
-    precompile::{PrecompileError, PrecompileFn, PrecompileId, PrecompileOutput, Precompiles},
+    precompile::{PrecompileFn, PrecompileId, PrecompileResult, Precompiles},
     Context, Journal,
 };
-
-/// Result of a precompile call.
-///
-/// Returns [`PrecompileOutput`] on success (which may be Success, Revert, or Halt via its status),
-/// or [`PrecompileError`] for fatal errors that abort EVM execution.
-pub type PrecompileResultExt = Result<PrecompileOutput, PrecompileError>;
 
 /// Returns whether the given [`PrecompileId`] supports caching.
 ///
@@ -563,9 +557,7 @@ where
         }
         .map_err(|e| e.to_string())?;
 
-        let result = precompile_output_to_interpreter_result(precompile_output, inputs.gas_limit);
-
-        Ok(Some(result))
+        Ok(Some(precompile_output_to_interpreter_result(precompile_output, inputs.gas_limit)))
     }
 
     fn warm_addresses(&self) -> Box<impl Iterator<Item = Address>> {
@@ -597,7 +589,7 @@ impl DynPrecompile {
     /// Creates a new [`DynPrecompiles`] with the given closure.
     pub fn new<F>(id: PrecompileId, f: F) -> Self
     where
-        F: Fn(PrecompileInput<'_>) -> PrecompileResultExt + Send + Sync + 'static,
+        F: Fn(PrecompileInput<'_>) -> PrecompileResult + Send + Sync + 'static,
     {
         Self(Arc::new((id, f)))
     }
@@ -606,7 +598,7 @@ impl DynPrecompile {
     /// [`Precompile::supports_caching`] returning `false`.
     pub fn new_stateful<F>(id: PrecompileId, f: F) -> Self
     where
-        F: Fn(PrecompileInput<'_>) -> PrecompileResultExt + Send + Sync + 'static,
+        F: Fn(PrecompileInput<'_>) -> PrecompileResult + Send + Sync + 'static,
     {
         Self(Arc::new(StatefulPrecompile((id, f))))
     }
@@ -733,7 +725,7 @@ pub trait Precompile {
     fn precompile_id(&self) -> &PrecompileId;
 
     /// Execute the precompile with the given input data, gas limit, and caller address.
-    fn call(&self, input: PrecompileInput<'_>) -> PrecompileResultExt;
+    fn call(&self, input: PrecompileInput<'_>) -> PrecompileResult;
 
     /// Returns whether this precompile's results should be cached.
     ///
@@ -756,7 +748,7 @@ pub trait Precompile {
     ///
     /// ```ignore
     /// impl Precompile for MyPrecompile {
-    ///     fn call(&self, input: PrecompileInput<'_>) -> PrecompileResultExt {
+    ///     fn call(&self, input: PrecompileInput<'_>) -> PrecompileResult {
     ///         // ...
     ///     }
     ///
@@ -772,13 +764,13 @@ pub trait Precompile {
 
 impl<F> Precompile for (PrecompileId, F)
 where
-    F: Fn(PrecompileInput<'_>) -> PrecompileResultExt + Send + Sync,
+    F: Fn(PrecompileInput<'_>) -> PrecompileResult + Send + Sync,
 {
     fn precompile_id(&self) -> &PrecompileId {
         &self.0
     }
 
-    fn call(&self, input: PrecompileInput<'_>) -> PrecompileResultExt {
+    fn call(&self, input: PrecompileInput<'_>) -> PrecompileResult {
         self.1(input)
     }
 
@@ -789,13 +781,13 @@ where
 
 impl<F> Precompile for (&PrecompileId, F)
 where
-    F: Fn(PrecompileInput<'_>) -> PrecompileResultExt + Send + Sync,
+    F: Fn(PrecompileInput<'_>) -> PrecompileResult + Send + Sync,
 {
     fn precompile_id(&self) -> &PrecompileId {
         self.0
     }
 
-    fn call(&self, input: PrecompileInput<'_>) -> PrecompileResultExt {
+    fn call(&self, input: PrecompileInput<'_>) -> PrecompileResult {
         self.1(input)
     }
 
@@ -809,7 +801,7 @@ impl Precompile for revm::precompile::Precompile {
         self.id()
     }
 
-    fn call(&self, input: PrecompileInput<'_>) -> PrecompileResultExt {
+    fn call(&self, input: PrecompileInput<'_>) -> PrecompileResult {
         Ok(self.execute(input.data, input.gas, input.reservoir))
     }
 
@@ -820,7 +812,7 @@ impl Precompile for revm::precompile::Precompile {
 
 impl<F> From<F> for DynPrecompile
 where
-    F: Fn(PrecompileInput<'_>) -> PrecompileResultExt + Send + Sync + 'static,
+    F: Fn(PrecompileInput<'_>) -> PrecompileResult + Send + Sync + 'static,
 {
     fn from(f: F) -> Self {
         Self::new(PrecompileId::Custom("closure".into()), f)
@@ -829,7 +821,7 @@ where
 
 impl From<PrecompileFn> for DynPrecompile {
     fn from(f: PrecompileFn) -> Self {
-        let p = move |input: PrecompileInput<'_>| -> PrecompileResultExt {
+        let p = move |input: PrecompileInput<'_>| -> PrecompileResult {
             Ok(f(input.data, input.gas, input.reservoir))
         };
         p.into()
@@ -838,7 +830,7 @@ impl From<PrecompileFn> for DynPrecompile {
 
 impl<F> From<(PrecompileId, F)> for DynPrecompile
 where
-    F: Fn(PrecompileInput<'_>) -> PrecompileResultExt + Send + Sync + 'static,
+    F: Fn(PrecompileInput<'_>) -> PrecompileResult + Send + Sync + 'static,
 {
     fn from((id, f): (PrecompileId, F)) -> Self {
         Self(Arc::new((id, f)))
@@ -847,7 +839,7 @@ where
 
 impl From<(PrecompileId, PrecompileFn)> for DynPrecompile {
     fn from((id, f): (PrecompileId, PrecompileFn)) -> Self {
-        let p = move |input: PrecompileInput<'_>| -> PrecompileResultExt {
+        let p = move |input: PrecompileInput<'_>| -> PrecompileResult {
             Ok(f(input.data, input.gas, input.reservoir))
         };
         (id, p).into()
@@ -859,7 +851,7 @@ impl Precompile for DynPrecompile {
         self.0.precompile_id()
     }
 
-    fn call(&self, input: PrecompileInput<'_>) -> PrecompileResultExt {
+    fn call(&self, input: PrecompileInput<'_>) -> PrecompileResult {
         self.0.call(input)
     }
 
@@ -876,7 +868,7 @@ impl<A: Precompile, B: Precompile> Precompile for Either<A, B> {
         }
     }
 
-    fn call(&self, input: PrecompileInput<'_>) -> PrecompileResultExt {
+    fn call(&self, input: PrecompileInput<'_>) -> PrecompileResult {
         match self {
             Self::Left(p) => p.call(input),
             Self::Right(p) => p.call(input),
@@ -898,7 +890,7 @@ impl<P: Precompile> Precompile for StatefulPrecompile<P> {
         self.0.precompile_id()
     }
 
-    fn call(&self, input: PrecompileInput<'_>) -> PrecompileResultExt {
+    fn call(&self, input: PrecompileInput<'_>) -> PrecompileResult {
         self.0.call(input)
     }
 
@@ -1005,7 +997,7 @@ mod tests {
         // define a function to modify the precompile to always return a constant value
         spec_precompiles.map_precompile(&identity_address, move |_original_dyn| {
             // create a new DynPrecompile that always returns our constant
-            (|_input: PrecompileInput<'_>| -> PrecompileResultExt {
+            (|_input: PrecompileInput<'_>| -> PrecompileResult {
                 Ok(PrecompileOutput::new(10, Bytes::from_static(b"constant value"), 0))
             })
             .into()
@@ -1047,7 +1039,7 @@ mod tests {
         let mut ctx = EthEvmContext::new(EmptyDB::default(), Default::default());
 
         // define a closure that implements the precompile functionality
-        let closure_precompile = |input: PrecompileInput<'_>| -> PrecompileResultExt {
+        let closure_precompile = |input: PrecompileInput<'_>| -> PrecompileResult {
             let _timestamp = input.internals.block_env().timestamp();
             let mut output = b"processed: ".to_vec();
             output.extend_from_slice(input.data.as_ref());
@@ -1076,7 +1068,7 @@ mod tests {
 
     #[test]
     fn test_supports_caching() {
-        let closure_precompile = |_input: PrecompileInput<'_>| -> PrecompileResultExt {
+        let closure_precompile = |_input: PrecompileInput<'_>| -> PrecompileResult {
             Ok(PrecompileOutput::new(10, Bytes::from_static(b"output"), 0))
         };
 
