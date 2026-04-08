@@ -1,6 +1,6 @@
 //! Ethereum block executor.
 
-use std::cmp::min;
+use core::cmp::min;
 
 use super::{
     dao_fork, eip6110,
