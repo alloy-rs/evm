@@ -1,7 +1,13 @@
 //! Helpers for dealing with Precompiles.
 
 use crate::{Database, EvmInternals};
-use alloc::{borrow::Cow, boxed::Box, string::String, sync::Arc, vec::Vec};
+use alloc::{
+    borrow::Cow,
+    boxed::Box,
+    string::{String, ToString},
+    sync::Arc,
+    vec::Vec,
+};
 use alloy_consensus::transaction::Either;
 use alloy_primitives::{
     map::{AddressMap, AddressSet},
