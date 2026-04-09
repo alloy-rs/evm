@@ -5,9 +5,7 @@ use alloc::{boxed::Box, vec::Vec};
 use alloy_consensus::transaction::Recovered;
 use alloy_eips::{eip2718::WithEncoded, eip7685::Requests};
 use revm::{
-    context::result::{ExecutionResult, ResultAndState},
-    context_interface::either::Either,
-    inspector::NoOpInspector,
+    context::result::ResultAndState, context_interface::either::Either, inspector::NoOpInspector,
     Inspector,
 };
 
@@ -213,8 +211,8 @@ pub trait BlockExecutor {
     ///    [`Recovered<Self::Transaction>`](alloy_consensus::transaction::Recovered) (with sender)
     /// 2. [`Recovered<Self::Transaction>`](alloy_consensus::transaction::Recovered) →
     ///    [`TxEnv`](revm::context::TxEnv) (via [`FromRecoveredTx`])
-    /// 3. [`TxEnv`](revm::context::TxEnv) → EVM execution → [`ExecutionResult`]
-    /// 4. [`ExecutionResult`] + `Self::Transaction` → `Self::Receipt`
+    /// 3. [`TxEnv`](revm::context::TxEnv) → EVM execution → [`Self::Result`](BlockExecutor::Result)
+    /// 4. [`Self::Result`](BlockExecutor::Result) + `Self::Transaction` → `Self::Receipt`
     ///
     /// Common examples:
     /// - [`EthereumTxEnvelope`](alloy_consensus::EthereumTxEnvelope) for all Ethereum transaction
@@ -262,7 +260,7 @@ pub trait BlockExecutor {
     }
 
     /// Executes a single transaction and applies execution result to internal state. Invokes the
-    /// given closure with an internal [`ExecutionResult`] produced by the EVM.
+    /// given closure with an internal [`Self::Result`](BlockExecutor::Result) produced by the EVM.
     ///
     /// This method is similar to [`execute_transaction`](Self::execute_transaction) but provides
     /// access to the raw execution result before it's converted to a receipt. This is useful for:
@@ -274,7 +272,7 @@ pub trait BlockExecutor {
     fn execute_transaction_with_result_closure(
         &mut self,
         tx: impl ExecutableTx<Self>,
-        f: impl FnOnce(&ExecutionResult<<Self::Evm as Evm>::HaltReason>),
+        f: impl FnOnce(&Self::Result),
     ) -> Result<u64, BlockExecutionError> {
         self.execute_transaction_with_commit_condition(tx, |res| {
             f(res);
@@ -284,8 +282,8 @@ pub trait BlockExecutor {
     }
 
     /// Executes a single transaction and applies execution result to internal state. Invokes the
-    /// given closure with an internal [`ExecutionResult`] produced by the EVM, and commits the
-    /// transaction to the state on [`CommitChanges::Yes`].
+    /// given closure with an internal [`Self::Result`](BlockExecutor::Result) produced by the EVM,
+    /// and commits the transaction to the state on [`CommitChanges::Yes`].
     ///
     /// This is the most flexible transaction execution method, allowing conditional commitment
     /// based on the execution result. The closure receives the execution result and returns
@@ -306,12 +304,12 @@ pub trait BlockExecutor {
     fn execute_transaction_with_commit_condition(
         &mut self,
         tx: impl ExecutableTx<Self>,
-        f: impl FnOnce(&ExecutionResult<<Self::Evm as Evm>::HaltReason>) -> CommitChanges,
+        f: impl FnOnce(&Self::Result) -> CommitChanges,
     ) -> Result<Option<u64>, BlockExecutionError> {
         // Execute transaction without committing
         let output = self.execute_transaction_without_commit(tx)?;
 
-        if !f(&output.result().result).should_commit() {
+        if !f(&output).should_commit() {
             return Ok(None);
         }
 
