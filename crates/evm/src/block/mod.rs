@@ -282,8 +282,8 @@ pub trait BlockExecutor {
     }
 
     /// Executes a single transaction and applies execution result to internal state. Invokes the
-    /// given closure with an internal [`Self::Result`](BlockExecutor::Result) produced by the EVM, and commits the
-    /// transaction to the state on [`CommitChanges::Yes`].
+    /// given closure with an internal [`Self::Result`](BlockExecutor::Result) produced by the EVM,
+    /// and commits the transaction to the state on [`CommitChanges::Yes`].
     ///
     /// This is the most flexible transaction execution method, allowing conditional commitment
     /// based on the execution result. The closure receives the execution result and returns
