@@ -5,9 +5,7 @@ use alloc::{boxed::Box, vec::Vec};
 use alloy_consensus::transaction::Recovered;
 use alloy_eips::{eip2718::WithEncoded, eip7685::Requests};
 use revm::{
-    context::result::{ExecutionResult, ResultAndState},
-    context_interface::either::Either,
-    inspector::NoOpInspector,
+    context::result::ResultAndState, context_interface::either::Either, inspector::NoOpInspector,
     Inspector,
 };
 
@@ -274,7 +272,7 @@ pub trait BlockExecutor {
     fn execute_transaction_with_result_closure(
         &mut self,
         tx: impl ExecutableTx<Self>,
-        f: impl FnOnce(&ExecutionResult<<Self::Evm as Evm>::HaltReason>),
+        f: impl FnOnce(&Self::Result),
     ) -> Result<u64, BlockExecutionError> {
         self.execute_transaction_with_commit_condition(tx, |res| {
             f(res);
@@ -306,12 +304,12 @@ pub trait BlockExecutor {
     fn execute_transaction_with_commit_condition(
         &mut self,
         tx: impl ExecutableTx<Self>,
-        f: impl FnOnce(&ExecutionResult<<Self::Evm as Evm>::HaltReason>) -> CommitChanges,
+        f: impl FnOnce(&Self::Result) -> CommitChanges,
     ) -> Result<Option<u64>, BlockExecutionError> {
         // Execute transaction without committing
         let output = self.execute_transaction_without_commit(tx)?;
 
-        if !f(&output.result().result).should_commit() {
+        if !f(&output).should_commit() {
             return Ok(None);
         }
 
