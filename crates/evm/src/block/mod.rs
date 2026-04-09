@@ -211,8 +211,8 @@ pub trait BlockExecutor {
     ///    [`Recovered<Self::Transaction>`](alloy_consensus::transaction::Recovered) (with sender)
     /// 2. [`Recovered<Self::Transaction>`](alloy_consensus::transaction::Recovered) →
     ///    [`TxEnv`](revm::context::TxEnv) (via [`FromRecoveredTx`])
-    /// 3. [`TxEnv`](revm::context::TxEnv) → EVM execution → [`ExecutionResult`]
-    /// 4. [`ExecutionResult`] + `Self::Transaction` → `Self::Receipt`
+    /// 3. [`TxEnv`](revm::context::TxEnv) → EVM execution → [`Self::Result`](BlockExecutor::Result)
+    /// 4. [`Self::Result`](BlockExecutor::Result) + `Self::Transaction` → `Self::Receipt`
     ///
     /// Common examples:
     /// - [`EthereumTxEnvelope`](alloy_consensus::EthereumTxEnvelope) for all Ethereum transaction
@@ -260,7 +260,7 @@ pub trait BlockExecutor {
     }
 
     /// Executes a single transaction and applies execution result to internal state. Invokes the
-    /// given closure with an internal [`ExecutionResult`] produced by the EVM.
+    /// given closure with an internal [`Self::Result`](BlockExecutor::Result) produced by the EVM.
     ///
     /// This method is similar to [`execute_transaction`](Self::execute_transaction) but provides
     /// access to the raw execution result before it's converted to a receipt. This is useful for:
@@ -282,7 +282,7 @@ pub trait BlockExecutor {
     }
 
     /// Executes a single transaction and applies execution result to internal state. Invokes the
-    /// given closure with an internal [`ExecutionResult`] produced by the EVM, and commits the
+    /// given closure with an internal [`Self::Result`](BlockExecutor::Result) produced by the EVM, and commits the
     /// transaction to the state on [`CommitChanges::Yes`].
     ///
     /// This is the most flexible transaction execution method, allowing conditional commitment
