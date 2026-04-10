@@ -40,13 +40,13 @@ alloy-evm = { version = "0.30.0", path = "crates/evm", default-features = false 
 # alloy
 alloy-eip2124 = { version = "0.2", default-features = false }
 alloy-chains = { version = "0.2.0", default-features = false }
-alloy-eips = { version = "1.5.2", default-features = false }
-alloy-consensus = { version = "1.5.2", default-features = false }
+alloy-eips = { version = "2.0.0-rc.1", default-features = false }
+alloy-consensus = { version = "2.0.0-rc.1", default-features = false }
 alloy-primitives = { version = "1.0.0", default-features = false }
 alloy-sol-types = { version = "1.0.0", default-features = false }
 alloy-hardforks = { version = "0.4.7" }
-alloy-rpc-types-eth = { version = "1.5.2", default-features = false }
-alloy-rpc-types-engine = { version = "1.5.2", default-features = false }
+alloy-rpc-types-eth = { version = "2.0.0-rc.1", default-features = false }
+alloy-rpc-types-engine = { version = "2.0.0-rc.1", default-features = false }
 
 # revm
 revm = { version = "36.0.0", default-features = false }
@@ -61,3 +61,13 @@ serde = { version = "1", default-features = false, features = ["derive"] }
 thiserror = { version = "2.0.0", default-features = false }
 serde_json = "1"
 test-case = "3"
+
+[patch.crates-io]
+alloy-eips = { git = "https://github.com/alloy-rs/alloy", branch = "release/2.0.0-rc.1" }
+alloy-consensus = { git = "https://github.com/alloy-rs/alloy", branch = "release/2.0.0-rc.1" }
+alloy-rpc-types-eth = { git = "https://github.com/alloy-rs/alloy", branch = "release/2.0.0-rc.1" }
+alloy-rpc-types-engine = { git = "https://github.com/alloy-rs/alloy", branch = "release/2.0.0-rc.1" }
+alloy-serde = { git = "https://github.com/alloy-rs/alloy", branch = "release/2.0.0-rc.1" }
+alloy-network-primitives = { git = "https://github.com/alloy-rs/alloy", branch = "release/2.0.0-rc.1" }
+alloy-consensus-any = { git = "https://github.com/alloy-rs/alloy", branch = "release/2.0.0-rc.1" }
+alloy-tx-macros = { git = "https://github.com/alloy-rs/alloy", branch = "release/2.0.0-rc.1" }
