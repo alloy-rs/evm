@@ -808,7 +808,7 @@ impl Precompile for revm::precompile::Precompile {
     }
 
     fn call(&self, input: PrecompileInput<'_>) -> PrecompileResult {
-        Ok(self.execute(input.data, input.gas, input.reservoir))
+        self.execute(input.data, input.gas, input.reservoir)
     }
 
     fn supports_caching(&self) -> bool {
@@ -828,7 +828,7 @@ where
 impl From<PrecompileFn> for DynPrecompile {
     fn from(f: PrecompileFn) -> Self {
         let p = move |input: PrecompileInput<'_>| -> PrecompileResult {
-            Ok(f(input.data, input.gas, input.reservoir))
+            f(input.data, input.gas, input.reservoir)
         };
         p.into()
     }
@@ -846,7 +846,7 @@ where
 impl From<(PrecompileId, PrecompileFn)> for DynPrecompile {
     fn from((id, f): (PrecompileId, PrecompileFn)) -> Self {
         let p = move |input: PrecompileInput<'_>| -> PrecompileResult {
-            Ok(f(input.data, input.gas, input.reservoir))
+            f(input.data, input.gas, input.reservoir)
         };
         (id, p).into()
     }
