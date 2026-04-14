@@ -6,7 +6,9 @@ use alloy_primitives::{Address, Bytes, Log, TxKind, B256, U256};
 use core::{error::Error, fmt, fmt::Debug};
 use revm::{
     context::{
-        journaled_state::{account::JournaledAccountTr, JournalCheckpoint, TransferError},
+        journaled_state::{
+            account::JournaledAccountTr, JournalCheckpoint, JournalLoadError, TransferError,
+        },
         result::InvalidTransaction,
         Block, Cfg, ContextTr, DBErrorMarker, JournalTr,
     },
@@ -257,14 +259,16 @@ trait EvmInternalsTr: Database<Error = ErasedError> + Debug {
         &'a mut self,
         address: Address,
         skip_cold_load: bool,
-    ) -> Result<StateLoad<Box<dyn JournaledAccountTr + 'a>>, EvmInternalsError>;
+    ) -> Result<StateLoad<Box<dyn JournaledAccountTr + 'a>>, JournalLoadError<EvmInternalsError>>;
 
     /// Loads an account mutably.
     fn load_account_mut<'a>(
         &'a mut self,
         address: Address,
     ) -> Result<StateLoad<Box<dyn JournaledAccountTr + 'a>>, EvmInternalsError> {
+        // safe to unwrap as skip_cold_load is false.
         self.load_account_mut_skip_cold_load(address, false)
+            .map_err(JournalLoadError::unwrap_db_error)
     }
 
     fn load_account_code<'a>(
@@ -416,7 +420,8 @@ where
         &'a mut self,
         address: Address,
         skip_cold_load: bool,
-    ) -> Result<StateLoad<Box<dyn JournaledAccountTr + 'a>>, EvmInternalsError> {
+    ) -> Result<StateLoad<Box<dyn JournaledAccountTr + 'a>>, JournalLoadError<EvmInternalsError>>
+    {
         self.0
             .load_account_mut_skip_cold_load(address, skip_cold_load)
             .map(|state_load| {
@@ -424,7 +429,7 @@ where
                     Box::new(journaled_account) as Box<dyn JournaledAccountTr + 'a>
                 })
             })
-            .map_err(EvmInternalsError::database)
+            .map_err(|e| e.map(EvmInternalsError::database))
     }
 
     fn transfer(
@@ -560,7 +565,8 @@ impl<'a> EvmInternals<'a> {
         &'b mut self,
         address: Address,
         skip_cold_load: bool,
-    ) -> Result<StateLoad<Box<dyn JournaledAccountTr + 'b>>, EvmInternalsError> {
+    ) -> Result<StateLoad<Box<dyn JournaledAccountTr + 'b>>, JournalLoadError<EvmInternalsError>>
+    {
         self.internals.load_account_mut_skip_cold_load(address, skip_cold_load)
     }
 

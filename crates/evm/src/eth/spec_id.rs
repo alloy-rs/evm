@@ -81,6 +81,10 @@ mod tests {
             Self::from_timestamp_zero(EthereumHardfork::Osaka)
         }
 
+        fn amsterdam() -> Self {
+            Self::from_timestamp_zero(EthereumHardfork::Amsterdam)
+        }
+
         fn prague() -> Self {
             Self::from_timestamp_zero(EthereumHardfork::Prague)
         }
@@ -145,6 +149,7 @@ mod tests {
     }
 
     #[test_case::test_case(FakeHardfork::osaka(), SpecId::OSAKA; "Osaka")]
+    #[test_case::test_case(FakeHardfork::amsterdam(), SpecId::AMSTERDAM; "Amsterdam")]
     #[test_case::test_case(FakeHardfork::prague(), SpecId::PRAGUE; "Prague")]
     #[test_case::test_case(FakeHardfork::cancun(), SpecId::CANCUN; "Cancun")]
     #[test_case::test_case(FakeHardfork::shanghai(), SpecId::SHANGHAI; "Shanghai")]
