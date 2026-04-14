@@ -97,7 +97,10 @@ pub fn insert_post_block_withdrawals_balance_increments(
         if let Some(withdrawals) = withdrawals {
             for withdrawal in withdrawals {
                 *balance_increments.entry(withdrawal.address).or_default() +=
-                    withdrawal.amount_wei().to::<u128>();
+                if withdrawal.amount > 0 {
+                    *balance_increments.entry(withdrawal.address).or_default() +=
+                        withdrawal.amount_wei().to::<u128>();
+                }
             }
         }
     }
