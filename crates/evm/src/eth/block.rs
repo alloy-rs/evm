@@ -216,17 +216,6 @@ where
         self.block_state_gas_used += state_gas_used;
         self.cumulative_tx_gas_used += tx_gas_used;
 
-        // check whether amsterdam is active
-        let amsterdam_active = self
-            .spec
-            .is_amsterdam_active_at_timestamp(self.evm.block().timestamp().saturating_to());
-
-        // Check block gas limit after each transaction if Amsterdam is active, as required by
-        // EIP-8037.
-        if amsterdam_active && self.max_block_gas_used() > self.evm.block().gas_limit() {
-            return Err(BlockValidationError::BlockGasExceeded.into());
-        }
-
         // only determine cancun fields when active
         if self.spec.is_cancun_active_at_timestamp(self.evm.block().timestamp().saturating_to()) {
             self.blob_gas_used = self.blob_gas_used.saturating_add(blob_gas_used);
