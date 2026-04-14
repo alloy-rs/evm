@@ -21,7 +21,9 @@ pub fn spec_by_timestamp_and_block_number<C>(
 where
     C: EthereumHardforks,
 {
-    if chain_spec.is_osaka_active_at_timestamp(timestamp) {
+    if chain_spec.is_amsterdam_active_at_timestamp(timestamp) {
+        SpecId::AMSTERDAM
+    } else if chain_spec.is_osaka_active_at_timestamp(timestamp) {
         SpecId::OSAKA
     } else if chain_spec.is_prague_active_at_timestamp(timestamp) {
         SpecId::PRAGUE
@@ -77,6 +79,10 @@ mod tests {
     impl FakeHardfork {
         fn osaka() -> Self {
             Self::from_timestamp_zero(EthereumHardfork::Osaka)
+        }
+
+        fn amsterdam() -> Self {
+            Self::from_timestamp_zero(EthereumHardfork::Amsterdam)
         }
 
         fn prague() -> Self {
@@ -143,6 +149,7 @@ mod tests {
     }
 
     #[test_case::test_case(FakeHardfork::osaka(), SpecId::OSAKA; "Osaka")]
+    #[test_case::test_case(FakeHardfork::amsterdam(), SpecId::AMSTERDAM; "Amsterdam")]
     #[test_case::test_case(FakeHardfork::prague(), SpecId::PRAGUE; "Prague")]
     #[test_case::test_case(FakeHardfork::cancun(), SpecId::CANCUN; "Cancun")]
     #[test_case::test_case(FakeHardfork::shanghai(), SpecId::SHANGHAI; "Shanghai")]

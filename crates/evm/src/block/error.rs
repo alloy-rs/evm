@@ -79,6 +79,11 @@ pub enum BlockValidationError {
     /// [EIP-6110]: https://eips.ethereum.org/EIPS/eip-6110
     #[error("failed to decode deposit requests from receipts: {_0}")]
     DepositRequestDecode(String),
+    /// Error when block's total gas used exceeds the block gas limit
+    ///
+    /// [EIP-8037]: https://eips.ethereum.org/EIPS/eip-8037
+    #[error("block gas used exceeds block gas limit")]
+    BlockGasExceeded,
     /// Arbitrary Block validation errors.
     #[error(transparent)]
     Other(Box<dyn core::error::Error + Send + Sync + 'static>),

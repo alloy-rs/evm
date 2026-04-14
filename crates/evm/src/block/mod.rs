@@ -12,6 +12,9 @@ use revm::{
 mod error;
 pub use error::*;
 
+mod gas_output;
+pub use gas_output::*;
+
 mod state_hook;
 pub use state_hook::*;
 
@@ -255,7 +258,7 @@ pub trait BlockExecutor {
     fn execute_transaction(
         &mut self,
         tx: impl ExecutableTx<Self>,
-    ) -> Result<u64, BlockExecutionError> {
+    ) -> Result<GasOutput, BlockExecutionError> {
         self.execute_transaction_with_result_closure(tx, |_| ())
     }
 
@@ -273,7 +276,7 @@ pub trait BlockExecutor {
         &mut self,
         tx: impl ExecutableTx<Self>,
         f: impl FnOnce(&Self::Result),
-    ) -> Result<u64, BlockExecutionError> {
+    ) -> Result<GasOutput, BlockExecutionError> {
         self.execute_transaction_with_commit_condition(tx, |res| {
             f(res);
             CommitChanges::Yes
@@ -305,7 +308,7 @@ pub trait BlockExecutor {
         &mut self,
         tx: impl ExecutableTx<Self>,
         f: impl FnOnce(&Self::Result) -> CommitChanges,
-    ) -> Result<Option<u64>, BlockExecutionError> {
+    ) -> Result<Option<GasOutput>, BlockExecutionError> {
         // Execute transaction without committing
         let output = self.execute_transaction_without_commit(tx)?;
 
@@ -341,11 +344,14 @@ pub trait BlockExecutor {
     /// [`execute_transaction_without_commit`](Self::execute_transaction_without_commit)
     /// and applies the state changes, updates gas accounting, and generates a receipt.
     ///
-    /// Returns the gas used by the transaction.
+    /// Returns the gas used by the transaction (including both regular and state gas).
     ///
     /// # Parameters
     /// - `output`: The transaction output containing execution result and state changes
-    fn commit_transaction(&mut self, output: Self::Result) -> Result<u64, BlockExecutionError>;
+    fn commit_transaction(
+        &mut self,
+        output: Self::Result,
+    ) -> Result<GasOutput, BlockExecutionError>;
 
     /// Applies any necessary changes after executing the block's transactions, completes execution
     /// and returns the underlying EVM along with execution result.
