@@ -82,7 +82,7 @@ pub enum BlockValidationError {
     /// Error when block's total gas used exceeds the block gas limit
     ///
     /// [EIP-8037]: https://eips.ethereum.org/EIPS/eip-8037
-    #[error("block gas used  exceeds block gas limit")]
+    #[error("block gas used exceeds block gas limit")]
     BlockGasExceeded,
     /// Arbitrary Block validation errors.
     #[error(transparent)]
