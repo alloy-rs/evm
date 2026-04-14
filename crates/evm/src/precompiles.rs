@@ -731,6 +731,12 @@ pub trait Precompile {
     fn precompile_id(&self) -> &PrecompileId;
 
     /// Execute the precompile with the given input data, gas limit, and caller address.
+    ///
+    /// `Ok(PrecompileOutput)` covers non-fatal outcomes (success, revert, halt such as
+    /// out-of-gas), distinguished by [`PrecompileOutput::status`]. `Err(PrecompileError)` is
+    /// reserved for fatal errors that abort EVM execution.
+    ///
+    /// [`PrecompileOutput::status`]: revm::precompile::PrecompileOutput::status
     fn call(&self, input: PrecompileInput<'_>) -> PrecompileResult;
 
     /// Returns whether this precompile's results should be cached.
