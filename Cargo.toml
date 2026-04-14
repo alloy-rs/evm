@@ -62,12 +62,3 @@ thiserror = { version = "2.0.0", default-features = false }
 serde_json = "1"
 test-case = "3"
 
-[patch.crates-io]
-alloy-eips = { git = "https://github.com/alloy-rs/alloy", branch = "release/2.0.0-rc.1" }
-alloy-consensus = { git = "https://github.com/alloy-rs/alloy", branch = "release/2.0.0-rc.1" }
-alloy-rpc-types-eth = { git = "https://github.com/alloy-rs/alloy", branch = "release/2.0.0-rc.1" }
-alloy-rpc-types-engine = { git = "https://github.com/alloy-rs/alloy", branch = "release/2.0.0-rc.1" }
-alloy-serde = { git = "https://github.com/alloy-rs/alloy", branch = "release/2.0.0-rc.1" }
-alloy-network-primitives = { git = "https://github.com/alloy-rs/alloy", branch = "release/2.0.0-rc.1" }
-alloy-consensus-any = { git = "https://github.com/alloy-rs/alloy", branch = "release/2.0.0-rc.1" }
-alloy-tx-macros = { git = "https://github.com/alloy-rs/alloy", branch = "release/2.0.0-rc.1" }
