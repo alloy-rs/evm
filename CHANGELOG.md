@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.32.0](https://github.com/alloy-rs/evm/releases/tag/v0.32.0) - 2026-04-14
+
+### Dependencies
+
+- Revm state-gas integration ([#286](https://github.com/alloy-rs/evm/issues/286))
+
+### Miscellaneous Tasks
+
+- [BAL] Added slotnum changes  for glam ([#338](https://github.com/alloy-rs/evm/issues/338))
+
 ## [0.31.0](https://github.com/alloy-rs/evm/releases/tag/v0.31.0) - 2026-04-13
 
 ### Dependencies
@@ -14,6 +24,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Documentation
 
 - Improve state hook source docs and add Other variants ([#325](https://github.com/alloy-rs/evm/issues/325))
+
+### Miscellaneous Tasks
+
+- Release 0.31.0
 
 ### Refactor
 
