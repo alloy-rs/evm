@@ -2,8 +2,9 @@
 
 use crate::{Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, RecoveredTx, ToTxEnv};
 use alloc::{boxed::Box, vec::Vec};
-use alloy_consensus::transaction::Recovered;
+use alloy_consensus::transaction::{Recovered, TxHashRef};
 use alloy_eips::{eip2718::WithEncoded, eip7685::Requests};
+use alloy_primitives::B256;
 use revm::{
     context::result::ResultAndState, context_interface::either::Either, inspector::NoOpInspector,
     Inspector,
@@ -440,6 +441,99 @@ pub trait TxResult {
     /// Consumes self and returns the inner EVM result.
     fn into_result(self) -> ResultAndState<Self::HaltReason>;
 }
+
+/// Extension helpers for [`BlockExecutor`] — composed operations commonly
+/// needed by RPC layers, debuggers, and testing harnesses.
+///
+/// All methods have default implementations built on top of
+/// [`BlockExecutor`]'s required primitives. Implementors only need to
+/// implement `BlockExecutor`; they get `BlockExecutorExt` for free via
+/// the blanket impl.
+pub trait BlockExecutorExt: BlockExecutor {
+    /// Replays transactions by committing each one via [`BlockExecutor::execute_transaction`],
+    /// stopping **before** executing the transaction whose hash matches `target_tx_hash`.
+    ///
+    /// Returns the 0-based index of the target transaction within the iterator.
+    ///
+    /// If the target transaction is not found, all transactions are executed and the
+    /// total count is returned.
+    fn replay_transactions_until(
+        &mut self,
+        transactions: impl IntoIterator<Item = impl ExecutableTx<Self> + TxHashRef>,
+        target_tx_hash: B256,
+    ) -> Result<usize, BlockExecutionError> {
+        let mut count = 0;
+        for (index, tx) in transactions.into_iter().enumerate() {
+            if *tx.tx_hash() == target_tx_hash {
+                return Ok(index);
+            }
+            self.execute_transaction(tx)?;
+            count = index + 1;
+        }
+        Ok(count)
+    }
+
+    /// Replays transactions up to the target, then executes the target transaction
+    /// **without committing** its state changes.
+    ///
+    /// Returns `Some((index, result))` if the target is found, `None` otherwise.
+    ///
+    /// All transactions **before** the target are committed. The target transaction
+    /// result is returned without being committed — call
+    /// [`BlockExecutor::commit_transaction`] to persist if needed.
+    fn replay_transaction(
+        &mut self,
+        transactions: impl IntoIterator<Item = impl ExecutableTx<Self> + TxHashRef>,
+        target_tx_hash: B256,
+    ) -> Result<Option<(usize, Self::Result)>, BlockExecutionError> {
+        for (index, tx) in transactions.into_iter().enumerate() {
+            if *tx.tx_hash() == target_tx_hash {
+                let result = self.execute_transaction_without_commit(tx)?;
+                return Ok(Some((index, result)));
+            }
+            self.execute_transaction(tx)?;
+        }
+        Ok(None)
+    }
+
+    /// Executes a transaction without committing state changes.
+    ///
+    /// Semantic wrapper around [`BlockExecutor::execute_transaction_without_commit`]
+    /// that communicates dry-run intent.
+    ///
+    /// # Caveats
+    ///
+    /// The executor's internal EVM journal may be modified. For true isolation,
+    /// use a separate executor instance.
+    fn simulate_transaction(
+        &mut self,
+        tx: impl ExecutableTx<Self>,
+    ) -> Result<Self::Result, BlockExecutionError> {
+        self.execute_transaction_without_commit(tx)
+    }
+
+    /// Executes a transaction without committing, then passes the full result and
+    /// mutable EVM access to a closure that decides whether to commit.
+    ///
+    /// More powerful than [`BlockExecutor::execute_transaction_with_commit_condition`]
+    /// which only exposes `&ExecutionResult` (no state diff, no EVM access).
+    fn execute_transaction_with_context<F, R>(
+        &mut self,
+        tx: impl ExecutableTx<Self>,
+        f: F,
+    ) -> Result<(R, Option<u64>), BlockExecutionError>
+    where
+        F: FnOnce(&Self::Result, &mut Self::Evm) -> (R, CommitChanges),
+    {
+        let result = self.execute_transaction_without_commit(tx)?;
+        let (ret, commit) = f(&result, self.evm_mut());
+        let gas =
+            if commit.should_commit() { Some(self.commit_transaction(result)?) } else { None };
+        Ok((ret, gas))
+    }
+}
+
+impl<T: BlockExecutor + ?Sized> BlockExecutorExt for T {}
 
 /// A helper trait encapsulating the constraints on [`BlockExecutor`] produced by the
 /// [`BlockExecutorFactory`] to avoid duplicating them in every implementation.
