@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.33.0](https://github.com/alloy-rs/evm/releases/tag/v0.33.0) - 2026-04-17
+
+### Dependencies
+
+- Bump revm 38 ([#342](https://github.com/alloy-rs/evm/issues/342))
+
+### Miscellaneous Tasks
+
+- [BAL] Added slotnum to EthBlockExecutionCtx ([#340](https://github.com/alloy-rs/evm/issues/340))
+
 ## [0.32.0](https://github.com/alloy-rs/evm/releases/tag/v0.32.0) - 2026-04-14
 
 ### Dependencies
@@ -13,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Miscellaneous Tasks
 
+- Release 0.32.0
 - [BAL] Added slotnum changes  for glam ([#338](https://github.com/alloy-rs/evm/issues/338))
 
 ## [0.31.0](https://github.com/alloy-rs/evm/releases/tag/v0.31.0) - 2026-04-13
