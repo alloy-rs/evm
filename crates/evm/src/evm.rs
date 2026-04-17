@@ -5,7 +5,7 @@ use alloy_consensus::transaction::TxHashRef;
 use alloy_primitives::{Address, Bytes, B256};
 use core::{error::Error, fmt::Debug, hash::Hash};
 use revm::{
-    context::result::ExecutionResult,
+    context::{result::ExecutionResult, CfgEnv},
     context_interface::{
         result::{HaltReasonTr, ResultAndState},
         ContextTr,
@@ -63,6 +63,9 @@ pub trait Evm {
 
     /// Reference to [`Evm::BlockEnv`].
     fn block(&self) -> &Self::BlockEnv;
+
+    /// Reference to [`CfgEnv`].
+    fn cfg_env(&self) -> &CfgEnv<Self::Spec>;
 
     /// Returns the chain ID of the environment.
     fn chain_id(&self) -> u64;

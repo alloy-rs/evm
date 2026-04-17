@@ -24,7 +24,7 @@ use alloy_hardforks::EthereumHardfork;
 use alloy_primitives::{Bytes, Log, B256};
 use revm::{
     context::Block, context_interface::result::ResultAndState, database::DatabaseCommitExt,
-    primitives::eip7825::TX_GAS_LIMIT_CAP, DatabaseCommit, Inspector,
+    DatabaseCommit, Inspector,
 };
 
 /// Context for Ethereum block execution.
@@ -177,9 +177,12 @@ where
 
         // Use regular part of transaction gas limit to check if it fits inside available block
         // space.
-        let tx_min_gas_limit = min(tx.tx().gas_limit(), TX_GAS_LIMIT_CAP);
+        let mut max_tx_gas_usage = tx.tx().gas_limit();
+        if let Some(tx_gas_limit_cap) = self.evm.cfg_env().tx_gas_limit_cap {
+            max_tx_gas_usage = min(max_tx_gas_usage, tx_gas_limit_cap);
+        }
 
-        if tx_min_gas_limit > block_available_gas {
+        if max_tx_gas_usage > block_available_gas {
             return Err(BlockValidationError::TransactionGasLimitMoreThanAvailableBlockGas {
                 transaction_gas_limit: tx.tx().gas_limit(),
                 block_available_gas,
