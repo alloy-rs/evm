@@ -1,6 +1,6 @@
 use crate::{Evm, EvmEnv};
 use alloy_primitives::{Address, Bytes};
-use revm::context::either;
+use revm::context::{either, CfgEnv};
 
 impl<L, R> Evm for either::Either<L, R>
 where
@@ -27,6 +27,10 @@ where
 
     fn block(&self) -> &Self::BlockEnv {
         either::for_both!(self, evm => evm.block())
+    }
+
+    fn cfg_env(&self) -> &CfgEnv<Self::Spec> {
+        either::for_both!(self, evm => evm.cfg_env())
     }
 
     fn chain_id(&self) -> u64 {
