@@ -165,10 +165,7 @@ where
         // the original behavior where gas_used = spent - refunded.
         //
         // Amsterdam+: use block_regular_gas_used.
-        let block_gas_used = if self
-            .spec
-            .is_amsterdam_active_at_timestamp(self.evm.block().timestamp().saturating_to())
-        {
+        let block_gas_used = if self.evm.cfg_env().enable_amsterdam_eip8037 {
             self.block_regular_gas_used
         } else {
             self.cumulative_tx_gas_used
@@ -307,10 +304,7 @@ where
 
         // Pre-Amsterdam: use tx_gas_used (with refunds) for the block gas total.
         // Amsterdam+: use max(regular, state) gas without refunds (EIP-8037).
-        let gas_used = if self
-            .spec
-            .is_amsterdam_active_at_timestamp(self.evm.block().timestamp().saturating_to())
-        {
+        let gas_used = if self.evm.cfg_env().enable_amsterdam_eip8037 {
             self.max_block_gas_used()
         } else {
             self.cumulative_tx_gas_used
