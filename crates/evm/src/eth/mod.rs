@@ -2,7 +2,13 @@
 
 pub use env::NextEvmEnvAttributes;
 
-use crate::{env::EvmEnv, evm::EvmFactory, precompiles::PrecompilesMap, Database, Evm};
+use crate::{
+    env::EvmEnv,
+    evm::{BalEvm, EvmFactory},
+    precompiles::PrecompilesMap,
+    Database, Evm,
+};
+use alloc::sync::Arc;
 use alloy_primitives::{Address, Bytes};
 use core::{
     fmt::Debug,
@@ -11,11 +17,13 @@ use core::{
 use revm::{
     context::{BlockEnv, CfgEnv, Evm as RevmEvm, TxEnv},
     context_interface::result::{EVMError, HaltReason, ResultAndState},
+    database::bal::{BalDatabase, EvmDatabaseError},
     handler::{instructions::EthInstructions, EthFrame, EthPrecompiles, PrecompileProvider},
     inspector::NoOpInspector,
     interpreter::{interpreter::EthInterpreter, InterpreterResult},
     precompile::{PrecompileSpecId, Precompiles},
     primitives::hardfork::SpecId,
+    state::bal::Bal,
     Context, ExecuteEvm, InspectEvm, Inspector, MainBuilder, MainContext, SystemCallEvm,
 };
 
@@ -31,7 +39,7 @@ mod env;
 pub(crate) mod spec_id;
 
 /// The Ethereum EVM context type.
-pub type EthEvmContext<DB> = Context<BlockEnv, TxEnv, CfgEnv, DB>;
+pub type EthEvmContext<DB> = Context<BlockEnv, TxEnv, CfgEnv, BalDatabase<DB>>;
 
 /// Helper builder to construct `EthEvm` instances in a unified way.
 #[derive(Debug)]
@@ -109,7 +117,7 @@ impl<DB: Database, I> EthEvmBuilder<DB, I> {
         let inner = Context::mainnet()
             .with_block(self.block_env)
             .with_cfg(self.cfg_env)
-            .with_db(self.db)
+            .with_db(BalDatabase::new(self.db))
             .build_mainnet_with_inspector(self.inspector)
             .with_precompiles(precompiles);
 
@@ -200,7 +208,7 @@ where
 {
     type DB = DB;
     type Tx = TxEnv;
-    type Error = EVMError<DB::Error>;
+    type Error = EVMError<<BalDatabase<DB> as revm::Database>::Error>;
     type HaltReason = HaltReason;
     type Spec = SpecId;
     type BlockEnv = BlockEnv;
@@ -242,7 +250,7 @@ where
     fn finish(self) -> (Self::DB, EvmEnv<Self::Spec>) {
         let Context { block: block_env, cfg: cfg_env, journaled_state, .. } = self.inner.ctx;
 
-        (journaled_state.database, EvmEnv { block_env, cfg_env })
+        (journaled_state.database.db, EvmEnv { block_env, cfg_env })
     }
 
     fn set_inspector_enabled(&mut self, enabled: bool) {
@@ -262,6 +270,16 @@ where
     }
 }
 
+impl<DB: Database, I, PRECOMPILE> BalEvm for EthEvm<DB, I, PRECOMPILE> {
+    fn set_bal(&mut self, bal: Arc<Bal>) {
+        self.inner.ctx.journaled_state.database.bal_state.bal = Some(bal);
+    }
+
+    fn set_index(&mut self, index: usize) {
+        self.inner.ctx.journaled_state.database.bal_state.bal_index = index as u64;
+    }
+}
+
 /// Factory producing [`EthEvm`].
 #[derive(Debug, Default, Clone, Copy)]
 #[non_exhaustive]
@@ -269,9 +287,10 @@ pub struct EthEvmFactory;
 
 impl EvmFactory for EthEvmFactory {
     type Evm<DB: Database, I: Inspector<EthEvmContext<DB>>> = EthEvm<DB, I, Self::Precompiles>;
-    type Context<DB: Database> = Context<BlockEnv, TxEnv, CfgEnv, DB>;
+    type Context<DB: Database> = EthEvmContext<DB>;
     type Tx = TxEnv;
-    type Error<DBError: core::error::Error + Send + Sync + 'static> = EVMError<DBError>;
+    type Error<DBError: core::error::Error + Send + Sync + 'static> =
+        EVMError<EvmDatabaseError<DBError>>;
     type HaltReason = HaltReason;
     type Spec = SpecId;
     type BlockEnv = BlockEnv;
