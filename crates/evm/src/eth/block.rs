@@ -187,6 +187,25 @@ where
             .into());
         }
 
+        // Amsterdam+: state gas is not bounded by `tx_gas_limit_cap`, so a transaction can
+        // consume up to its full `gas_limit` worth of state gas. The block's state-gas
+        // reservoir is bounded by `block.gas_limit`, so the uncapped `tx.gas_limit` must
+        // also fit in the remaining state-gas budget — otherwise the block cannot stay
+        // within its overall gas limit.
+        if self.evm.cfg_env().enable_amsterdam_eip8037 {
+            let block_available_state_gas =
+                self.evm.block().gas_limit() - self.block_state_gas_used;
+            if tx.tx().gas_limit() > block_available_state_gas {
+                return Err(
+                    BlockValidationError::TransactionGasLimitMoreThanAvailableBlockStateGas {
+                        transaction_gas_limit: tx.tx().gas_limit(),
+                        block_available_state_gas,
+                    }
+                    .into(),
+                );
+            }
+        }
+
         // Execute transaction and return the result
         let result = self.evm.transact(tx_env).map_err(|err| {
             let hash = tx.tx().trie_hash();
