@@ -29,6 +29,16 @@ pub enum BlockValidationError {
         /// The available block gas
         block_available_gas: u64,
     },
+    /// Error when transaction gas limit exceeds available block state gas (EIP-8037).
+    #[error(
+        "transaction gas limit {transaction_gas_limit} is more than blocks available state gas {block_available_state_gas}"
+    )]
+    TransactionGasLimitMoreThanAvailableBlockStateGas {
+        /// The transaction's gas limit
+        transaction_gas_limit: u64,
+        /// The available block state gas
+        block_available_state_gas: u64,
+    },
     /// Error for EIP-4788 when parent beacon block root is missing
     #[error("EIP-4788 parent beacon block root missing for active Cancun block")]
     MissingParentBeaconBlockRoot,

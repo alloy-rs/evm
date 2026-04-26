@@ -193,14 +193,16 @@ where
         // also fit in the remaining state-gas budget — otherwise the block cannot stay
         // within its overall gas limit.
         if self.evm.cfg_env().enable_amsterdam_eip8037 {
-            let block_state_available_gas =
+            let block_available_state_gas =
                 self.evm.block().gas_limit() - self.block_state_gas_used;
-            if tx.tx().gas_limit() > block_state_available_gas {
-                return Err(BlockValidationError::TransactionGasLimitMoreThanAvailableBlockGas {
-                    transaction_gas_limit: tx.tx().gas_limit(),
-                    block_available_gas: block_state_available_gas,
-                }
-                .into());
+            if tx.tx().gas_limit() > block_available_state_gas {
+                return Err(
+                    BlockValidationError::TransactionGasLimitMoreThanAvailableBlockStateGas {
+                        transaction_gas_limit: tx.tx().gas_limit(),
+                        block_available_state_gas,
+                    }
+                    .into(),
+                );
             }
         }
 
