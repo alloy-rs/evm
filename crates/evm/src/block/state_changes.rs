@@ -82,8 +82,6 @@ pub fn post_block_withdrawals_balance_increments(
 
 /// Applies all withdrawal balance increments if shanghai is active at the given timestamp to the
 /// given `balance_increments` map.
-///
-/// Zero-valued withdrawals are filtered out.
 #[inline]
 pub fn insert_post_block_withdrawals_balance_increments(
     spec: impl EthereumHardforks,

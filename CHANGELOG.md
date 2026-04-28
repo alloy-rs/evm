@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.34.0](https://github.com/alloy-rs/evm/releases/tag/v0.34.0) - 2026-04-28
+
+### Documentation
+
+- Fix stale zero-withdrawal comment ([#351](https://github.com/alloy-rs/evm/issues/351))
+
+### Refactor
+
+- [evm] Require sendable tx results ([#352](https://github.com/alloy-rs/evm/issues/352))
+- Small changes to executor traits ([#346](https://github.com/alloy-rs/evm/issues/346))
+- [block] Expose executor tx result type ([#349](https://github.com/alloy-rs/evm/issues/349))
+
 ## [0.33.3](https://github.com/alloy-rs/evm/releases/tag/v0.33.3) - 2026-04-28
 
 ### Dependencies
@@ -13,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Miscellaneous Tasks
 
+- Release 0.33.3
 - [BAL] Allow tracking of zero balance change for withdrawal ([#339](https://github.com/alloy-rs/evm/issues/339))
 
 ## [0.33.2](https://github.com/alloy-rs/evm/releases/tag/v0.33.2) - 2026-04-20
