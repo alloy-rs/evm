@@ -5,11 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.33.3](https://github.com/alloy-rs/evm/releases/tag/v0.33.3) - 2026-04-28
+
+### Dependencies
+
+- Harden supply chain — pin actions, lock permissions ([#341](https://github.com/alloy-rs/evm/issues/341))
+
+### Miscellaneous Tasks
+
+- [BAL] Allow tracking of zero balance change for withdrawal ([#339](https://github.com/alloy-rs/evm/issues/339))
+
 ## [0.33.2](https://github.com/alloy-rs/evm/releases/tag/v0.33.2) - 2026-04-20
 
 ### Bug Fixes
 
 - Infer EIP-8037 activation from `CfgEnv` ([#344](https://github.com/alloy-rs/evm/issues/344))
+
+### Miscellaneous Tasks
+
+- Release 0.33.2
 
 ## [0.33.1](https://github.com/alloy-rs/evm/releases/tag/v0.33.1) - 2026-04-17
 
