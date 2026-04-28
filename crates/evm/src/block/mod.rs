@@ -449,6 +449,7 @@ where
         Evm = <F::EvmFactory as EvmFactory>::Evm<DB, I>,
         Transaction = F::Transaction,
         Receipt = F::Receipt,
+        Result = F::TxExecutionResult,
     >,
     DB: StateDB + 'a,
     I: Inspector<<F::EvmFactory as EvmFactory>::Context<DB>> + 'a,
@@ -464,6 +465,7 @@ where
         Evm = <F::EvmFactory as EvmFactory>::Evm<DB, I>,
         Transaction = F::Transaction,
         Receipt = F::Receipt,
+        Result = F::TxExecutionResult,
     >,
 {
 }
@@ -497,6 +499,18 @@ where
 pub trait BlockExecutorFactory: 'static {
     /// The EVM factory used by the executor.
     type EvmFactory: EvmFactory;
+
+    /// Result type produced by the executor for each transaction.
+    ///
+    /// This is the concrete [`BlockExecutor::Result`] type returned by executors created from this
+    /// factory. It captures the raw EVM execution output before it is committed into block state
+    /// and converted into a receipt.
+    ///
+    /// Exposing this type on the factory allows generic callers that only know the
+    /// [`BlockExecutorFactory`] to name the per-transaction execution result produced by its
+    /// executors. The result's halt reason must match the halt reason used by the configured
+    /// [`EvmFactory`].
+    type TxExecutionResult: TxResult<HaltReason = <Self::EvmFactory as EvmFactory>::HaltReason>;
 
     /// Context required for block execution beyond what the EVM provides (e.g.
     /// [`EvmEnv`](crate::EvmEnv))
