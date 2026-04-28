@@ -427,9 +427,9 @@ pub trait BlockExecutor {
 }
 
 /// A result of transaction execution.
-pub trait TxResult {
+pub trait TxResult: Send + 'static {
     /// Halt reason.
-    type HaltReason;
+    type HaltReason: Send + 'static;
 
     /// Returns the inner EVM result.
     fn result(&self) -> &ResultAndState<Self::HaltReason>;
