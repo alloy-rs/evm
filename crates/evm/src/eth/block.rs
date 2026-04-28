@@ -393,6 +393,10 @@ where
     type ExecutionCtx<'a> = EthBlockExecutionCtx<'a>;
     type Transaction = R::Transaction;
     type Receipt = R::Receipt;
+    type TxExecutionResult = EthTxResult<
+        <EvmF as EvmFactory>::HaltReason,
+        <R::Transaction as TransactionEnvelope>::TxType,
+    >;
 
     fn evm_factory(&self) -> &Self::EvmFactory {
         &self.evm_factory
