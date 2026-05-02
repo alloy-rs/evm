@@ -3,7 +3,7 @@
 //! This module provides helper functions for RPC implementations, including:
 //! - Block and state overrides
 
-use alloc::{boxed::Box, collections::BTreeMap};
+use alloc::collections::BTreeMap;
 use alloy_primitives::{keccak256, map::HashMap, Address, B256, U256};
 use alloy_rpc_types_eth::{
     state::{AccountOverride, StateOverride},
@@ -147,13 +147,10 @@ where
     }
 
     // Create a new account marked as touched
-    let mut acc = revm::state::Account {
-        info: info.clone(),
-        original_info: Box::new(info),
-        status: AccountStatus::Touched,
-        storage: Default::default(),
-        transaction_id: 0,
-    };
+    let mut acc = revm::state::Account::default();
+    acc.info = info;
+    acc.status = AccountStatus::Touched;
+    acc.set_current_info_as_original();
 
     let storage_diff = match (account_override.state, account_override.state_diff) {
         (Some(_), Some(_)) => return Err(StateOverrideError::BothStateAndStateDiff(account)),
@@ -163,13 +160,9 @@ where
         // used.
         (Some(state), None) => {
             // Destroy the account to ensure that its storage is cleared
-            db.commit(HashMap::from_iter([(
-                account,
-                Account {
-                    status: AccountStatus::SelfDestructed | AccountStatus::Touched,
-                    ..Default::default()
-                },
-            )]));
+            let mut destroyed = Account::default();
+            destroyed.status = AccountStatus::SelfDestructed | AccountStatus::Touched;
+            db.commit(HashMap::from_iter([(account, destroyed)]));
             // Mark the account as created to ensure that old storage is not read
             acc.mark_created();
             Some(state)

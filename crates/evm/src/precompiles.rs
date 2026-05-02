@@ -3,7 +3,6 @@
 use crate::{Database, EvmInternals};
 use alloc::{
     borrow::Cow,
-    boxed::Box,
     string::{String, ToString},
     sync::Arc,
     vec::Vec,
@@ -566,8 +565,11 @@ where
         Ok(Some(precompile_output_to_interpreter_result(precompile_output, inputs.gas_limit)))
     }
 
-    fn warm_addresses(&self) -> Box<impl Iterator<Item = Address>> {
-        Box::new(self.addresses().copied())
+    fn warm_addresses(&self) -> &AddressSet {
+        match &self.precompiles {
+            PrecompilesKind::Builtin(precompiles) => precompiles.addresses_set(),
+            PrecompilesKind::Dynamic(dyn_precompiles) => &dyn_precompiles.addresses,
+        }
     }
 
     fn contains(&self, address: &Address) -> bool {
