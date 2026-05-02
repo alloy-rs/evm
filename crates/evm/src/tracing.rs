@@ -20,6 +20,8 @@ pub struct TxTracer<E: Evm> {
 pub struct TracingCtx<'a, T, E: Evm> {
     /// The transaction that was just executed.
     pub tx: T,
+    /// The index of the transaction in the block.
+    pub tx_index: usize,
     /// Result of transaction execution.
     pub result: ExecutionResult<E::HaltReason>,
     /// State changes after transaction.
@@ -28,6 +30,8 @@ pub struct TracingCtx<'a, T, E: Evm> {
     pub inspector: &'a mut E::Inspector,
     /// Database used when executing the transaction, _before_ committing the state changes.
     pub db: &'a mut E::DB,
+    /// Block environment of the EVM.
+    pub block_env: &'a E::BlockEnv,
     /// Fused inspector.
     fused_inspector: &'a E::Inspector,
     /// Whether the inspector was fused.
@@ -39,6 +43,13 @@ impl<'a, T, E: Evm<Inspector: Clone>> TracingCtx<'a, T, E> {
     pub fn take_inspector(&mut self) -> E::Inspector {
         *self.was_fused = true;
         core::mem::replace(self.inspector, self.fused_inspector.clone())
+    }
+}
+
+impl<T: IntoTxEnv<E::Tx> + Clone, E: Evm> TracingCtx<'_, T, E> {
+    /// Reconstructs the transaction environment from the transaction.
+    pub fn tx_env(&self) -> E::Tx {
+        self.tx.clone().into_tx_env()
     }
 }
 
@@ -90,10 +101,13 @@ impl<E: Evm<Inspector: Clone, DB: DatabaseCommit>> TxTracer<E> {
         F: FnMut(TracingCtx<'_, T, E>) -> Result<O, Err>,
         Err: From<E::Error>,
     {
+        let block_env = self.evm.block().clone();
         TracerIter {
             inner: self,
             txs: txs.into_iter().peekable(),
             hook,
+            tx_index: 0,
+            block_env,
             skip_last_commit: true,
             fuse: true,
         }
@@ -116,6 +130,8 @@ pub struct TracerIter<'a, E: Evm, Txs: Iterator, F> {
     inner: &'a mut TxTracer<E>,
     txs: Peekable<Txs>,
     hook: F,
+    tx_index: usize,
+    block_env: E::BlockEnv,
     skip_last_commit: bool,
     fuse: bool,
 }
@@ -149,6 +165,8 @@ where
 
     fn next(&mut self) -> Option<Self::Item> {
         let tx = self.txs.next()?;
+        let tx_index = self.tx_index;
+        self.tx_index += 1;
         let result = self.inner.evm.transact(tx.clone());
 
         let TxTracer { evm, fused_inspector } = self.inner;
@@ -160,10 +178,12 @@ where
         let mut was_fused = false;
         let output = (self.hook)(TracingCtx {
             tx,
+            tx_index,
             result,
             state: &state,
             inspector,
             db,
+            block_env: &self.block_env,
             fused_inspector: &*fused_inspector,
             was_fused: &mut was_fused,
         });
@@ -179,5 +199,49 @@ where
         }
 
         Some(output)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use alloc::{vec, vec::Vec};
+
+    use crate::{env::EvmEnv, eth::EthEvmFactory, evm::EvmFactoryExt};
+    use alloy_primitives::{Address, U256};
+    use revm::{
+        context::{BlockEnv, TxEnv},
+        context_interface::Block,
+        database::CacheDB,
+        database_interface::EmptyDB,
+        inspector::NoOpInspector,
+        state::AccountInfo,
+    };
+
+    #[test]
+    fn test_tracing_ctx_tx_index_and_block_env() {
+        let block_env = BlockEnv { number: U256::from(42), ..Default::default() };
+
+        let mut cfg_env = revm::context::CfgEnv::default();
+        cfg_env.disable_nonce_check = true;
+        let env = EvmEnv { block_env, cfg_env };
+        let mut db = CacheDB::new(EmptyDB::default());
+        let sender = Address::ZERO;
+        db.insert_account_info(
+            sender,
+            AccountInfo { balance: U256::from(1_000_000_000_000u64), ..Default::default() },
+        );
+        let mut tracer = EthEvmFactory.create_tracer(db, env, NoOpInspector {});
+
+        let txs = vec![TxEnv::default(), TxEnv::default(), TxEnv::default()];
+
+        let results: Vec<_> = tracer
+            .trace_many(txs, |ctx| (ctx.tx_index, ctx.block_env.number(), ctx.block_env.basefee()))
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+
+        assert_eq!(results.len(), 3);
+        assert_eq!(results[0], (0, U256::from(42), 0));
+        assert_eq!(results[1], (1, U256::from(42), 0));
+        assert_eq!(results[2], (2, U256::from(42), 0));
     }
 }
