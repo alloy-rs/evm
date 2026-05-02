@@ -21,6 +21,9 @@ pub use state_hook::*;
 pub mod system_calls;
 pub use system_calls::*;
 
+mod exec_hook;
+pub use exec_hook::*;
+
 pub mod state_changes;
 
 pub mod state;
@@ -423,6 +426,25 @@ pub trait BlockExecutor {
         }
 
         self.apply_post_execution_changes()
+    }
+
+    /// Attaches a before-tx hook. Chain with [`after`](Self::after) for both.
+    fn before<F>(self, f: F) -> ExecHook<Self>
+    where
+        Self: Sized,
+        F: Fn(&mut Self::Evm, &dyn RecoveredTx<Self::Transaction>) -> HookResult + HookClosure,
+    {
+        ExecHook::new(self).before(f)
+    }
+
+    /// Attaches an after-tx hook. Chain with [`before`](Self::before) for both.
+    fn after<F>(self, f: F) -> ExecHook<Self>
+    where
+        Self: Sized,
+        F: Fn(&mut Self::Evm, &ExecutionResult<<Self::Evm as Evm>::HaltReason>) -> HookResult
+            + HookClosure,
+    {
+        ExecHook::new(self).after(f)
     }
 }
 
