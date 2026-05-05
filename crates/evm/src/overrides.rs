@@ -12,6 +12,7 @@ use alloy_rpc_types_eth::{
 use revm::{
     bytecode::BytecodeDecodeError,
     context::BlockEnv,
+    context_interface::block::BlobExcessGasAndPrice,
     database::{CacheDB, State},
     state::{Account, AccountStatus, Bytecode, EvmStorageSlot},
     Database, DatabaseCommit,
@@ -77,6 +78,7 @@ where
         coinbase,
         random,
         base_fee,
+        blob_base_fee,
         block_hash,
         ..
     } = BlockOverrides { ..overrides };
@@ -106,6 +108,14 @@ where
     }
     if let Some(base_fee) = base_fee {
         env.basefee = base_fee.saturating_to();
+    }
+    if let Some(blob_base_fee) = blob_base_fee {
+        let excess_blob_gas =
+            env.blob_excess_gas_and_price.map(|blob| blob.excess_blob_gas).unwrap_or_default();
+        env.blob_excess_gas_and_price = Some(BlobExcessGasAndPrice {
+            excess_blob_gas,
+            blob_gasprice: blob_base_fee.saturating_to(),
+        });
     }
 }
 
@@ -213,6 +223,25 @@ mod tests {
     use super::*;
     use alloy_primitives::{address, bytes};
     use revm::database::EmptyDB;
+
+    #[test]
+    fn test_block_override_blob_base_fee() {
+        let mut db = CacheDB::new(EmptyDB::new());
+        let mut env = BlockEnv {
+            blob_excess_gas_and_price: Some(BlobExcessGasAndPrice {
+                excess_blob_gas: 42,
+                blob_gasprice: 1,
+            }),
+            ..Default::default()
+        };
+
+        let overrides = BlockOverrides::default().with_blob_base_fee(U256::from(12345));
+        apply_block_overrides(overrides, &mut db, &mut env);
+
+        let blob = env.blob_excess_gas_and_price.unwrap();
+        assert_eq!(blob.excess_blob_gas, 42);
+        assert_eq!(blob.blob_gasprice, 12345);
+    }
 
     #[test]
     fn test_state_override_state() {
