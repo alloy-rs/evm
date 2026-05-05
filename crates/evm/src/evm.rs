@@ -1,6 +1,7 @@
 //! Abstraction over EVM.
 
 use crate::{env::BlockEnvironment, tracing::TxTracer, EvmEnv, EvmError, IntoTxEnv};
+use alloc::sync::Arc;
 use alloy_consensus::transaction::TxHashRef;
 use alloy_primitives::{Address, Bytes, B256};
 use core::{error::Error, fmt::Debug, hash::Hash};
@@ -11,6 +12,7 @@ use revm::{
         ContextTr,
     },
     inspector::{JournalExt, NoOpInspector},
+    state::bal::{Bal, BlockAccessIndex},
     DatabaseCommit, Inspector,
 };
 
@@ -255,6 +257,27 @@ pub trait EvmExt: Evm {
 /// Automatic implementation of [`EvmExt`] for all types that implement [`Evm`].
 impl<T: Evm> EvmExt for T {}
 
+/// An EVM implementation that supports BAL caching.
+pub trait BalEvm {
+    /// Sets the BAL to use for the block execution.
+    fn set_bal(&mut self, bal: Arc<Bal>);
+
+    /// Enables BAL building for the current block execution.
+    fn enable_bal_building(&mut self);
+
+    /// Sets an index of the next transaction to be executed.
+    ///
+    /// Caller must make sure to call [`Self::set_bal`] before for this to actually apply the
+    /// caching.
+    fn set_index(&mut self, index: BlockAccessIndex);
+
+    /// Bumps the BAL index. No-op if BAL building is not enabled.
+    fn bump_bal_index(&mut self);
+
+    /// Takes the built BAL. Will return [`None`] if [`Self::enable_bal_building`] was not called.
+    fn take_built_bal(&mut self) -> Option<Bal>;
+}
+
 /// A type responsible for creating instances of an ethereum virtual machine given a certain input.
 pub trait EvmFactory {
     /// The EVM type that this factory creates.
@@ -270,7 +293,7 @@ pub trait EvmFactory {
     >;
 
     /// The EVM context for inspectors
-    type Context<DB: Database>: ContextTr<Db = DB, Journal: JournalExt>;
+    type Context<DB: Database>: ContextTr<Journal: JournalExt>;
     /// Transaction environment.
     type Tx: IntoTxEnv<Self::Tx>;
     /// EVM error. See [`Evm::Error`].

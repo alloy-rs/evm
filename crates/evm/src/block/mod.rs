@@ -3,6 +3,7 @@
 use crate::{Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, RecoveredTx, ToTxEnv};
 use alloc::{boxed::Box, vec::Vec};
 use alloy_consensus::transaction::Recovered;
+use alloy_eip7928::BlockAccessList;
 use alloy_eips::{eip2718::WithEncoded, eip7685::Requests};
 use revm::{
     context::result::ResultAndState, context_interface::either::Either, inspector::NoOpInspector,
@@ -39,6 +40,8 @@ pub struct BlockExecutionResult<T> {
     pub gas_used: u64,
     /// Blob gas used by the block.
     pub blob_gas_used: u64,
+    /// The block access list.
+    pub block_access_list: Option<BlockAccessList>,
 }
 
 impl<T> Default for BlockExecutionResult<T> {
@@ -48,6 +51,7 @@ impl<T> Default for BlockExecutionResult<T> {
             requests: Default::default(),
             gas_used: 0,
             blob_gas_used: 0,
+            block_access_list: None,
         }
     }
 }
@@ -264,55 +268,6 @@ pub trait BlockExecutor {
         self.execute_transaction_with_result_closure(tx, |_| ())
     }
 
-    /// Executes a single transaction at its zero-based index in the block and applies execution
-    /// result to internal state.
-    ///
-    /// This is equivalent to [`execute_transaction`](Self::execute_transaction), but first sets
-    /// the underlying database's BAL index for the transaction's position in the block. BAL uses
-    /// index `0` for pre-execution changes, transaction indexes are shifted by one (`tx_index + 1`)
-    /// and post-execution changes use the index after the last transaction. This means transaction
-    /// `0` is executed at BAL index `1`, transaction `1` at BAL index `2`, and so on.
-    ///
-    /// Callers that execute transactions individually should prefer this method when the
-    /// transaction index in the block is known, so BAL reads and writes are attributed to the
-    /// correct EIP-7928 index.
-    fn execute_transaction_with_index(
-        &mut self,
-        tx: impl ExecutableTx<Self>,
-        tx_index: usize,
-    ) -> Result<GasOutput, BlockExecutionError>
-    where
-        <Self::Evm as Evm>::DB: BalIndexedDatabase,
-    {
-        self.execute_transaction_with_index_and_result_closure(tx, tx_index, |_| ())
-    }
-
-    /// Executes a single transaction at its zero-based index in the block and invokes the given
-    /// closure with the internal [`Self::Result`](BlockExecutor::Result) produced by the EVM.
-    ///
-    /// This is the indexed counterpart to
-    /// [`execute_transaction_with_result_closure`](Self::execute_transaction_with_result_closure).
-    /// It first sets the underlying database's BAL index for the transaction's position in the
-    /// block, then executes and commits the transaction while exposing the raw execution result to
-    /// the closure.
-    ///
-    /// BAL uses index `0` for pre-execution changes, transaction indexes are shifted by one
-    /// (`tx_index + 1`) and post-execution changes use the index after the last transaction. This
-    /// means transaction `0` is executed at BAL index `1`, transaction `1` at BAL index `2`, and so
-    /// on.
-    fn execute_transaction_with_index_and_result_closure(
-        &mut self,
-        tx: impl ExecutableTx<Self>,
-        tx_index: usize,
-        f: impl FnOnce(&Self::Result),
-    ) -> Result<GasOutput, BlockExecutionError>
-    where
-        <Self::Evm as Evm>::DB: BalIndexedDatabase,
-    {
-        self.evm_mut().db_mut().set_bal_index(tx_index as u64 + 1);
-        self.execute_transaction_with_result_closure(tx, f)
-    }
-
     /// Executes a single transaction and applies execution result to internal state. Invokes the
     /// given closure with an internal [`Self::Result`](BlockExecutor::Result) produced by the EVM.
     ///
@@ -388,6 +343,20 @@ pub trait BlockExecutor {
         &mut self,
         tx: impl ExecutableTx<Self>,
     ) -> Result<Self::Result, BlockExecutionError>;
+
+    /// Executes a single transaction without committing state changes.
+    ///
+    /// Implementors must override this method to support out-of-order execution.
+    fn execute_transaction_with_index(
+        &mut self,
+        tx: impl ExecutableTx<Self>,
+        index: usize,
+    ) -> Result<Self::Result, BlockExecutionError> {
+        if self.receipts().len() != index {
+            return Err(BlockExecutionError::msg("out-of-order execution is not supported"));
+        }
+        self.execute_transaction_without_commit(tx)
+    }
 
     /// Commits a previously executed transaction's state changes.
     ///
@@ -567,7 +536,7 @@ pub trait BlockExecutorFactory: 'static {
     ///   block.
     /// - Should be lightweight (use references where possible)
     /// - Contains only block-level data, not transaction-specific data
-    type ExecutionCtx<'a>: Clone;
+    type ExecutionCtx<'a>: Send + Sync + Clone;
 
     /// Transaction type used by the executor, see [`BlockExecutor::Transaction`].
     ///
