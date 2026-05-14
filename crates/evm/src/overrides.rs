@@ -3,7 +3,7 @@
 //! This module provides helper functions for RPC implementations, including:
 //! - Block and state overrides
 
-use alloc::{boxed::Box, collections::BTreeMap};
+use alloc::collections::BTreeMap;
 use alloy_primitives::{keccak256, map::HashMap, Address, B256, U256};
 use alloy_rpc_types_eth::{
     state::{AccountOverride, StateOverride},
@@ -14,7 +14,7 @@ use revm::{
     context::BlockEnv,
     context_interface::block::BlobExcessGasAndPrice,
     database::{CacheDB, State},
-    state::{Account, AccountStatus, Bytecode, EvmStorageSlot},
+    state::{Account, AccountStatus, Bytecode, EvmStorageSlot, TransactionId},
     Database, DatabaseCommit,
 };
 
@@ -157,13 +157,8 @@ where
     }
 
     // Create a new account marked as touched
-    let mut acc = revm::state::Account {
-        info: info.clone(),
-        original_info: Box::new(info),
-        status: AccountStatus::Touched,
-        storage: Default::default(),
-        transaction_id: 0,
-    };
+    let mut acc = revm::state::Account::from(info);
+    acc.status = AccountStatus::Touched;
 
     let storage_diff = match (account_override.state, account_override.state_diff) {
         (Some(_), Some(_)) => return Err(StateOverrideError::BothStateAndStateDiff(account)),
@@ -173,13 +168,9 @@ where
         // used.
         (Some(state), None) => {
             // Destroy the account to ensure that its storage is cleared
-            db.commit(HashMap::from_iter([(
-                account,
-                Account {
-                    status: AccountStatus::SelfDestructed | AccountStatus::Touched,
-                    ..Default::default()
-                },
-            )]));
+            let mut destroyed = Account::default();
+            destroyed.status = AccountStatus::SelfDestructed | AccountStatus::Touched;
+            db.commit(HashMap::from_iter([(account, destroyed)]));
             // Mark the account as created to ensure that old storage is not read
             acc.mark_created();
             Some(state)
@@ -207,7 +198,7 @@ where
                     original_value: (!value).into(),
                     present_value: value.into(),
                     is_cold: false,
-                    transaction_id: 0,
+                    transaction_id: TransactionId::ZERO,
                 },
             );
         }
