@@ -55,7 +55,8 @@ impl<T> Default for BlockExecutionResult<T> {
 /// Helper trait to encapsulate requirements for a type to be used as input for [`BlockExecutor`].
 ///
 /// This trait combines the requirements for a transaction to be executable by a block executor:
-/// - Must be convertible to the EVM's transaction environment
+/// - Must be convertible to the EVM's transaction environment, such as revm's
+///   [`TxEnv`](revm::context::TxEnv)
 /// - Must provide access to the transaction and signer via [`RecoveredTx`]
 ///
 /// The trait ensures that the block executor can both execute the transaction in the EVM
@@ -72,7 +73,8 @@ pub trait ExecutableTxParts<TxEnv, T> {
     /// The recovered transaction accessor type.
     type Recovered: RecoveredTx<T>;
 
-    /// Converts the transaction to an executable environment and a recovered transaction itself.
+    /// Converts the transaction into the executable transaction environment (`TxEnv`) and the
+    /// original recovered transaction.
     fn into_parts(self) -> (TxEnv, Self::Recovered);
 }
 
