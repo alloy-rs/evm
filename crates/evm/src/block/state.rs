@@ -1,7 +1,10 @@
 //! State database abstraction.
 
 use crate::Database;
-use revm::{database::State, database_interface::bal::BalDatabase, DatabaseCommit};
+use revm::{
+    database::State, database_interface::bal::BalDatabase, state::bal::BlockAccessIndex,
+    DatabaseCommit,
+};
 
 /// Database that tracks the current block-level access list (BAL) index from EIP-7928.
 ///
@@ -27,7 +30,7 @@ where
     Self: Database,
 {
     fn set_bal_index(&mut self, index: u64) {
-        self.bal_state.bal_index = index;
+        self.bal_state.bal_index = BlockAccessIndex::new(index);
     }
 
     fn bump_bal_index(&mut self) {
@@ -40,7 +43,7 @@ where
     Self: Database,
 {
     fn set_bal_index(&mut self, index: u64) {
-        self.bal_state.bal_index = index;
+        self.bal_state.bal_index = BlockAccessIndex::new(index);
     }
 
     fn bump_bal_index(&mut self) {
@@ -63,9 +66,9 @@ mod tests {
         let mut db = State::builder().with_database(CacheDB::new(EmptyDB::new())).build();
 
         BalIndexedDatabase::set_bal_index(&mut db, 7);
-        assert_eq!(db.bal_state.bal_index, 7);
+        assert_eq!(db.bal_state.bal_index, BlockAccessIndex::new(7));
 
         BalIndexedDatabase::bump_bal_index(&mut db);
-        assert_eq!(db.bal_state.bal_index, 8);
+        assert_eq!(db.bal_state.bal_index, BlockAccessIndex::new(8));
     }
 }

@@ -1,7 +1,6 @@
 //! State changes that are not related to transactions.
 
 use super::{calc, BlockExecutionError};
-use alloc::boxed::Box;
 use alloy_consensus::BlockHeader;
 use alloy_eips::eip4895::Withdrawal;
 use alloy_hardforks::EthereumHardforks;
@@ -120,15 +119,9 @@ where
             BlockExecutionError::msg("could not load account for balance increment")
         })?;
 
-        Ok((
-            *address,
-            Account {
-                info: account.clone(),
-                original_info: Box::new(account.clone()),
-                status: AccountStatus::Touched,
-                ..Default::default()
-            },
-        ))
+        let mut new_account = Account::from(account.clone());
+        new_account.status = AccountStatus::Touched;
+        Ok((*address, new_account))
     };
 
     balance_increments
