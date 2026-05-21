@@ -4,10 +4,10 @@ use super::{calc, BlockExecutionError};
 use alloy_consensus::BlockHeader;
 use alloy_eips::eip4895::Withdrawal;
 use alloy_hardforks::EthereumHardforks;
-use alloy_primitives::{map::AddressMap, Address};
+use alloy_primitives::{map::AddressMap, U256};
 use revm::{
     context::Block,
-    state::{Account, AccountStatus, EvmState},
+    state::{Account, EvmState, TransactionId},
     Database,
 };
 
@@ -100,33 +100,28 @@ pub fn insert_post_block_withdrawals_balance_increments(
     }
 }
 
-/// Creates an `EvmState` from a map of balance increments and the current state
-/// to load accounts from. No balance increment is done in the function.
-/// Zero balance increments are ignored and won't create state entries.
-pub fn balance_increment_state<DB>(
+/// Creates an [`EvmState`] from a map of balance increments and the current state. Loads accounts
+/// from the database and applies increments on top of their state.
+pub(crate) fn balance_increment_state<DB>(
     balance_increments: &AddressMap<u128>,
     state: &mut DB,
 ) -> Result<EvmState, BlockExecutionError>
 where
     DB: Database,
 {
-    let mut load_account = |address: &Address| -> Result<(Address, Account), BlockExecutionError> {
-        let cache_account = state.basic(*address).map_err(|_| {
-            BlockExecutionError::msg("could not load account for balance increment")
-        })?;
-
-        let account = cache_account.as_ref().ok_or_else(|| {
-            BlockExecutionError::msg("could not load account for balance increment")
-        })?;
-
-        let mut new_account = Account::from(account.clone());
-        new_account.status = AccountStatus::Touched;
-        Ok((*address, new_account))
-    };
-
     balance_increments
         .iter()
-        .filter(|(_, &balance)| balance != 0)
-        .map(|(addr, _)| load_account(addr))
+        .map(|(address, &balance)| {
+            let cache_account = state.basic(*address).map_err(|_| {
+                BlockExecutionError::msg("could not load account for balance increment")
+            })?;
+
+            let mut new_account = cache_account
+                .map(Account::from)
+                .unwrap_or_else(|| Account::new_not_existing(TransactionId::ZERO));
+            new_account.info.balance = new_account.info.balance.saturating_add(U256::from(balance));
+            new_account.mark_touch();
+            Ok((*address, new_account))
+        })
         .collect::<Result<EvmState, _>>()
 }
