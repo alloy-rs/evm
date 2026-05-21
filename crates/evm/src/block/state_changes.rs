@@ -100,8 +100,8 @@ pub fn insert_post_block_withdrawals_balance_increments(
     }
 }
 
-/// Creates an `EvmState` from a map of balance increments and the current state
-/// to load accounts from. No balance increment is done in the function.
+/// Creates an [`EvmState`] from a map of balance increments and the current state. Loads accounts
+/// from the database and applies increments on top of their state.
 pub(crate) fn balance_increment_state<DB>(
     balance_increments: &AddressMap<u128>,
     state: &mut DB,
