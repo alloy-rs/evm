@@ -288,21 +288,17 @@ where
             *balance_increments.entry(dao_fork::DAO_HARDFORK_BENEFICIARY).or_default() +=
                 drained_balance;
         }
-        // increment balances
-        self.evm
-            .db_mut()
-            .increment_balances(balance_increments.clone())
-            .map_err(|_| BlockValidationError::IncrementBalanceFailed)?;
+        let balance_increment_state =
+            balance_increment_state(&balance_increments, self.evm.db_mut())
+                .map_err(|_| BlockValidationError::IncrementBalanceFailed)?;
 
-        // call state hook with changes due to balance increments.
-        self.system_caller.try_on_state_with(|| {
-            balance_increment_state(&balance_increments, self.evm.db_mut()).map(|state| {
-                (
-                    StateChangeSource::PostBlock(StateChangePostBlockSource::BalanceIncrements),
-                    Cow::Owned(state),
-                )
-            })
-        })?;
+        // Call state hook with the same balance increment state that will be committed.
+        self.system_caller.on_state(
+            StateChangeSource::PostBlock(StateChangePostBlockSource::BalanceIncrements),
+            &balance_increment_state,
+        );
+
+        self.evm.db_mut().commit(balance_increment_state);
 
         // Pre-Amsterdam: use tx_gas_used (with refunds) for the block gas total.
         // Amsterdam+: use max(regular, state) gas without refunds (EIP-8037).
