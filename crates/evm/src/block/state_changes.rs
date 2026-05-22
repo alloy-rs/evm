@@ -125,3 +125,99 @@ where
         })
         .collect::<Result<EvmState, _>>()
 }
+
+#[cfg(test)]
+mod tests {
+    use alloy_primitives::{address, Address, U256};
+    use revm::{
+        database::{CacheDB, EmptyDB, State},
+        primitives::{HashMap, KECCAK_EMPTY},
+        state::AccountInfo,
+    };
+
+    use crate::block::state_changes::balance_increment_state;
+
+    fn setup_state_with_account(
+        addr: Address,
+        balance: u128,
+        nonce: u64,
+    ) -> State<CacheDB<EmptyDB>> {
+        let db = CacheDB::<EmptyDB>::default();
+        let mut state = State::builder().with_database(db).with_bundle_update().build();
+
+        let account_info = AccountInfo {
+            balance: U256::from(balance),
+            nonce,
+            code_hash: KECCAK_EMPTY,
+            code: None,
+            account_id: None,
+        };
+        state.insert_account(addr, account_info);
+        state
+    }
+
+    #[test]
+    fn test_balance_increment_state_empty_increments_map() {
+        let mut state = State::builder()
+            .with_database(CacheDB::<EmptyDB>::default())
+            .with_bundle_update()
+            .build();
+
+        let increments = HashMap::default();
+        let result = balance_increment_state(&increments, &mut state).unwrap();
+        assert!(result.is_empty(), "Empty increments map should return empty state");
+    }
+
+    #[test]
+    fn test_balance_increment_state_multiple_valid_increments() {
+        let addr1 = address!("0x1000000000000000000000000000000000000000");
+        let addr2 = address!("0x2000000000000000000000000000000000000000");
+
+        let mut state = setup_state_with_account(addr1, 100, 1);
+
+        let account2 = AccountInfo {
+            balance: U256::from(200),
+            nonce: 1,
+            code_hash: KECCAK_EMPTY,
+            code: None,
+            account_id: None,
+        };
+        state.insert_account(addr2, account2);
+
+        let mut increments = HashMap::default();
+        increments.insert(addr1, 50);
+        increments.insert(addr2, 100);
+
+        let result = balance_increment_state(&increments, &mut state).unwrap();
+
+        assert_eq!(result.len(), 2);
+        assert_eq!(result.get(&addr1).unwrap().info.balance, U256::from(150));
+        assert_eq!(result.get(&addr2).unwrap().info.balance, U256::from(300));
+    }
+
+    #[test]
+    fn test_balance_increment_state_mixed_zero_and_nonzero_increments() {
+        let addr1 = address!("0x1000000000000000000000000000000000000000");
+        let addr2 = address!("0x2000000000000000000000000000000000000000");
+
+        let mut state = setup_state_with_account(addr1, 100, 1);
+
+        let account2 = AccountInfo {
+            balance: U256::from(200),
+            nonce: 1,
+            code_hash: KECCAK_EMPTY,
+            code: None,
+            account_id: None,
+        };
+        state.insert_account(addr2, account2);
+
+        let mut increments = HashMap::default();
+        increments.insert(addr1, 0);
+        increments.insert(addr2, 100);
+
+        let result = balance_increment_state(&increments, &mut state).unwrap();
+
+        assert_eq!(result.get(&addr1).unwrap().info.balance, U256::from(100));
+        assert_eq!(result.get(&addr2).unwrap().info.balance, U256::from(300));
+    }
+}
