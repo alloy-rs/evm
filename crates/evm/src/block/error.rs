@@ -4,6 +4,7 @@ use alloc::{
     string::{String, ToString},
 };
 use alloy_primitives::B256;
+use core::error::Error;
 
 /// Block validation error.
 #[derive(Debug, thiserror::Error)]
@@ -15,6 +16,15 @@ pub enum BlockValidationError {
         hash: B256,
         /// The EVM error.
         error: Box<dyn InvalidTxError>,
+    },
+    /// EVM error that is not a transaction validation error. Most likely a BAL error propagated
+    /// from the database.
+    #[error("EVM execution failed: {error}")]
+    EVM {
+        /// The hash of the transaction
+        hash: B256,
+        /// The EVM error.
+        error: Box<dyn Error + Send + Sync + 'static>,
     },
     /// Error when incrementing balance in post execution
     #[error("incrementing balance in post execution failed")]
@@ -150,14 +160,21 @@ impl BlockExecutionError {
     /// Handles an EVM error occurred when executing a transaction.
     ///
     /// If an error matches [`EvmError::InvalidTransaction`], it will be wrapped into
-    /// [`BlockValidationError::InvalidTx`], otherwise into [`InternalBlockExecutionError::EVM`].
+    /// [`BlockValidationError::InvalidTx`], otherwise if [`EvmError::is_fatal`] return `true`, the
+    /// error would be wrapped into [`InternalBlockExecutionError::EVM`], otherwise it would be
+    /// wrapped into [`BlockValidationError::EVM`].
     pub fn evm<E: EvmError>(error: E, hash: B256) -> Self {
         match error.try_into_invalid_tx_err() {
             Ok(err) => {
                 Self::Validation(BlockValidationError::InvalidTx { hash, error: Box::new(err) })
             }
             Err(err) => {
-                Self::Internal(InternalBlockExecutionError::EVM { hash, error: Box::new(err) })
+                // Route errors based on whether they are fatal or not.
+                if err.is_fatal() {
+                    Self::Internal(InternalBlockExecutionError::EVM { hash, error: Box::new(err) })
+                } else {
+                    Self::Validation(BlockValidationError::EVM { hash, error: Box::new(err) })
+                }
             }
         }
     }
@@ -257,11 +274,16 @@ impl InternalBlockExecutionError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use revm::context_interface::result::{EVMError, InvalidTransaction};
+    use revm::{
+        context::DBErrorMarker,
+        context_interface::result::{EVMError, InvalidTransaction},
+    };
 
     #[derive(thiserror::Error, Debug)]
     #[error("err")]
     struct E;
+
+    impl DBErrorMarker for E {}
 
     #[test]
     fn other_downcast() {
