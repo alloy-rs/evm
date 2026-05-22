@@ -10,14 +10,13 @@ use super::{
 };
 use crate::{
     block::{
-        state_changes::{balance_increment_state, post_block_balance_increments},
-        BlockExecutionError, BlockExecutionResult, BlockExecutor, BlockExecutorFactory,
-        BlockValidationError, ExecutableTx, GasOutput, OnStateHook, StateChangePostBlockSource,
-        StateChangeSource, StateDB, SystemCaller, TxResult,
+        state_changes::post_block_balance_increments, BlockExecutionError, BlockExecutionResult,
+        BlockExecutor, BlockExecutorFactory, BlockValidationError, ExecutableTx, GasOutput,
+        StateDB, SystemCaller, TxResult,
     },
     Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, RecoveredTx,
 };
-use alloc::{borrow::Cow, boxed::Box, vec::Vec};
+use alloc::{borrow::Cow, vec::Vec};
 use alloy_consensus::{Header, Transaction, TransactionEnvelope, TxReceipt};
 use alloy_eips::{eip4895::Withdrawal, eip7685::Requests, Encodable2718};
 use alloy_hardforks::EthereumHardfork;
@@ -209,8 +208,6 @@ where
         let EthTxResult { result: ResultAndState { result, state }, blob_gas_used, tx_type } =
             output;
 
-        self.system_caller.on_state(StateChangeSource::Transaction(self.receipts.len()), &state);
-
         let tx_gas_used = result.gas().tx_gas_used();
         let regular_gas_used = result.gas().block_regular_gas_used();
         let state_gas_used = result.gas().block_state_gas_used();
@@ -289,17 +286,10 @@ where
                 drained_balance;
         }
         // increment balances
-        let balance_increment_state =
-            balance_increment_state(&balance_increments, self.evm.db_mut())
-                .map_err(|_| BlockValidationError::IncrementBalanceFailed)?;
-
-        // call state hook with changes due to balance increments.
-        self.system_caller.on_state(
-            StateChangeSource::PostBlock(StateChangePostBlockSource::BalanceIncrements),
-            &balance_increment_state,
-        );
-
-        self.evm.db_mut().commit(balance_increment_state);
+        self.evm
+            .db_mut()
+            .increment_balances(balance_increments)
+            .map_err(|_| BlockValidationError::IncrementBalanceFailed)?;
 
         // Pre-Amsterdam: use tx_gas_used (with refunds) for the block gas total.
         // Amsterdam+: use max(regular, state) gas without refunds (EIP-8037).
@@ -318,10 +308,6 @@ where
                 blob_gas_used: self.blob_gas_used,
             },
         ))
-    }
-
-    fn set_state_hook(&mut self, hook: Option<Box<dyn OnStateHook>>) {
-        self.system_caller.with_state_hook(hook);
     }
 
     fn evm_mut(&mut self) -> &mut Self::Evm {
