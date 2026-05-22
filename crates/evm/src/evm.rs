@@ -5,7 +5,7 @@ use alloy_consensus::transaction::TxHashRef;
 use alloy_primitives::{Address, Bytes, B256};
 use core::{error::Error, fmt::Debug, hash::Hash};
 use revm::{
-    context::{result::ExecutionResult, CfgEnv},
+    context::{result::ExecutionResult, CfgEnv, DBErrorMarker},
     context_interface::{
         result::{HaltReasonTr, ResultAndState},
         ContextTr,
@@ -274,7 +274,7 @@ pub trait EvmFactory {
     /// Transaction environment.
     type Tx: IntoTxEnv<Self::Tx>;
     /// EVM error. See [`Evm::Error`].
-    type Error<DBError: Error + Send + Sync + 'static>: EvmError;
+    type Error<DBError: DBErrorMarker>: EvmError;
     /// Halt reason. See [`Evm::HaltReason`].
     type HaltReason: HaltReasonTr + Send + Sync + 'static;
     /// The EVM specification identifier, see [`Evm::Spec`].

@@ -4,6 +4,7 @@ use alloc::{
     string::{String, ToString},
 };
 use alloy_primitives::B256;
+use core::error::Error;
 
 /// Block validation error.
 #[derive(Debug, thiserror::Error)]
@@ -15,6 +16,15 @@ pub enum BlockValidationError {
         hash: B256,
         /// The EVM error.
         error: Box<dyn InvalidTxError>,
+    },
+    /// EVM error that is not a transaction validation error. Most likely a BAL error propagated
+    /// from the database.
+    #[error("EVM execution failed: {error}")]
+    EVM {
+        /// The hash of the transaction
+        hash: B256,
+        /// The EVM error.
+        error: Box<dyn Error + Send + Sync + 'static>,
     },
     /// Error when incrementing balance in post execution
     #[error("incrementing balance in post execution failed")]
@@ -157,7 +167,11 @@ impl BlockExecutionError {
                 Self::Validation(BlockValidationError::InvalidTx { hash, error: Box::new(err) })
             }
             Err(err) => {
-                Self::Internal(InternalBlockExecutionError::EVM { hash, error: Box::new(err) })
+                if err.is_fatal() {
+                    Self::Internal(InternalBlockExecutionError::EVM { hash, error: Box::new(err) })
+                } else {
+                    Self::Validation(BlockValidationError::EVM { hash, error: Box::new(err) })
+                }
             }
         }
     }
@@ -257,11 +271,16 @@ impl InternalBlockExecutionError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use revm::context_interface::result::{EVMError, InvalidTransaction};
+    use revm::{
+        context::DBErrorMarker,
+        context_interface::result::{EVMError, InvalidTransaction},
+    };
 
     #[derive(thiserror::Error, Debug)]
     #[error("err")]
     struct E;
+
+    impl DBErrorMarker for E {}
 
     #[test]
     fn other_downcast() {

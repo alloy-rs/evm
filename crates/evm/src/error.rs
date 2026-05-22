@@ -1,7 +1,10 @@
 //! Abstraction over EVM errors.
 
 use core::{any::Any, error::Error};
-use revm::context_interface::result::{EVMError, InvalidTransaction};
+use revm::{
+    context::DBErrorMarker,
+    context_interface::result::{EVMError, InvalidTransaction},
+};
 
 /// Abstraction over transaction validation error.
 pub trait InvalidTxError: Error + Send + Sync + Any + 'static {
@@ -64,6 +67,10 @@ pub trait EvmError: Sized + Error + Send + Sync + 'static {
     /// Attempts to convert the error into [`EvmError::InvalidTransaction`].
     fn try_into_invalid_tx_err(self) -> Result<Self::InvalidTransaction, Self>;
 
+    /// Returns `true` if the error is fatal and should be treated as an internal error during
+    /// execution.
+    fn is_fatal(&self) -> bool;
+
     /// Returns `true` if the error is an invalid transaction error.
     fn is_invalid_tx_err(&self) -> bool {
         self.as_invalid_tx_err().is_some()
@@ -72,7 +79,7 @@ pub trait EvmError: Sized + Error + Send + Sync + 'static {
 
 impl<DBError, TxError> EvmError for EVMError<DBError, TxError>
 where
-    DBError: Error + Send + Sync + 'static,
+    DBError: DBErrorMarker,
     TxError: InvalidTxError,
 {
     type InvalidTransaction = TxError;
@@ -88,6 +95,14 @@ where
         match self {
             Self::Transaction(err) => Ok(err),
             err => Err(err),
+        }
+    }
+
+    fn is_fatal(&self) -> bool {
+        match self {
+            Self::Transaction(_) => false,
+            Self::Custom(_) | Self::CustomAny(_) | Self::Header(_) => true,
+            Self::Database(err) => err.is_fatal(),
         }
     }
 }
