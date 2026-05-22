@@ -404,7 +404,7 @@ pub struct EthBlockExecutorFactory<
 }
 
 impl<R, Spec, EvmFactory> EthBlockExecutorFactory<R, Spec, EvmFactory> {
-    /// Creates a new [`EthBlockExecutorFactory`] with the given spec, [`EvmFactory`], and
+    /// Creates a new [`EthBlockExecutorFactory`] with the given spec, EVM factory, and
     /// [`ReceiptBuilder`].
     pub const fn new(receipt_builder: R, spec: Spec, evm_factory: EvmFactory) -> Self {
         Self { receipt_builder, spec, evm_factory }
