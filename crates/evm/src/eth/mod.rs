@@ -268,6 +268,10 @@ where
             &mut self.inner.precompiles,
         )
     }
+
+    fn as_bal_evm_mut(&mut self) -> Option<&mut dyn BalEvm> {
+        Some(self)
+    }
 }
 
 impl<DB: Database, I, PRECOMPILE> BalEvm for EthEvm<DB, I, PRECOMPILE> {

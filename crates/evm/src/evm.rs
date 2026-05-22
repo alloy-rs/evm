@@ -192,6 +192,11 @@ pub trait Evm {
         self.components_mut().1
     }
 
+    /// Returns this EVM as a mutable BAL-capable EVM, if supported.
+    fn as_bal_evm_mut(&mut self) -> Option<&mut dyn BalEvm> {
+        None
+    }
+
     /// Provides immutable references to the database, inspector and precompiles.
     fn components(&self) -> (&Self::DB, &Self::Inspector, &Self::Precompiles);
 
