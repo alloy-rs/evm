@@ -5,11 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.35.0](https://github.com/alloy-rs/evm/releases/tag/v0.35.0) - 2026-05-22
+
+### Bug Fixes
+
+- Dispatch proper balance increments state to state hook ([#363](https://github.com/alloy-rs/evm/issues/363))
+- [evm] Apply blob base fee block override ([#356](https://github.com/alloy-rs/evm/issues/356))
+
+### Dependencies
+
+- Bump revm to 40.0.0 ([#361](https://github.com/alloy-rs/evm/issues/361))
+
+### Documentation
+
+- [evm] Clarify executable tx parts ([#362](https://github.com/alloy-rs/evm/issues/362))
+
+### Features
+
+- Handle non-fatal EVM errors ([#364](https://github.com/alloy-rs/evm/issues/364))
+- [evm] Add indexed transaction execution ([#354](https://github.com/alloy-rs/evm/issues/354))
+
+### Miscellaneous Tasks
+
+- Port reth tests for increments ([#365](https://github.com/alloy-rs/evm/issues/365))
+
 ## [0.34.0](https://github.com/alloy-rs/evm/releases/tag/v0.34.0) - 2026-04-28
 
 ### Documentation
 
 - Fix stale zero-withdrawal comment ([#351](https://github.com/alloy-rs/evm/issues/351))
+
+### Miscellaneous Tasks
+
+- Release 0.34.0
 
 ### Refactor
 
@@ -693,10 +721,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.12.2](https://github.com/alloy-rs/evm/releases/tag/v0.12.2) - 2025-06-23
 
-### Bug Fixes
-
-- Fix compilation
-
 ### Documentation
 
 - Fix typo in tracing.rs comment ([#113](https://github.com/alloy-rs/evm/issues/113))
@@ -710,6 +734,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Release 0.12.2
 - Derive Copy for `PrecompileInput` ([#110](https://github.com/alloy-rs/evm/issues/110))
+
+## [0.12.1](https://github.com/alloy-rs/evm/releases/tag/v0.12.1) - 2025-06-20
+
+### Bug Fixes
+
+- Fix compilation
+
+### Miscellaneous Tasks
+
 - Release 0.12.1
 
 ## [0.12.0](https://github.com/alloy-rs/evm/releases/tag/v0.12.0) - 2025-06-20
