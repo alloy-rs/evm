@@ -546,7 +546,7 @@ where
 
         let precompile_output = {
             let _span =
-                tracing::debug_span!("precompile", name = precompile.precompile_id().name(),)
+                tracing::trace_span!("precompile", name = precompile.precompile_id().name(),)
                     .entered();
             precompile.call(PrecompileInput {
                 data: inputs.input.as_bytes_local(local).as_ref(),
