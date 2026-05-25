@@ -32,6 +32,9 @@ pub enum StateChangePreBlockSource {
     /// EIP-7002: triggers the withdrawal requests contract to process any queued validator
     /// withdrawal requests.
     WithdrawalRequestsContract,
+    /// EIP-7997: inserts the deterministic `CREATE2` factory bytecode at its fixed address on the
+    /// block that activates Amsterdam.
+    FactoryPredeploy,
     /// A custom pre-block state change not covered by the standard variants.
     Other(&'static str),
 }
