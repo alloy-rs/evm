@@ -151,6 +151,48 @@ mod tests {
     }
 
     #[test]
+    fn commit_records_change_and_preserves_balance() {
+        use revm::{database::states::bundle_state::BundleRetention, DatabaseCommit};
+
+        // Account pre-exists with a balance but no code.
+        let balance = U256::from(7u64);
+        let mut db = CacheDB::new(EmptyDB::new());
+        db.insert_account_info(FACTORY_ADDRESS, AccountInfo::from_balance(balance));
+
+        // Built inline (not via `evm_with`) so the concrete `State` DB type is preserved and its
+        // `merge_transitions`/`take_bundle` methods remain callable.
+        let mut cfg = CfgEnv::default();
+        cfg.spec = SpecId::AMSTERDAM;
+        let env = EvmEnv {
+            block_env: BlockEnv { timestamp: U256::from(1), ..Default::default() },
+            cfg_env: cfg,
+        };
+        let inner = State::builder().with_database(db).with_bundle_update().build();
+        let mut evm = EthEvmFactory.create_evm(inner, env);
+
+        let state =
+            build_factory_predeploy_state(&TestSpec { amsterdam: true }, &mut evm).unwrap().unwrap();
+        // Balance is preserved on the pre-existing account.
+        assert_eq!(state.get(&FACTORY_ADDRESS).unwrap().info.balance, balance);
+        evm.db_mut().commit(state);
+
+        // Post-state reads back the code and the preserved balance.
+        let info = evm.db_mut().basic(FACTORY_ADDRESS).unwrap().unwrap();
+        assert_eq!(info.code_hash, FACTORY_CODE_HASH);
+        assert_eq!(info.balance, balance);
+
+        // The bundle records the transition from (balance, no code) to (balance, factory code),
+        // i.e. the original is tracked correctly rather than the post-insertion state.
+        evm.db_mut().merge_transitions(BundleRetention::Reverts);
+        let bundle = evm.db_mut().take_bundle();
+        let acct = bundle.account(&FACTORY_ADDRESS).expect("bundle account");
+        assert_eq!(acct.info.as_ref().unwrap().code_hash, FACTORY_CODE_HASH);
+        let original = acct.original_info.as_ref().expect("original info");
+        assert_eq!(original.balance, balance);
+        assert!(original.is_empty_code_hash(), "original should have no code");
+    }
+
+    #[test]
     fn noop_before_amsterdam() {
         let mut evm = evm_with(CacheDB::new(EmptyDB::new()));
 
