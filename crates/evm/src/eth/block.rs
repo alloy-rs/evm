@@ -153,6 +153,7 @@ where
         self.system_caller.apply_blockhashes_contract_call(self.ctx.parent_hash, &mut self.evm)?;
         self.system_caller
             .apply_beacon_root_contract_call(self.ctx.parent_beacon_block_root, &mut self.evm)?;
+        self.system_caller.apply_factory_predeploy(&mut self.evm)?;
 
         Ok(())
     }

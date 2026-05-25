@@ -19,6 +19,9 @@ mod eip2935;
 mod eip4788;
 mod eip7002;
 mod eip7251;
+mod eip7997;
+
+pub use eip7997::{FACTORY_ADDRESS, FACTORY_CODE, FACTORY_CODE_HASH};
 
 /// An ephemeral helper type for executing system calls.
 ///
@@ -57,6 +60,7 @@ where
     ) -> Result<(), BlockExecutionError> {
         self.apply_blockhashes_contract_call(header.parent_hash(), evm)?;
         self.apply_beacon_root_contract_call(header.parent_beacon_block_root(), evm)?;
+        self.apply_factory_predeploy(evm)?;
 
         Ok(())
     }
@@ -133,6 +137,31 @@ where
                 );
             }
             evm.db_mut().commit(res.state);
+        }
+
+        Ok(())
+    }
+
+    /// Applies the EIP-7997 pre-block state transition, inserting the deterministic `CREATE2`
+    /// factory bytecode at [`FACTORY_ADDRESS`].
+    ///
+    /// This is a no-op unless Amsterdam is active and the factory is not already deployed, so it
+    /// only mutates state on the block that activates Amsterdam.
+    pub fn apply_factory_predeploy(
+        &mut self,
+        evm: &mut impl Evm<DB: DatabaseCommit>,
+    ) -> Result<(), BlockExecutionError> {
+        let _span = tracing::debug_span!("eip7997_factory_predeploy").entered();
+        let state = eip7997::build_factory_predeploy_state(&self.spec, evm)?;
+
+        if let Some(state) = state {
+            if let Some(hook) = &mut self.hook {
+                hook.on_state(
+                    StateChangeSource::PreBlock(StateChangePreBlockSource::FactoryPredeploy),
+                    &state,
+                );
+            }
+            evm.db_mut().commit(state);
         }
 
         Ok(())
