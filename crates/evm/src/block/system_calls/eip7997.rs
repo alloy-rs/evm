@@ -37,8 +37,8 @@ pub const FACTORY_CODE_HASH: B256 =
 /// present at the address. Comparing the existing code hash makes the insertion idempotent, so it
 /// only mutates state once: on the block that activates Amsterdam.
 ///
-/// The existing balance is preserved and the nonce is set to `1`, matching the account state of a
-/// deployed contract.
+/// Only the code (and its hash) is set; any existing account fields, such as balance and nonce,
+/// are preserved, as EIP-7997 does not specify them.
 ///
 /// Note: this does not commit the state change to the database, it only constructs it.
 #[inline]
@@ -62,7 +62,6 @@ pub(crate) fn build_factory_predeploy_state(
         return Ok(None);
     }
 
-    info.nonce = 1;
     info.code_hash = FACTORY_CODE_HASH;
     info.code = Some(Bytecode::new_legacy(FACTORY_CODE));
 
@@ -128,7 +127,6 @@ mod tests {
         let account = state.get(&FACTORY_ADDRESS).expect("factory account");
         assert_eq!(account.info.code_hash, FACTORY_CODE_HASH);
         assert_eq!(account.info.code.as_ref().unwrap().original_bytes(), FACTORY_CODE);
-        assert_eq!(account.info.nonce, 1);
         assert!(account.is_touched());
         assert_eq!(state.len(), 1);
     }
@@ -140,7 +138,6 @@ mod tests {
         db.insert_account_info(
             FACTORY_ADDRESS,
             AccountInfo {
-                nonce: 1,
                 code_hash: FACTORY_CODE_HASH,
                 code: Some(Bytecode::new_legacy(FACTORY_CODE)),
                 ..Default::default()
