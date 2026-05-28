@@ -467,12 +467,10 @@ impl PrecompilesMap {
     }
 
     /// Returns an iterator over references to precompile addresses.
-    pub fn addresses(&self) -> impl Iterator<Item = &Address> {
+    pub fn addresses(&self) -> &AddressSet {
         match &self.precompiles {
-            PrecompilesKind::Builtin(precompiles) => Either::Left(precompiles.addresses()),
-            PrecompilesKind::Dynamic(dyn_precompiles) => {
-                Either::Right(dyn_precompiles.addresses.iter())
-            }
+            PrecompilesKind::Builtin(precompiles) => precompiles.addresses_set(),
+            PrecompilesKind::Dynamic(dyn_precompiles) => &dyn_precompiles.addresses,
         }
     }
 
@@ -961,7 +959,7 @@ mod tests {
     use alloy_primitives::{address, Bytes};
     use revm::{
         context::Block,
-        database::EmptyDB,
+        database::{bal::BalDatabase, EmptyDB},
         precompile::{PrecompileId, PrecompileOutput},
         primitives::hardfork::SpecId,
     };
@@ -971,7 +969,7 @@ mod tests {
         let eth_precompiles = EthPrecompiles::new(SpecId::default());
         let mut spec_precompiles = PrecompilesMap::from(eth_precompiles);
 
-        let mut ctx = EthEvmContext::new(EmptyDB::default(), Default::default());
+        let mut ctx = EthEvmContext::new(BalDatabase::new(EmptyDB::default()), Default::default());
 
         // create a test input for the precompile (identity precompile)
         let identity_address = address!("0x0000000000000000000000000000000000000004");
@@ -1050,7 +1048,7 @@ mod tests {
         let expected_output = Bytes::from_static(b"processed: test data");
         let gas_limit = 1000;
 
-        let mut ctx = EthEvmContext::new(EmptyDB::default(), Default::default());
+        let mut ctx = EthEvmContext::new(BalDatabase::new(EmptyDB::default()), Default::default());
 
         // define a closure that implements the precompile functionality
         let closure_precompile = |input: PrecompileInput<'_>| -> PrecompileResult {
@@ -1119,7 +1117,7 @@ mod tests {
         let eth_precompiles = EthPrecompiles::new(SpecId::default());
         let mut spec_precompiles = PrecompilesMap::from(eth_precompiles);
 
-        let mut ctx = EthEvmContext::new(EmptyDB::default(), Default::default());
+        let mut ctx = EthEvmContext::new(BalDatabase::new(EmptyDB::default()), Default::default());
 
         // Define a custom address pattern for dynamic precompiles
         let dynamic_prefix = [0xDE, 0xAD];
@@ -1174,7 +1172,7 @@ mod tests {
         let eth_precompiles = EthPrecompiles::new(SpecId::default());
         let spec_precompiles = PrecompilesMap::from(eth_precompiles);
 
-        let mut ctx = EthEvmContext::new(EmptyDB::default(), Default::default());
+        let mut ctx = EthEvmContext::new(BalDatabase::new(EmptyDB::default()), Default::default());
 
         let identity_address = address!("0x0000000000000000000000000000000000000004");
         let test_input = Bytes::from_static(b"test data");
@@ -1239,7 +1237,7 @@ mod tests {
         let eth_precompiles = EthPrecompiles::new(SpecId::default());
         let mut spec_precompiles = PrecompilesMap::from(eth_precompiles);
 
-        let mut ctx = EthEvmContext::new(EmptyDB::default(), Default::default());
+        let mut ctx = EthEvmContext::new(BalDatabase::new(EmptyDB::default()), Default::default());
 
         // Identity precompile at address 0x04
         let identity_address = address!("0x0000000000000000000000000000000000000004");

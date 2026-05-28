@@ -15,10 +15,12 @@ use crate::{
         BlockValidationError, ExecutableTx, GasOutput, OnStateHook, StateChangePostBlockSource,
         StateChangeSource, StateDB, SystemCaller, TxResult,
     },
+    evm::BalEvm,
     Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, RecoveredTx,
 };
-use alloc::{borrow::Cow, boxed::Box, vec::Vec};
+use alloc::{borrow::Cow, boxed::Box, sync::Arc, vec::Vec};
 use alloy_consensus::{Header, Transaction, TransactionEnvelope, TxReceipt};
+use alloy_eip7928::BlockAccessIndex;
 use alloy_eips::{eip4895::Withdrawal, eip7685::Requests, Encodable2718};
 use alloy_hardforks::EthereumHardfork;
 use alloy_primitives::{Bytes, Log, B256};
@@ -44,6 +46,9 @@ pub struct EthBlockExecutionCtx<'a> {
     pub tx_count_hint: Option<usize>,
     /// Slot number (EIP-7843, Amsterdam).
     pub slot_number: Option<u64>,
+    /// Block access list. Fully optional and might be omitted during block building or for
+    /// pre-Amsterdam blocks.
+    pub block_access_list: Option<Arc<revm::state::bal::Bal>>,
 }
 
 /// Block executor for Ethereum.
@@ -103,16 +108,24 @@ where
     }
 }
 
-impl<'a, Evm, Spec, R> EthBlockExecutor<'a, Evm, Spec, R>
+impl<'a, E, Spec, R> EthBlockExecutor<'a, E, Spec, R>
 where
     R: ReceiptBuilder,
+    E: Evm,
 {
     /// Creates a new [`EthBlockExecutor`]
-    pub fn new(evm: Evm, ctx: EthBlockExecutionCtx<'a>, spec: Spec, receipt_builder: R) -> Self
+    pub fn new(mut evm: E, ctx: EthBlockExecutionCtx<'a>, spec: Spec, receipt_builder: R) -> Self
     where
         Spec: Clone,
     {
         let tx_count_hint = ctx.tx_count_hint.unwrap_or_default();
+
+        if let Some(bal) = &ctx.block_access_list {
+            if let Some(bal_evm) = evm.as_bal_evm_mut() {
+                bal_evm.set_bal(bal.clone());
+            }
+        }
+
         Self {
             evm,
             ctx,
@@ -135,6 +148,21 @@ where
         }
         self.block_state_gas_used
     }
+
+    /// Returns a mutable reference to [`BalEvm`] if underlying EVM supports it, otherwise returns
+    /// an error.
+    fn bal_evm_mut(&mut self) -> Result<&mut dyn BalEvm, BlockExecutionError> {
+        self.evm
+            .as_bal_evm_mut()
+            .ok_or_else(|| BlockExecutionError::msg("EVM does not support block access lists"))
+    }
+
+    /// Bumps the BAL index if underlying EVM supports it.
+    fn bump_bal_index(&mut self) {
+        if let Some(bal_evm) = self.evm.as_bal_evm_mut() {
+            bal_evm.bump_bal_index();
+        }
+    }
 }
 
 impl<E, Spec, R> BlockExecutor for EthBlockExecutor<'_, E, Spec, R>
@@ -150,9 +178,20 @@ where
     type Result = EthTxResult<E::HaltReason, <R::Transaction as TransactionEnvelope>::TxType>;
 
     fn apply_pre_execution_changes(&mut self) -> Result<(), BlockExecutionError> {
+        // If BAL is provided or this is a post-Amsterdam block, trigger BAL building
+        if self.ctx.block_access_list.is_some()
+            || self
+                .spec
+                .is_amsterdam_active_at_timestamp(self.evm.block().timestamp().saturating_to())
+        {
+            self.bal_evm_mut()?.enable_bal_building();
+        }
+
         self.system_caller.apply_blockhashes_contract_call(self.ctx.parent_hash, &mut self.evm)?;
         self.system_caller
             .apply_beacon_root_contract_call(self.ctx.parent_beacon_block_root, &mut self.evm)?;
+
+        self.bump_bal_index();
 
         Ok(())
     }
@@ -205,6 +244,20 @@ where
         })
     }
 
+    fn execute_transaction_with_index(
+        &mut self,
+        tx: impl ExecutableTx<Self>,
+        index: usize,
+    ) -> Result<Self::Result, BlockExecutionError> {
+        if self.ctx.block_access_list.is_none() {
+            return Err(BlockExecutionError::msg("block access list is not available"));
+        }
+
+        self.bal_evm_mut()?.set_index(BlockAccessIndex::new((index + 1) as u64));
+
+        self.execute_transaction_without_commit(tx)
+    }
+
     fn commit_transaction(&mut self, output: Self::Result) -> GasOutput {
         let EthTxResult { result: ResultAndState { result, state }, blob_gas_used, tx_type } =
             output;
@@ -236,6 +289,7 @@ where
 
         // Commit the state changes.
         self.evm.db_mut().commit(state);
+        self.bump_bal_index();
 
         GasOutput::with_state_gas(tx_gas_used, state_gas_used)
     }
@@ -301,6 +355,14 @@ where
 
         self.evm.db_mut().commit(balance_increment_state);
 
+        let bal = self.evm.as_bal_evm_mut().and_then(|bal_evm| bal_evm.take_built_bal());
+
+        if let Some(provided_bal) = &self.ctx.block_access_list {
+            if bal.as_ref() != Some(provided_bal.as_ref()) {
+                return Err(BlockValidationError::msg("invalid BAL provided").into());
+            }
+        }
+
         // Pre-Amsterdam: use tx_gas_used (with refunds) for the block gas total.
         // Amsterdam+: use max(regular, state) gas without refunds (EIP-8037).
         let gas_used = if self.evm.cfg_env().enable_amsterdam_eip8037 {
@@ -316,6 +378,7 @@ where
                 requests,
                 gas_used,
                 blob_gas_used: self.blob_gas_used,
+                block_access_list: bal.map(|bal| bal.into_alloy_bal()),
             },
         ))
     }
@@ -353,7 +416,7 @@ pub struct EthBlockExecutorFactory<
 }
 
 impl<R, Spec, EvmFactory> EthBlockExecutorFactory<R, Spec, EvmFactory> {
-    /// Creates a new [`EthBlockExecutorFactory`] with the given spec, [`EvmFactory`], and
+    /// Creates a new [`EthBlockExecutorFactory`] with the given spec, EVM factory, and
     /// [`ReceiptBuilder`].
     pub const fn new(receipt_builder: R, spec: Spec, evm_factory: EvmFactory) -> Self {
         Self { receipt_builder, spec, evm_factory }

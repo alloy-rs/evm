@@ -15,6 +15,7 @@ workspace = true
 
 [dependencies]
 alloy-consensus = { workspace = true, features = ["k256"] }
+alloy-eip7928 = { version = "0.4", default-features = false }
 alloy-primitives.workspace = true
 alloy-sol-types.workspace = true
 alloy-eips.workspace = true
@@ -50,7 +51,8 @@ std = [
 	"thiserror/std",
 	"alloy-rpc-types-eth?/std",
 	"alloy-rpc-types-engine?/std",
-	"tracing/std"
+	"tracing/std",
+	"alloy-eip7928/std",
 ]
 gmp = [
     "revm/gmp",
