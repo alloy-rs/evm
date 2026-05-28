@@ -274,12 +274,15 @@ impl PrecompilesMap {
     /// Moves precompiles from source addresses to destination addresses.
     ///
     /// For each `(source, dest)` pair in the iterator:
-    /// - If `source == dest`, the pair is skipped (no-op).
+    /// - If `source == dest`, returns an error.
     /// - If the source address is not a precompile, returns an error.
     /// - Otherwise, the precompile is removed from the source address and installed at the
     ///   destination address.
     ///
     /// # Errors
+    ///
+    /// Returns [`MovePrecompileError::MovePrecompileToSelf`] if any source and destination address
+    /// are the same.
     ///
     /// Returns [`MovePrecompileError::NotAPrecompile`] if any source address does not have a
     /// precompile installed.
@@ -298,14 +301,17 @@ impl PrecompilesMap {
     where
         I: IntoIterator<Item = (Address, Address)>,
     {
-        let moves: Vec<_> = moves.into_iter().filter(|(src, dest)| src != dest).collect();
+        let moves: Vec<_> = moves.into_iter().collect();
 
         if moves.is_empty() {
             return Ok(());
         }
 
         // Validate all source addresses are precompiles before making any changes
-        for (source, _dest) in &moves {
+        for (source, dest) in &moves {
+            if source == dest {
+                return Err(MovePrecompileError::MovePrecompileToSelf(*source));
+            }
             if self.get(source).is_none() {
                 return Err(MovePrecompileError::NotAPrecompile(*source));
             }
@@ -340,6 +346,9 @@ impl PrecompilesMap {
     /// `Self` on success.
     ///
     /// # Errors
+    ///
+    /// Returns [`MovePrecompileError::MovePrecompileToSelf`] if any source and destination address
+    /// are the same.
     ///
     /// Returns [`MovePrecompileError::NotAPrecompile`] if any source address does not have a
     /// precompile installed.
@@ -940,6 +949,8 @@ where
 pub enum MovePrecompileError {
     /// The source address is not a precompile.
     NotAPrecompile(Address),
+    /// Attempted to move a precompile to its own address.
+    MovePrecompileToSelf(Address),
 }
 
 impl Display for MovePrecompileError {
@@ -947,6 +958,9 @@ impl Display for MovePrecompileError {
         match self {
             Self::NotAPrecompile(addr) => {
                 write!(f, "source address {addr} is not a precompile")
+            }
+            Self::MovePrecompileToSelf(addr) => {
+                write!(f, "cannot move precompile to the same address {addr}")
             }
         }
     }
@@ -1296,14 +1310,14 @@ mod tests {
     }
 
     #[test]
-    fn test_move_precompiles_same_address_noop() {
+    fn test_move_precompiles_same_address_errors() {
         let eth_precompiles = EthPrecompiles::new(SpecId::default());
         let mut spec_precompiles = PrecompilesMap::from(eth_precompiles);
 
         let identity_address = address!("0x0000000000000000000000000000000000000004");
 
-        // Moving to same address should be a no-op and not error
-        spec_precompiles.move_precompiles([(identity_address, identity_address)]).unwrap();
+        let result = spec_precompiles.move_precompiles([(identity_address, identity_address)]);
+        assert_eq!(result, Err(MovePrecompileError::MovePrecompileToSelf(identity_address)));
 
         // Precompile should still exist
         assert!(spec_precompiles.get(&identity_address).is_some());
