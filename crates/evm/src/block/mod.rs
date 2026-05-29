@@ -1,7 +1,7 @@
 //! Block execution abstraction.
 
 use crate::{Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, RecoveredTx, ToTxEnv};
-use alloc::{boxed::Box, vec::Vec};
+use alloc::vec::Vec;
 use alloy_consensus::transaction::Recovered;
 use alloy_eips::{eip2718::WithEncoded, eip7685::Requests};
 use revm::{
@@ -15,8 +15,7 @@ pub use error::*;
 mod gas_output;
 pub use gas_output::*;
 
-mod state_hook;
-pub use state_hook::*;
+pub use revm::{NoopHook, OnStateHook};
 
 pub mod system_calls;
 pub use system_calls::*;
@@ -415,19 +414,6 @@ pub trait BlockExecutor {
         Self: Sized,
     {
         self.finish().map(|(_, result)| result)
-    }
-
-    /// Sets a hook to be called after each state change during execution.
-    fn set_state_hook(&mut self, hook: Option<Box<dyn OnStateHook>>);
-
-    /// A builder-style helper to invoke [`BlockExecutor::set_state_hook`].
-    #[must_use]
-    fn with_state_hook(mut self, hook: Option<Box<dyn OnStateHook>>) -> Self
-    where
-        Self: Sized,
-    {
-        self.set_state_hook(hook);
-        self
     }
 
     /// Exposes mutable reference to EVM.
