@@ -2,8 +2,8 @@
 
 use crate::{Database, EvmInternals};
 use alloc::{
-    boxed::Box,
     borrow::Cow,
+    boxed::Box,
     string::{String, ToString},
     vec::Vec,
 };
@@ -55,7 +55,7 @@ impl PrecompilesMap {
     /// Maps a precompile at the given address using the provided function.
     pub fn map_precompile<F>(&mut self, address: &Address, f: F)
     where
-        F: FnOnce(DynPrecompile) -> DynPrecompile + Send + Sync + 'static,
+        F: FnOnce(DynPrecompile) -> DynPrecompile + 'static,
     {
         let dyn_precompiles = self.ensure_dynamic_precompiles();
 
@@ -183,7 +183,7 @@ impl PrecompilesMap {
     /// This is a consuming version of [`map_precompile`](Self::map_precompile) that returns `Self`.
     pub fn with_mapped_precompile<F>(mut self, address: &Address, f: F) -> Self
     where
-        F: FnOnce(DynPrecompile) -> DynPrecompile + Send + Sync + 'static,
+        F: FnOnce(DynPrecompile) -> DynPrecompile + 'static,
     {
         self.map_precompile(address, f);
         self
@@ -791,7 +791,7 @@ where
 
 impl<F> Precompile for (&PrecompileId, F)
 where
-    F: Fn(PrecompileInput<'_>) -> PrecompileResult + Send + Sync,
+    F: Fn(PrecompileInput<'_>) -> PrecompileResult,
 {
     fn precompile_id(&self) -> &PrecompileId {
         self.0
@@ -822,7 +822,7 @@ impl Precompile for revm::precompile::Precompile {
 
 impl<F> From<F> for DynPrecompile
 where
-    F: Fn(PrecompileInput<'_>) -> PrecompileResult + Send + Sync + 'static,
+    F: Fn(PrecompileInput<'_>) -> PrecompileResult + 'static,
 {
     fn from(f: F) -> Self {
         Self::new(PrecompileId::Custom("closure".into()), f)
@@ -840,7 +840,7 @@ impl From<PrecompileFn> for DynPrecompile {
 
 impl<F> From<(PrecompileId, F)> for DynPrecompile
 where
-    F: Fn(PrecompileInput<'_>) -> PrecompileResult + Send + Sync + 'static,
+    F: Fn(PrecompileInput<'_>) -> PrecompileResult + 'static,
 {
     fn from((id, f): (PrecompileId, F)) -> Self {
         Self(Box::new((id, f)))
@@ -924,7 +924,7 @@ pub trait PrecompileLookup {
 /// Implement PrecompileLookup for closure types
 impl<F> PrecompileLookup for F
 where
-    F: Fn(&Address) -> Option<DynPrecompile> + Send + Sync,
+    F: Fn(&Address) -> Option<DynPrecompile>,
 {
     fn lookup(&self, address: &Address) -> Option<DynPrecompile> {
         self(address)
