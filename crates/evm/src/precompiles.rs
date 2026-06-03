@@ -2,6 +2,7 @@
 
 use crate::{Database, EvmInternals};
 use alloc::{
+    boxed::Box,
     borrow::Cow,
     string::{String, ToString},
     vec::Vec,
