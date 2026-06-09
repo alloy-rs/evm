@@ -3,8 +3,8 @@
 use crate::{Database, EvmInternals};
 use alloc::{
     borrow::Cow,
+    boxed::Box,
     string::{String, ToString},
-    sync::Arc,
     vec::Vec,
 };
 use alloy_consensus::transaction::Either;
@@ -34,12 +34,11 @@ const fn precompile_id_supports_caching(id: &PrecompileId) -> bool {
 ///
 /// This is an optimization that allows us to keep using the static precompiles
 /// until we need to modify them, at which point we convert to the dynamic representation.
-#[derive(Clone)]
 pub struct PrecompilesMap {
     /// The wrapped precompiles in their current representation.
     precompiles: PrecompilesKind,
     /// An optional dynamic precompile loader that can lookup precompiles dynamically.
-    lookup: Option<Arc<dyn PrecompileLookup>>,
+    lookup: Option<Box<dyn PrecompileLookup>>,
 }
 
 impl PrecompilesMap {
@@ -56,7 +55,7 @@ impl PrecompilesMap {
     /// Maps a precompile at the given address using the provided function.
     pub fn map_precompile<F>(&mut self, address: &Address, f: F)
     where
-        F: FnOnce(DynPrecompile) -> DynPrecompile + Send + Sync + 'static,
+        F: FnOnce(DynPrecompile) -> DynPrecompile + 'static,
     {
         let dyn_precompiles = self.ensure_dynamic_precompiles();
 
@@ -160,7 +159,7 @@ impl PrecompilesMap {
         F: FnOnce(Option<DynPrecompile>) -> Option<DynPrecompile>,
     {
         let dyn_precompiles = self.ensure_dynamic_precompiles();
-        let current = dyn_precompiles.inner.get(address).cloned();
+        let current = dyn_precompiles.inner.remove(address);
 
         // apply the transformation function
         let result = f(current);
@@ -173,7 +172,6 @@ impl PrecompilesMap {
             }
             None => {
                 // remove the precompile if the transformation returned None
-                dyn_precompiles.inner.remove(address);
                 dyn_precompiles.addresses.remove(address);
             }
         }
@@ -185,7 +183,7 @@ impl PrecompilesMap {
     /// This is a consuming version of [`map_precompile`](Self::map_precompile) that returns `Self`.
     pub fn with_mapped_precompile<F>(mut self, address: &Address, f: F) -> Self
     where
-        F: FnOnce(DynPrecompile) -> DynPrecompile + Send + Sync + 'static,
+        F: FnOnce(DynPrecompile) -> DynPrecompile + 'static,
     {
         self.map_precompile(address, f);
         self
@@ -401,7 +399,7 @@ impl PrecompilesMap {
     where
         L: PrecompileLookup + 'static,
     {
-        self.lookup = Some(Arc::new(lookup));
+        self.lookup = Some(Box::new(lookup));
     }
 
     /// Maps the dynamic precompile lookup function while preserving access to the previous lookup.
@@ -472,7 +470,7 @@ impl PrecompilesMap {
             };
 
             for (&addr, pc) in static_precompiles.inner().iter() {
-                dynamic.inner.insert(addr, DynPrecompile(Arc::new(pc.clone())));
+                dynamic.inner.insert(addr, DynPrecompile(Box::new(pc.clone())));
                 dynamic.addresses.insert(addr);
             }
 
@@ -612,7 +610,6 @@ where
 ///
 /// This is an optimization that allows us to keep using the static precompiles
 /// until we need to modify them, at which point we convert to the dynamic representation.
-#[derive(Clone)]
 enum PrecompilesKind {
     /// Static builtin precompiles.
     Builtin(Cow<'static, Precompiles>),
@@ -621,30 +618,29 @@ enum PrecompilesKind {
 }
 
 /// A dynamic precompile implementation that can be modified at runtime.
-#[derive(Clone)]
-pub struct DynPrecompile(pub(crate) Arc<dyn Precompile + Send + Sync>);
+pub struct DynPrecompile(pub(crate) Box<dyn Precompile>);
 
 impl DynPrecompile {
     /// Creates a new [`DynPrecompiles`] with the given closure.
     pub fn new<F>(id: PrecompileId, f: F) -> Self
     where
-        F: Fn(PrecompileInput<'_>) -> PrecompileResult + Send + Sync + 'static,
+        F: Fn(PrecompileInput<'_>) -> PrecompileResult + 'static,
     {
-        Self(Arc::new((id, f)))
+        Self(Box::new((id, f)))
     }
 
     /// Creates a new [`DynPrecompiles`] with the given closure and
     /// [`Precompile::supports_caching`] returning `false`.
     pub fn new_stateful<F>(id: PrecompileId, f: F) -> Self
     where
-        F: Fn(PrecompileInput<'_>) -> PrecompileResult + Send + Sync + 'static,
+        F: Fn(PrecompileInput<'_>) -> PrecompileResult + 'static,
     {
-        Self(Arc::new(StatefulPrecompile((id, f))))
+        Self(Box::new(StatefulPrecompile((id, f))))
     }
 
     /// Flips [`Precompile::supports_caching`] to `false`.
     pub fn stateful(self) -> Self {
-        Self(Arc::new(StatefulPrecompile(self.0)))
+        Self(Box::new(StatefulPrecompile(self.0)))
     }
 }
 
@@ -658,7 +654,7 @@ impl core::fmt::Debug for DynPrecompile {
 ///
 /// This structure stores dynamic precompiles that can be modified at runtime,
 /// unlike the static `Precompiles` struct from revm.
-#[derive(Clone, Default)]
+#[derive(Default)]
 pub struct DynPrecompiles {
     /// Precompiles
     inner: AddressMap<DynPrecompile>,
@@ -758,7 +754,7 @@ impl<'a> PrecompileInput<'a> {
 }
 
 /// Trait for implementing precompiled contracts.
-#[auto_impl::auto_impl(&, Arc)]
+#[auto_impl::auto_impl(&, Box, Arc)]
 pub trait Precompile {
     /// Returns precompile ID.
     fn precompile_id(&self) -> &PrecompileId;
@@ -809,7 +805,7 @@ pub trait Precompile {
 
 impl<F> Precompile for (PrecompileId, F)
 where
-    F: Fn(PrecompileInput<'_>) -> PrecompileResult + Send + Sync,
+    F: Fn(PrecompileInput<'_>) -> PrecompileResult,
 {
     fn precompile_id(&self) -> &PrecompileId {
         &self.0
@@ -826,7 +822,7 @@ where
 
 impl<F> Precompile for (&PrecompileId, F)
 where
-    F: Fn(PrecompileInput<'_>) -> PrecompileResult + Send + Sync,
+    F: Fn(PrecompileInput<'_>) -> PrecompileResult,
 {
     fn precompile_id(&self) -> &PrecompileId {
         self.0
@@ -857,7 +853,7 @@ impl Precompile for revm::precompile::Precompile {
 
 impl<F> From<F> for DynPrecompile
 where
-    F: Fn(PrecompileInput<'_>) -> PrecompileResult + Send + Sync + 'static,
+    F: Fn(PrecompileInput<'_>) -> PrecompileResult + 'static,
 {
     fn from(f: F) -> Self {
         Self::new(PrecompileId::Custom("closure".into()), f)
@@ -875,10 +871,10 @@ impl From<PrecompileFn> for DynPrecompile {
 
 impl<F> From<(PrecompileId, F)> for DynPrecompile
 where
-    F: Fn(PrecompileInput<'_>) -> PrecompileResult + Send + Sync + 'static,
+    F: Fn(PrecompileInput<'_>) -> PrecompileResult + 'static,
 {
     fn from((id, f): (PrecompileId, F)) -> Self {
-        Self(Arc::new((id, f)))
+        Self(Box::new((id, f)))
     }
 }
 
@@ -948,7 +944,7 @@ impl<P: Precompile> Precompile for StatefulPrecompile<P> {
 ///
 /// This trait allows for runtime resolution of precompiles that aren't known
 /// at initialization time.
-pub trait PrecompileLookup: Send + Sync {
+pub trait PrecompileLookup {
     /// Looks up a precompile at the given address.
     ///
     /// Returns `Some(precompile)` if a precompile exists at the address,
@@ -959,7 +955,7 @@ pub trait PrecompileLookup: Send + Sync {
 /// Implement PrecompileLookup for closure types
 impl<F> PrecompileLookup for F
 where
-    F: Fn(&Address) -> Option<DynPrecompile> + Send + Sync,
+    F: Fn(&Address) -> Option<DynPrecompile>,
 {
     fn lookup(&self, address: &Address) -> Option<DynPrecompile> {
         self(address)
