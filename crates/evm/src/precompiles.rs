@@ -402,6 +402,22 @@ impl PrecompilesMap {
         self.lookup = Some(Box::new(lookup));
     }
 
+    /// Maps the dynamic precompile lookup function while preserving access to the previous lookup.
+    ///
+    /// This is useful when layering additional lookup behavior on top of an existing dynamic
+    /// resolver. The mapper receives the requested address and the previous lookup, if one was
+    /// installed. Callers can delegate to the previous lookup for addresses they do not handle.
+    pub fn map_precompile_lookup<F>(&mut self, f: F)
+    where
+        F: Fn(&Address, Option<&dyn PrecompileLookup>) -> Option<DynPrecompile>
+            + Send
+            + Sync
+            + 'static,
+    {
+        let previous = self.lookup.take();
+        self.lookup = Some(Box::new(move |address: &Address| f(address, previous.as_deref())));
+    }
+
     /// Builder-style method to set a dynamic precompile lookup function.
     ///
     /// This is a consuming version of [`set_precompile_lookup`](Self::set_precompile_lookup)
@@ -414,6 +430,21 @@ impl PrecompilesMap {
         L: PrecompileLookup + 'static,
     {
         self.set_precompile_lookup(lookup);
+        self
+    }
+
+    /// Builder-style method to map the dynamic precompile lookup function.
+    ///
+    /// This is a consuming version of [`map_precompile_lookup`](Self::map_precompile_lookup)
+    /// that returns `Self` for method chaining.
+    pub fn with_mapped_precompile_lookup<F>(mut self, f: F) -> Self
+    where
+        F: Fn(&Address, Option<&dyn PrecompileLookup>) -> Option<DynPrecompile>
+            + Send
+            + Sync
+            + 'static,
+    {
+        self.map_precompile_lookup(f);
         self
     }
 
@@ -1163,6 +1194,38 @@ mod tests {
         // Test non-matching address returns None
         let non_matching_address = address!("0x1234000000000000000000000000000000000001");
         assert!(spec_precompiles.get(&non_matching_address).is_none());
+    }
+
+    #[test]
+    fn test_map_precompile_lookup_preserves_previous_lookup() {
+        let eth_precompiles = EthPrecompiles::new(SpecId::default());
+        let mut spec_precompiles = PrecompilesMap::from(eth_precompiles);
+
+        let previous_lookup_address = address!("0x1000000000000000000000000000000000000001");
+        let mapped_lookup_address = address!("0x2000000000000000000000000000000000000001");
+        let missing_address = address!("0x3000000000000000000000000000000000000001");
+
+        spec_precompiles.set_precompile_lookup(move |address: &Address| {
+            (address == &previous_lookup_address).then(|| {
+                DynPrecompile::new(PrecompileId::Custom("previous".into()), |_input| {
+                    Ok(PrecompileOutput::new(100, Bytes::new(), 0))
+                })
+            })
+        });
+
+        spec_precompiles.map_precompile_lookup(move |address, previous| {
+            if address == &mapped_lookup_address {
+                return Some(DynPrecompile::new(PrecompileId::Custom("mapped".into()), |_input| {
+                    Ok(PrecompileOutput::new(200, Bytes::new(), 0))
+                }));
+            }
+
+            previous.and_then(|lookup| lookup.lookup(address))
+        });
+
+        assert!(spec_precompiles.get(&previous_lookup_address).is_some());
+        assert!(spec_precompiles.get(&mapped_lookup_address).is_some());
+        assert!(spec_precompiles.get(&missing_address).is_none());
     }
 
     #[test]
