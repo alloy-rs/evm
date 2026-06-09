@@ -415,7 +415,7 @@ impl PrecompilesMap {
             + 'static,
     {
         let previous = self.lookup.take();
-        self.lookup = Some(Arc::new(move |address: &Address| f(address, previous.as_deref())));
+        self.lookup = Some(Box::new(move |address: &Address| f(address, previous.as_deref())));
     }
 
     /// Builder-style method to set a dynamic precompile lookup function.
