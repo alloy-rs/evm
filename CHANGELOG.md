@@ -5,11 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.37.0](https://github.com/alloy-rs/evm/releases/tag/v0.37.0) - 2026-06-12
+
+### Bug Fixes
+
+- Quote dependabot schedule time ([#382](https://github.com/alloy-rs/evm/issues/382))
+- [ci] Ignore proc-macro-error2 advisory ([#376](https://github.com/alloy-rs/evm/issues/376))
+
+### Dependencies
+
+- Bump revm to 41.0.0 ([#384](https://github.com/alloy-rs/evm/issues/384))
+
+### Features
+
+- [evm] Support mapping precompile lookups ([#375](https://github.com/alloy-rs/evm/issues/375))
+
+### Miscellaneous Tasks
+
+- Group weekly dependabot updates ([#381](https://github.com/alloy-rs/evm/issues/381))
+- Remove send sync bounds ([#373](https://github.com/alloy-rs/evm/issues/373))
+
 ## [0.36.0](https://github.com/alloy-rs/evm/releases/tag/v0.36.0) - 2026-05-29
 
 ### Dependencies
 
 - Use revm State commit hook ([#366](https://github.com/alloy-rs/evm/issues/366))
+
+### Miscellaneous Tasks
+
+- Release 0.36.0
 
 ## [0.35.1](https://github.com/alloy-rs/evm/releases/tag/v0.35.1) - 2026-05-27
 
@@ -738,6 +762,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.12.2](https://github.com/alloy-rs/evm/releases/tag/v0.12.2) - 2025-06-23
 
+### Bug Fixes
+
+- Fix compilation
+
 ### Documentation
 
 - Fix typo in tracing.rs comment ([#113](https://github.com/alloy-rs/evm/issues/113))
@@ -751,15 +779,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Release 0.12.2
 - Derive Copy for `PrecompileInput` ([#110](https://github.com/alloy-rs/evm/issues/110))
-
-## [0.12.1](https://github.com/alloy-rs/evm/releases/tag/v0.12.1) - 2025-06-20
-
-### Bug Fixes
-
-- Fix compilation
-
-### Miscellaneous Tasks
-
 - Release 0.12.1
 
 ## [0.12.0](https://github.com/alloy-rs/evm/releases/tag/v0.12.0) - 2025-06-20
