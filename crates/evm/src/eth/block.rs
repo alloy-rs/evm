@@ -126,6 +126,12 @@ where
         }
     }
 
+    /// Reserves capacity for at least `tx_count` additional receipts.
+    #[inline]
+    pub fn reserve(&mut self, tx_count: usize) {
+        self.receipts.reserve(tx_count);
+    }
+
     /// Returns the maximum of regular and state gas used by transactions in this block.
     #[inline]
     pub const fn max_block_gas_used(&self) -> u64 {
