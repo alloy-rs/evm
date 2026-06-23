@@ -298,15 +298,6 @@ mod tests {
     }
 
     #[test]
-    fn test_dyn_block_environment_downcasts_to_block_env() {
-        let block_env = BlockEnv::default();
-        let dyn_block_env: &dyn BlockEnvironment = &block_env;
-        let any_block_env = dyn_block_env as &dyn Any;
-
-        assert!(any_block_env.downcast_ref::<BlockEnv>().is_some());
-    }
-
-    #[test]
     fn test_evm_env_with_osaka_limits() {
         // osaka() has tx_gas_limit_cap set to EIP-7825's cap.
         use revm::context::{BlockEnv, CfgEnv};

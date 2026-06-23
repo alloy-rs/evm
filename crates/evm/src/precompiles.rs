@@ -987,6 +987,7 @@ mod tests {
     use crate::eth::EthEvmContext;
     use alloy_primitives::{address, Bytes};
     use revm::{
+        context::BlockEnv,
         database::EmptyDB,
         precompile::{PrecompileId, PrecompileOutput},
         primitives::hardfork::SpecId,
@@ -1068,6 +1069,14 @@ mod tests {
             result.bytes, constant_bytes,
             "Modified precompile should return the constant value"
         );
+    }
+
+    #[test]
+    fn test_evm_internals_downcasts_block_env() {
+        let mut ctx = EthEvmContext::new(EmptyDB::default(), Default::default());
+        let internals = EvmInternals::from_context(&mut ctx);
+
+        assert!(internals.block_env_downcast_ref::<BlockEnv>().is_some());
     }
 
     #[test]

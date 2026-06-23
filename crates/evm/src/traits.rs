@@ -509,6 +509,11 @@ impl<'a> EvmInternals<'a> {
         self.block_env
     }
 
+    /// Attempts to downcast the block environment to a concrete type.
+    pub fn block_env_downcast_ref<T: BlockEnvironment>(&self) -> Option<&T> {
+        (self.block_env as &dyn core::any::Any).downcast_ref()
+    }
+
     /// Returns the current block number.
     pub fn block_number(&self) -> U256 {
         self.block_env.number()
