@@ -1,6 +1,6 @@
 //! Helpers for dealing with Precompiles.
 
-use crate::{Database, EvmInternals};
+use crate::{env::BlockEnvironment, Database, EvmInternals};
 use alloc::{
     borrow::Cow,
     boxed::Box,
@@ -550,7 +550,7 @@ impl core::fmt::Debug for PrecompilesMap {
 impl<BlockEnv, TxEnv, CfgEnv, DB, Chain>
     PrecompileProvider<Context<BlockEnv, TxEnv, CfgEnv, DB, Journal<DB>, Chain>> for PrecompilesMap
 where
-    BlockEnv: revm::context::Block,
+    BlockEnv: BlockEnvironment,
     TxEnv: revm::context::Transaction,
     CfgEnv: revm::context::Cfg,
     DB: Database,
@@ -987,7 +987,6 @@ mod tests {
     use crate::eth::EthEvmContext;
     use alloy_primitives::{address, Bytes};
     use revm::{
-        context::Block,
         database::EmptyDB,
         precompile::{PrecompileId, PrecompileOutput},
         primitives::hardfork::SpecId,

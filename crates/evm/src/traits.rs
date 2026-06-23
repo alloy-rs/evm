@@ -1,6 +1,6 @@
 //! EVM traits.
 
-use crate::Database;
+use crate::{env::BlockEnvironment, Database};
 use alloc::boxed::Box;
 use alloy_primitives::{Address, Bytes, Log, TxKind, B256, U256};
 use core::{error::Error, fmt, fmt::Debug};
@@ -10,7 +10,7 @@ use revm::{
             account::JournaledAccountTr, JournalCheckpoint, JournalLoadError, TransferError,
         },
         result::InvalidTransaction,
-        Block, Cfg, ContextTr, DBErrorMarker, JournalTr,
+        Cfg, ContextTr, DBErrorMarker, JournalTr,
     },
     interpreter::{SStoreResult, StateLoad},
     primitives::{StorageKey, StorageValue},
@@ -469,7 +469,7 @@ where
 /// Helper type exposing hooks into EVM and access to evm internal settings.
 pub struct EvmInternals<'a> {
     internals: Box<dyn EvmInternalsTr + 'a>,
-    block_env: &'a (dyn Block + 'a),
+    block_env: &'a dyn BlockEnvironment,
     chain_id: u64,
     tx_origin: Address,
     tx_env: &'a dyn TransactionTr,
@@ -479,7 +479,7 @@ impl<'a> EvmInternals<'a> {
     /// Creates a new [`EvmInternals`] instance.
     pub fn new<T>(
         journal: &'a mut T,
-        block_env: &'a dyn Block,
+        block_env: &'a dyn BlockEnvironment,
         cfg_env: &'a impl Cfg,
         tx_env: &'a dyn TransactionTr,
     ) -> Self
@@ -498,14 +498,14 @@ impl<'a> EvmInternals<'a> {
     /// Creates a new [`EvmInternals`] instance from a [`ContextTr`].
     pub fn from_context<CTX>(ctx: &'a mut CTX) -> Self
     where
-        CTX: ContextTr<Journal: JournalTr<Database: Database> + Debug>,
+        CTX: ContextTr<Block: BlockEnvironment, Journal: JournalTr<Database: Database> + Debug>,
     {
         let (block, tx, cfg, journaled_state, ..) = ctx.all_mut();
         Self::new(journaled_state, block, cfg, tx)
     }
 
     /// Returns the  evm's block information.
-    pub const fn block_env(&self) -> impl Block + 'a {
+    pub const fn block_env(&self) -> &dyn BlockEnvironment {
         self.block_env
     }
 
