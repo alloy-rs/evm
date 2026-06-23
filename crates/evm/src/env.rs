@@ -1,6 +1,6 @@
 //! Configuration types for EVM environment.
 
-use core::fmt::Debug;
+use core::{any::Any, fmt::Debug};
 
 use alloy_primitives::U256;
 use revm::{
@@ -162,7 +162,7 @@ impl<Spec, BlockEnv> From<(CfgEnv<Spec>, BlockEnv)> for EvmEnv<Spec, BlockEnv> {
 /// Trait for types that can be used as a block environment.
 ///
 /// Assumes that the type wraps an inner [`revm::context::BlockEnv`].
-pub trait BlockEnvironment: revm::context::Block + Clone + Debug + Send + Sync + 'static {
+pub trait BlockEnvironment: revm::context::Block + Any + Debug + Send + Sync + 'static {
     /// Returns a mutable reference to the inner [`revm::context::BlockEnv`].
     fn inner_mut(&mut self) -> &mut revm::context::BlockEnv;
 }
@@ -258,7 +258,7 @@ impl EvmLimitParams {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use revm::context::Cfg;
+    use revm::context::{Block, Cfg};
 
     #[test]
     fn test_evm_env_with_limits() {
@@ -287,6 +287,14 @@ mod tests {
             revm::primitives::eip3860::MAX_INITCODE_SIZE
         );
         assert_eq!(evm_env.cfg_env.tx_gas_limit_cap(), revm::primitives::eip7825::TX_GAS_LIMIT_CAP);
+    }
+
+    #[test]
+    fn test_block_environment_is_dyn_compatible() {
+        let block_env = BlockEnv::default();
+        let dyn_block_env: &dyn BlockEnvironment = &block_env;
+
+        assert_eq!(dyn_block_env.number(), block_env.number());
     }
 
     #[test]
