@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Add EthBlockExecutor reserve ([#385](https://github.com/alloy-rs/evm/issues/385))
 
+### Miscellaneous Tasks
+
+- Release 0.37.1
+
 ### Other
 
 - Expose dyn BlockEnvironment in EvmInternals ([#386](https://github.com/alloy-rs/evm/issues/386))
