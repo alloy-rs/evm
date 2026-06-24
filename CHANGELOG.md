@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.37.1](https://github.com/alloy-rs/evm/releases/tag/v0.37.1) - 2026-06-24
+
+### Bug Fixes
+
+- Re-add Clone bound ([#387](https://github.com/alloy-rs/evm/issues/387))
+
+### Features
+
+- Add EthBlockExecutor reserve ([#385](https://github.com/alloy-rs/evm/issues/385))
+
+### Other
+
+- Expose dyn BlockEnvironment in EvmInternals ([#386](https://github.com/alloy-rs/evm/issues/386))
+
 ## [0.37.0](https://github.com/alloy-rs/evm/releases/tag/v0.37.0) - 2026-06-12
 
 ### Bug Fixes
@@ -22,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Miscellaneous Tasks
 
+- Release 0.37.0
 - Group weekly dependabot updates ([#381](https://github.com/alloy-rs/evm/issues/381))
 - Remove send sync bounds ([#373](https://github.com/alloy-rs/evm/issues/373))
 
