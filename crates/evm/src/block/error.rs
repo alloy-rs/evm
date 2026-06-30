@@ -84,6 +84,22 @@ pub enum BlockValidationError {
         /// The error message.
         message: String,
     },
+    /// EVM error during builder deposit requests contract call [EIP-8282]
+    ///
+    /// [EIP-8282]: https://eips.ethereum.org/EIPS/eip-8282
+    #[error("failed to apply builder deposit requests contract call: {message}")]
+    BuilderDepositRequestsContractCall {
+        /// The error message.
+        message: String,
+    },
+    /// EVM error during builder exit requests contract call [EIP-8282]
+    ///
+    /// [EIP-8282]: https://eips.ethereum.org/EIPS/eip-8282
+    #[error("failed to apply builder exit requests contract call: {message}")]
+    BuilderExitRequestsContractCall {
+        /// The error message.
+        message: String,
+    },
     /// Error when decoding deposit requests from receipts [EIP-6110]
     ///
     /// [EIP-6110]: https://eips.ethereum.org/EIPS/eip-6110

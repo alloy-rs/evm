@@ -7,12 +7,20 @@ use alloy_eips::{
 };
 use alloy_hardforks::EthereumHardforks;
 use alloy_primitives::{Bytes, B256};
-use revm::DatabaseCommit;
+use revm::{context::Block, DatabaseCommit};
 
 mod eip2935;
 mod eip4788;
 mod eip7002;
 mod eip7251;
+mod eip7997;
+mod eip8282;
+
+pub use eip7997::{FACTORY_ADDRESS, FACTORY_CODE, FACTORY_CODE_HASH};
+pub use eip8282::{
+    BUILDER_DEPOSIT_REQUEST_PREDEPLOY_ADDRESS, BUILDER_DEPOSIT_REQUEST_TYPE,
+    BUILDER_EXIT_REQUEST_PREDEPLOY_ADDRESS, BUILDER_EXIT_REQUEST_TYPE,
+};
 
 /// An ephemeral helper type for executing system calls.
 ///
@@ -42,6 +50,7 @@ where
     ) -> Result<(), BlockExecutionError> {
         self.apply_blockhashes_contract_call(header.parent_hash(), evm)?;
         self.apply_beacon_root_contract_call(header.parent_beacon_block_root(), evm)?;
+        self.apply_factory_predeploy(evm)?;
 
         Ok(())
     }
@@ -72,6 +81,25 @@ where
         let consolidation_requests = self.apply_consolidation_requests_contract_call(evm)?;
         if !consolidation_requests.is_empty() {
             requests.push_request_with_type(CONSOLIDATION_REQUEST_TYPE, consolidation_requests);
+        }
+
+        // Collect all EIP-8282 builder execution requests, introduced in Amsterdam. The system
+        // calls must run from the Amsterdam activation block onward (they also reset each
+        // predeploy's excess counter from the `EXCESS_INHIBITOR` sentinel to 0 on first call).
+        if self.spec.is_amsterdam_active_at_timestamp(evm.block().timestamp().saturating_to()) {
+            // EIP-8282 builder deposit requests
+            let builder_deposit_requests =
+                self.apply_builder_deposit_requests_contract_call(evm)?;
+            if !builder_deposit_requests.is_empty() {
+                requests
+                    .push_request_with_type(BUILDER_DEPOSIT_REQUEST_TYPE, builder_deposit_requests);
+            }
+
+            // EIP-8282 builder exit requests
+            let builder_exit_requests = self.apply_builder_exit_requests_contract_call(evm)?;
+            if !builder_exit_requests.is_empty() {
+                requests.push_request_with_type(BUILDER_EXIT_REQUEST_TYPE, builder_exit_requests);
+            }
         }
 
         Ok(())
@@ -135,5 +163,48 @@ where
         evm.db_mut().commit(result_and_state.state);
 
         eip7251::post_commit(result_and_state.result)
+    }
+
+    /// Applies the EIP-7997 pre-block state transition, inserting the deterministic `CREATE2`
+    /// factory bytecode at [`FACTORY_ADDRESS`].
+    ///
+    /// This is a no-op unless Amsterdam is active and the factory is not already deployed, so it
+    /// only mutates state on the block that activates Amsterdam.
+    pub fn apply_factory_predeploy(
+        &mut self,
+        evm: &mut impl Evm<DB: DatabaseCommit>,
+    ) -> Result<(), BlockExecutionError> {
+        let _span = tracing::debug_span!("eip7997_factory_predeploy").entered();
+        if let Some(state) = eip7997::build_factory_predeploy_state(&self.spec, evm)? {
+            evm.db_mut().commit(state);
+        }
+
+        Ok(())
+    }
+
+    /// Applies the post-block call to the EIP-8282 builder deposit requests contract.
+    pub fn apply_builder_deposit_requests_contract_call(
+        &mut self,
+        evm: &mut impl Evm<DB: DatabaseCommit>,
+    ) -> Result<Bytes, BlockExecutionError> {
+        let _span = tracing::debug_span!("eip8282_builder_deposit_requests").entered();
+        let result_and_state = eip8282::transact_builder_deposit_requests_contract_call(evm)?;
+
+        evm.db_mut().commit(result_and_state.state);
+
+        eip8282::deposit_post_commit(result_and_state.result)
+    }
+
+    /// Applies the post-block call to the EIP-8282 builder exit requests contract.
+    pub fn apply_builder_exit_requests_contract_call(
+        &mut self,
+        evm: &mut impl Evm<DB: DatabaseCommit>,
+    ) -> Result<Bytes, BlockExecutionError> {
+        let _span = tracing::debug_span!("eip8282_builder_exit_requests").entered();
+        let result_and_state = eip8282::transact_builder_exit_requests_contract_call(evm)?;
+
+        evm.db_mut().commit(result_and_state.state);
+
+        eip8282::exit_post_commit(result_and_state.result)
     }
 }
