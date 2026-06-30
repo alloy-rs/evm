@@ -309,8 +309,11 @@ impl PrecompilesMap {
             }
         }
 
-        // Extract precompiles from source addresses
-        let mut extracted: Vec<(Address, DynPrecompile)> = Vec::with_capacity(moves.len());
+        let lookup_moves = moves.clone();
+
+        // Extract precompiles from source addresses without registering destinations as warm.
+        let mut moved_precompiles: AddressMap<alloc::sync::Arc<dyn Precompile>> =
+            AddressMap::with_capacity_and_hasher(moves.len(), Default::default());
 
         for (source, dest) in moves {
             let mut found_precompile: Option<DynPrecompile> = None;
@@ -320,14 +323,30 @@ impl PrecompilesMap {
             });
 
             if let Some(precompile) = found_precompile {
-                extracted.push((dest, precompile));
+                moved_precompiles.insert(dest, alloc::sync::Arc::from(precompile.0));
             }
         }
 
-        // Install precompiles at destination addresses
-        for (dest, precompile) in extracted {
-            self.apply_precompile(&dest, |_| Some(precompile));
+        // Remove static destination entries so the moved precompiles take precedence.
+        for (_, dest) in &lookup_moves {
+            self.apply_precompile(dest, |_| None);
         }
+
+        self.map_precompile_lookup(move |address, previous| {
+            if let Some(precompile) = moved_precompiles.get(address) {
+                return Some(DynPrecompile(Box::new(precompile.clone())));
+            }
+
+            if let Some((source, _)) = lookup_moves.iter().find(|(_, dest)| address == dest) {
+                return previous.and_then(|lookup| lookup.lookup(source));
+            }
+
+            if lookup_moves.iter().any(|(source, _)| address == source) {
+                return None;
+            }
+
+            previous.and_then(|lookup| lookup.lookup(address))
+        });
 
         Ok(())
     }
@@ -409,10 +428,7 @@ impl PrecompilesMap {
     /// installed. Callers can delegate to the previous lookup for addresses they do not handle.
     pub fn map_precompile_lookup<F>(&mut self, f: F)
     where
-        F: Fn(&Address, Option<&dyn PrecompileLookup>) -> Option<DynPrecompile>
-            + Send
-            + Sync
-            + 'static,
+        F: Fn(&Address, Option<&dyn PrecompileLookup>) -> Option<DynPrecompile> + 'static,
     {
         let previous = self.lookup.take();
         self.lookup = Some(Box::new(move |address: &Address| f(address, previous.as_deref())));
@@ -439,10 +455,7 @@ impl PrecompilesMap {
     /// that returns `Self` for method chaining.
     pub fn with_mapped_precompile_lookup<F>(mut self, f: F) -> Self
     where
-        F: Fn(&Address, Option<&dyn PrecompileLookup>) -> Option<DynPrecompile>
-            + Send
-            + Sync
-            + 'static,
+        F: Fn(&Address, Option<&dyn PrecompileLookup>) -> Option<DynPrecompile> + 'static,
     {
         self.map_precompile_lookup(f);
         self
@@ -1330,6 +1343,10 @@ mod tests {
             spec_precompiles.get(&new_address).is_some(),
             "Precompile should exist at new address"
         );
+        assert!(
+            !spec_precompiles.addresses().any(|address| address == &new_address),
+            "Moved precompile destination should not be pre-warmed"
+        );
 
         // Verify the moved precompile works correctly
         let result = spec_precompiles
@@ -1397,5 +1414,49 @@ mod tests {
         // New addresses should have the precompiles
         assert!(spec_precompiles.get(&new_ecrecover).is_some());
         assert!(spec_precompiles.get(&new_sha256).is_some());
+        assert!(!spec_precompiles.addresses().any(|address| address == &new_ecrecover));
+        assert!(!spec_precompiles.addresses().any(|address| address == &new_sha256));
+    }
+
+    #[test]
+    fn test_move_precompiles_replaces_destination() {
+        let eth_precompiles = EthPrecompiles::new(SpecId::default());
+        let mut spec_precompiles = PrecompilesMap::from(eth_precompiles);
+
+        let identity = address!("0x0000000000000000000000000000000000000004");
+        let sha256 = address!("0x0000000000000000000000000000000000000002");
+        let identity_id = spec_precompiles.get(&identity).unwrap().precompile_id().clone();
+
+        spec_precompiles.move_precompiles([(identity, sha256)]).unwrap();
+
+        assert!(spec_precompiles.get(&identity).is_none());
+        assert_eq!(spec_precompiles.get(&sha256).unwrap().precompile_id(), &identity_id);
+        assert!(!spec_precompiles.addresses().any(|address| address == &sha256));
+    }
+
+    #[test]
+    fn test_move_precompiles_preserves_previous_lookup() {
+        let eth_precompiles = EthPrecompiles::new(SpecId::default());
+        let mut spec_precompiles = PrecompilesMap::from(eth_precompiles);
+
+        let dynamic_source = address!("0x1000000000000000000000000000000000000001");
+        let dynamic_dest = address!("0x2000000000000000000000000000000000000001");
+        let unrelated_dynamic = address!("0x3000000000000000000000000000000000000001");
+
+        spec_precompiles.set_precompile_lookup(move |address: &Address| {
+            if address == &dynamic_source || address == &unrelated_dynamic {
+                Some(DynPrecompile::new(PrecompileId::Custom("dynamic".into()), |_input| {
+                    Ok(PrecompileOutput::new(100, Bytes::new(), 0))
+                }))
+            } else {
+                None
+            }
+        });
+
+        spec_precompiles.move_precompiles([(dynamic_source, dynamic_dest)]).unwrap();
+
+        assert!(spec_precompiles.get(&dynamic_source).is_none());
+        assert!(spec_precompiles.get(&dynamic_dest).is_some());
+        assert!(spec_precompiles.get(&unrelated_dynamic).is_some());
     }
 }
