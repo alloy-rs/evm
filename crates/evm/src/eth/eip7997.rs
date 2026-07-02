@@ -43,6 +43,7 @@ where
 
     let mut account = Account::from(info);
     if account.info.nonce == 0 {
+        // Mirror normal contract creation semantics: deployed contracts start with nonce 1.
         account.info.nonce = 1;
     }
     account.info.code_hash = code_hash;
