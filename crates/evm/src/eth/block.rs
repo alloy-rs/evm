@@ -3,7 +3,7 @@
 use core::cmp::min;
 
 use super::{
-    dao_fork, eip6110,
+    dao_fork, eip6110, eip7997,
     receipt_builder::{AlloyReceiptBuilder, ReceiptBuilder, ReceiptBuilderCtx},
     spec::{EthExecutorSpec, EthSpec},
     EthEvmFactory,
@@ -158,6 +158,11 @@ where
         self.system_caller.apply_blockhashes_contract_call(self.ctx.parent_hash, &mut self.evm)?;
         self.system_caller
             .apply_beacon_root_contract_call(self.ctx.parent_beacon_block_root, &mut self.evm)?;
+
+        let timestamp = self.evm.block().timestamp().saturating_to();
+        if self.spec.is_amsterdam_active_at_timestamp(timestamp) {
+            eip7997::insert_deterministic_factory_account(self.evm.db_mut())?;
+        }
 
         Ok(())
     }
@@ -400,5 +405,85 @@ where
         I: Inspector<EvmF::Context<DB>>,
     {
         EthBlockExecutor::new(evm, ctx, &self.spec, &self.receipt_builder)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{eth::eip7997, EvmEnv};
+    use alloy_hardforks::{EthereumHardfork, EthereumHardforks, ForkCondition};
+    use alloy_primitives::{Address, U256};
+    use revm::{
+        context::{BlockEnv, CfgEnv},
+        database::{CacheDB, State},
+        database_interface::EmptyDB,
+        primitives::hardfork::SpecId,
+        Database as _,
+    };
+
+    #[derive(Clone, Copy, Debug)]
+    struct TestSpec {
+        amsterdam: ForkCondition,
+    }
+
+    impl TestSpec {
+        const fn amsterdam_at(timestamp: u64) -> Self {
+            Self { amsterdam: ForkCondition::Timestamp(timestamp) }
+        }
+    }
+
+    impl EthereumHardforks for TestSpec {
+        fn ethereum_fork_activation(&self, fork: EthereumHardfork) -> ForkCondition {
+            match fork {
+                EthereumHardfork::Amsterdam => self.amsterdam,
+                _ => ForkCondition::Never,
+            }
+        }
+    }
+
+    impl EthExecutorSpec for TestSpec {
+        fn deposit_contract_address(&self) -> Option<Address> {
+            None
+        }
+    }
+
+    fn apply_pre_execution_changes(timestamp: u64, spec: TestSpec) -> State<CacheDB<EmptyDB>> {
+        let db = State::builder().with_database(CacheDB::new(EmptyDB::new())).build();
+        let mut cfg_env = CfgEnv::default();
+        cfg_env.spec = SpecId::AMSTERDAM;
+        cfg_env.chain_id = 1;
+        let block_env = BlockEnv { timestamp: U256::from(timestamp), ..Default::default() };
+
+        let evm = EthEvmFactory.create_evm(db, EvmEnv { block_env, cfg_env });
+        let ctx = EthBlockExecutionCtx {
+            parent_hash: B256::ZERO,
+            parent_beacon_block_root: None,
+            ommers: &[],
+            withdrawals: None,
+            extra_data: Bytes::new(),
+            tx_count_hint: None,
+            slot_number: None,
+        };
+        let mut executor = EthBlockExecutor::new(evm, ctx, spec, AlloyReceiptBuilder::default());
+
+        executor.apply_pre_execution_changes().unwrap();
+        executor.evm.into_db()
+    }
+
+    #[test]
+    fn inserts_deterministic_factory_when_amsterdam_is_active() {
+        let mut db = apply_pre_execution_changes(10, TestSpec::amsterdam_at(10));
+
+        let info = db.basic(eip7997::DETERMINISTIC_FACTORY_ADDRESS).unwrap().unwrap();
+        assert_eq!(info.nonce, 1);
+        assert_eq!(info.code_hash, eip7997::deterministic_factory_runtime_bytecode().hash_slow());
+    }
+
+    #[test]
+    fn skips_deterministic_factory_before_amsterdam() {
+        let mut db = apply_pre_execution_changes(9, TestSpec::amsterdam_at(10));
+
+        assert!(db.basic(eip7997::DETERMINISTIC_FACTORY_ADDRESS).unwrap().is_none());
     }
 }
