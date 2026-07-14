@@ -32,11 +32,11 @@ pub const BUILDER_EXIT_REQUEST_TYPE: u8 = 0x04;
 
 /// The address of the EIP-8282 builder deposit requests predeploy.
 pub const BUILDER_DEPOSIT_REQUEST_PREDEPLOY_ADDRESS: Address =
-    address!("0x0000884d2AA32eAa155F59A2f24eFa73D9008282");
+    address!("0x0000BFF46984E3725691FA540A8C7589300D8282");
 
 /// The address of the EIP-8282 builder exit requests predeploy.
 pub const BUILDER_EXIT_REQUEST_PREDEPLOY_ADDRESS: Address =
-    address!("0x000014574A74c805590AFF9499fc7A690f008282");
+    address!("0x000064D678505AD48F8CCB093BC65613800E8282");
 
 /// Applies the post-block call to the EIP-8282 builder deposit requests contract.
 ///
