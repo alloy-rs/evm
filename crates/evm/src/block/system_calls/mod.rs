@@ -13,10 +13,8 @@ mod eip2935;
 mod eip4788;
 mod eip7002;
 mod eip7251;
-mod eip7997;
 mod eip8282;
 
-pub use eip7997::{FACTORY_ADDRESS, FACTORY_CODE, FACTORY_CODE_HASH};
 pub use eip8282::{
     BUILDER_DEPOSIT_REQUEST_PREDEPLOY_ADDRESS, BUILDER_DEPOSIT_REQUEST_TYPE,
     BUILDER_EXIT_REQUEST_PREDEPLOY_ADDRESS, BUILDER_EXIT_REQUEST_TYPE,
@@ -50,7 +48,6 @@ where
     ) -> Result<(), BlockExecutionError> {
         self.apply_blockhashes_contract_call(header.parent_hash(), evm)?;
         self.apply_beacon_root_contract_call(header.parent_beacon_block_root(), evm)?;
-        self.apply_factory_predeploy(evm)?;
 
         Ok(())
     }
@@ -163,23 +160,6 @@ where
         evm.db_mut().commit(result_and_state.state);
 
         eip7251::post_commit(result_and_state.result)
-    }
-
-    /// Applies the EIP-7997 pre-block state transition, inserting the deterministic `CREATE2`
-    /// factory bytecode at [`FACTORY_ADDRESS`].
-    ///
-    /// This is a no-op unless Amsterdam is active and the factory is not already deployed, so it
-    /// only mutates state on the block that activates Amsterdam.
-    pub fn apply_factory_predeploy(
-        &mut self,
-        evm: &mut impl Evm<DB: DatabaseCommit>,
-    ) -> Result<(), BlockExecutionError> {
-        let _span = tracing::debug_span!("eip7997_factory_predeploy").entered();
-        if let Some(state) = eip7997::build_factory_predeploy_state(&self.spec, evm)? {
-            evm.db_mut().commit(state);
-        }
-
-        Ok(())
     }
 
     /// Applies the post-block call to the EIP-8282 builder deposit requests contract.
