@@ -197,6 +197,21 @@ where
             .into());
         }
 
+        // Amsterdam+ (EIP-8037): the full transaction gas limit must also fit within the
+        // block's available state gas: tx.gas <= state_gas_available. The transaction gas
+        // limit cap applies only to the regular dimension, so the uncapped gas limit is
+        // used here.
+        if self.evm.cfg_env().enable_amsterdam_eip8037 {
+            let state_gas_available = self.evm.block().gas_limit() - self.block_state_gas_used;
+            if tx.tx().gas_limit() > state_gas_available {
+                return Err(BlockValidationError::TransactionGasLimitMoreThanAvailableBlockGas {
+                    transaction_gas_limit: tx.tx().gas_limit(),
+                    block_available_gas: state_gas_available,
+                }
+                .into());
+            }
+        }
+
         // Execute transaction and return the result
         let result = self.evm.transact(tx_env).map_err(|err| {
             let hash = tx.tx().trie_hash();
@@ -400,5 +415,115 @@ where
         I: Inspector<EvmF::Context<DB>>,
     {
         EthBlockExecutor::new(evm, ctx, &self.spec, &self.receipt_builder)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{precompiles::PrecompilesMap, EthEvm, EvmEnv, EvmFactory};
+    use alloy_consensus::{transaction::Recovered, SignableTransaction, TxEnvelope, TxLegacy};
+    use alloy_primitives::{Address, Signature, TxKind, U256};
+    use revm::{
+        context::{BlockEnv, CfgEnv},
+        database::CacheDB,
+        database_interface::EmptyDB,
+        inspector::NoOpInspector,
+        primitives::hardfork::SpecId,
+    };
+
+    const BLOCK_GAS_LIMIT: u64 = 20_000_000;
+    /// EIP-7825 transaction gas limit cap (2^24).
+    const TX_GAS_LIMIT_CAP: u64 = 16_777_216;
+
+    type TestExecutor = EthBlockExecutor<
+        'static,
+        EthEvm<CacheDB<EmptyDB>, NoOpInspector, PrecompilesMap>,
+        EthSpec,
+        AlloyReceiptBuilder,
+    >;
+
+    fn amsterdam_executor() -> TestExecutor {
+        let mut cfg_env = CfgEnv::default();
+        cfg_env.spec = SpecId::AMSTERDAM;
+        cfg_env.enable_amsterdam_eip8037 = true;
+        cfg_env.tx_gas_limit_cap = Some(TX_GAS_LIMIT_CAP);
+
+        let block_env = BlockEnv { gas_limit: BLOCK_GAS_LIMIT, ..Default::default() };
+        let evm = EthEvmFactory
+            .create_evm(CacheDB::new(EmptyDB::default()), EvmEnv { cfg_env, block_env });
+
+        let ctx = EthBlockExecutionCtx {
+            parent_hash: B256::ZERO,
+            parent_beacon_block_root: None,
+            ommers: &[],
+            withdrawals: None,
+            extra_data: Bytes::default(),
+            tx_count_hint: None,
+            slot_number: None,
+        };
+
+        EthBlockExecutor::new(evm, ctx, EthSpec::mainnet(), AlloyReceiptBuilder)
+    }
+
+    fn tx_with_gas_limit(gas_limit: u64) -> Recovered<TxEnvelope> {
+        let tx = TxLegacy {
+            chain_id: Some(1),
+            nonce: 0,
+            gas_price: 0,
+            gas_limit,
+            to: TxKind::Create,
+            value: U256::ZERO,
+            input: Bytes::default(),
+        };
+        let signed = tx.into_signed(Signature::test_signature());
+        Recovered::new_unchecked(TxEnvelope::Legacy(signed), Address::ZERO)
+    }
+
+    /// EIP-8037: a transaction whose gas limit exceeds the block gas limit must be rejected
+    /// in the state dimension even if the capped gas limit fits the regular dimension.
+    #[test]
+    fn eip8037_rejects_tx_gas_above_state_gas_available() {
+        let mut executor = amsterdam_executor();
+        let tx = tx_with_gas_limit(BLOCK_GAS_LIMIT + 1);
+
+        // Regular dimension passes: min(cap, tx.gas) = 16_777_216 <= 20_000_000.
+        // State dimension must reject: tx.gas > state_gas_available.
+        let err = executor.execute_transaction_without_commit(&tx).unwrap_err();
+        assert!(matches!(
+            err.as_validation(),
+            Some(BlockValidationError::TransactionGasLimitMoreThanAvailableBlockGas {
+                transaction_gas_limit,
+                block_available_gas,
+            }) if *transaction_gas_limit == BLOCK_GAS_LIMIT + 1
+                && *block_available_gas == BLOCK_GAS_LIMIT
+        ));
+    }
+
+    /// EIP-8037: the state dimension check accounts for state gas already used in the block.
+    #[test]
+    fn eip8037_rejects_tx_gas_above_remaining_state_gas() {
+        let mut executor = amsterdam_executor();
+        executor.block_state_gas_used = BLOCK_GAS_LIMIT - 5_000_000;
+        let tx = tx_with_gas_limit(5_000_001);
+
+        let err = executor.execute_transaction_without_commit(&tx).unwrap_err();
+        assert!(matches!(
+            err.as_validation(),
+            Some(BlockValidationError::TransactionGasLimitMoreThanAvailableBlockGas {
+                transaction_gas_limit,
+                block_available_gas,
+            }) if *transaction_gas_limit == 5_000_001 && *block_available_gas == 5_000_000
+        ));
+    }
+
+    /// A transaction at the state gas boundary is accepted.
+    #[test]
+    fn eip8037_accepts_tx_gas_at_state_gas_boundary() {
+        let mut executor = amsterdam_executor();
+        executor.block_state_gas_used = BLOCK_GAS_LIMIT - 5_000_000;
+        let tx = tx_with_gas_limit(5_000_000);
+
+        assert!(executor.execute_transaction_without_commit(&tx).is_ok());
     }
 }
