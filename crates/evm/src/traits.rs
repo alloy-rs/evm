@@ -3,7 +3,7 @@
 use crate::{env::BlockEnvironment, Database};
 use alloc::boxed::Box;
 use alloy_primitives::{Address, Bytes, Log, TxKind, B256, U256};
-use core::{error::Error, fmt, fmt::Debug};
+use core::{any::Any, error::Error, fmt, fmt::Debug};
 use revm::{
     context::{
         journaled_state::{
@@ -52,7 +52,7 @@ impl EvmInternalsError {
 /// associated types (e.g. `access_list`, `authorization_list`). This trait mirrors
 /// the dyn-compatible subset of those methods, allowing transaction data to be
 /// accessed through `&dyn TransactionTr` in [`EvmInternals`].
-pub trait TransactionTr {
+pub trait TransactionTr: Any {
     /// Returns the transaction type.
     ///
     /// Depending on this field other functions should be called.
@@ -165,7 +165,7 @@ pub trait TransactionTr {
 
 impl<T> TransactionTr for T
 where
-    T: revm::context::Transaction,
+    T: revm::context::Transaction + 'static,
 {
     fn tx_type(&self) -> u8 {
         revm::context::Transaction::tx_type(self)
@@ -499,6 +499,7 @@ impl<'a> EvmInternals<'a> {
     pub fn from_context<CTX>(ctx: &'a mut CTX) -> Self
     where
         CTX: ContextTr<Block: BlockEnvironment, Journal: JournalTr<Database: Database> + Debug>,
+        CTX::Tx: 'static,
     {
         let (block, tx, cfg, journaled_state, ..) = ctx.all_mut();
         Self::new(journaled_state, block, cfg, tx)
@@ -539,6 +540,11 @@ impl<'a> EvmInternals<'a> {
     /// Returns the current transaction information.
     pub fn tx_env(&self) -> &dyn TransactionTr {
         self.tx_env
+    }
+
+    /// Attempts to downcast the transaction environment to a concrete type.
+    pub fn tx_env_downcast_ref<T: TransactionTr>(&self) -> Option<&T> {
+        (self.tx_env as &dyn Any).downcast_ref()
     }
 
     /// Returns a mutable reference to [`Database`] implementation with erased error type.
