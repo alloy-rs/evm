@@ -294,8 +294,120 @@ impl EvmFactory for EthEvmFactory {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::boxed::Box;
     use alloy_primitives::address;
     use revm::{database_interface::EmptyDB, primitives::hardfork::SpecId};
+
+    struct TestEvm<DB: Database, I> {
+        inner: EthEvm<Box<DB>, I, PrecompilesMap>,
+    }
+
+    impl<DB, I> Evm for TestEvm<DB, I>
+    where
+        DB: Database,
+        I: Inspector<EthEvmContext<Box<DB>>>,
+    {
+        type DB = DB;
+        type Tx = TxEnv;
+        type Error = EVMError<DB::Error>;
+        type HaltReason = HaltReason;
+        type Spec = SpecId;
+        type BlockEnv = BlockEnv;
+        type Precompiles = PrecompilesMap;
+        type Inspector = I;
+
+        fn block(&self) -> &Self::BlockEnv {
+            self.inner.block()
+        }
+
+        fn cfg_env(&self) -> &CfgEnv<Self::Spec> {
+            self.inner.cfg_env()
+        }
+
+        fn chain_id(&self) -> u64 {
+            self.inner.chain_id()
+        }
+
+        fn transact_raw(
+            &mut self,
+            tx: Self::Tx,
+        ) -> Result<ResultAndState<Self::HaltReason>, Self::Error> {
+            self.inner.transact_raw(tx)
+        }
+
+        fn transact_system_call(
+            &mut self,
+            caller: Address,
+            contract: Address,
+            data: Bytes,
+        ) -> Result<ResultAndState<Self::HaltReason>, Self::Error> {
+            self.inner.transact_system_call(caller, contract, data)
+        }
+
+        fn finish(self) -> (Self::DB, EvmEnv<Self::Spec, Self::BlockEnv>) {
+            let (db, env) = self.inner.finish();
+            (*db, env)
+        }
+
+        fn set_inspector_enabled(&mut self, enabled: bool) {
+            self.inner.set_inspector_enabled(enabled);
+        }
+
+        fn components(&self) -> (&Self::DB, &Self::Inspector, &Self::Precompiles) {
+            let (db, inspector, precompiles) = self.inner.components();
+            (db.as_ref(), inspector, precompiles)
+        }
+
+        fn components_mut(
+            &mut self,
+        ) -> (&mut Self::DB, &mut Self::Inspector, &mut Self::Precompiles) {
+            let (db, inspector, precompiles) = self.inner.components_mut();
+            (db.as_mut(), inspector, precompiles)
+        }
+    }
+
+    #[derive(Debug, Clone, Copy)]
+    struct TestFactory;
+
+    impl EvmFactory for TestFactory {
+        type Evm<DB: Database, I: Inspector<Self::Context<DB>>> = TestEvm<DB, I>;
+        type Context<DB: Database> = EthEvmContext<Box<DB>>;
+        type Tx = TxEnv;
+        type Error<DBError: DBErrorMarker> = EVMError<DBError>;
+        type HaltReason = HaltReason;
+        type Spec = SpecId;
+        type BlockEnv = BlockEnv;
+        type Precompiles = PrecompilesMap;
+
+        fn create_evm<DB: Database>(&self, db: DB, input: EvmEnv) -> Self::Evm<DB, NoOpInspector> {
+            TestEvm { inner: EthEvmBuilder::new(Box::new(db), input).build() }
+        }
+
+        fn create_evm_with_inspector<DB: Database, I: Inspector<Self::Context<DB>>>(
+            &self,
+            db: DB,
+            input: EvmEnv,
+            inspector: I,
+        ) -> Self::Evm<DB, I> {
+            TestEvm {
+                inner: EthEvmBuilder::new(Box::new(db), input)
+                    .activate_inspector(inspector)
+                    .build(),
+            }
+        }
+    }
+
+    #[test]
+    fn factory_context_can_adapt_database() {
+        let input = EvmEnv::default();
+        let mut evm = TestFactory.create_evm(EmptyDB::default(), input.clone());
+        let _: &EmptyDB = evm.db();
+        let _: &mut EmptyDB = evm.db_mut();
+
+        let evm = TestFactory.create_evm_with_inspector(EmptyDB::default(), input, NoOpInspector);
+        let (db, _) = evm.finish();
+        let _: EmptyDB = db;
+    }
 
     #[test]
     fn test_precompiles_with_correct_spec() {
