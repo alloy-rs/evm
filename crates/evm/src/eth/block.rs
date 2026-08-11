@@ -197,6 +197,21 @@ where
             .into());
         }
 
+        // Amsterdam+: the state-gas dimension has its own budget of `block_gas_limit`
+        // (execution-specs `check_block_gas_capacity`). Unlike the execution dimension,
+        // the transaction's full gas limit counts against it — state gas is drawn from
+        // the reservoir above `tx_gas_limit_cap`, so the cap does not bound it.
+        if self.evm.cfg_env().enable_amsterdam_eip8037 {
+            let state_gas_available = self.evm.block().gas_limit() - self.block_state_gas_used;
+            if tx.tx().gas_limit() > state_gas_available {
+                return Err(BlockValidationError::TransactionGasLimitMoreThanAvailableBlockGas {
+                    transaction_gas_limit: tx.tx().gas_limit(),
+                    block_available_gas: state_gas_available,
+                }
+                .into());
+            }
+        }
+
         // Execute transaction and return the result
         let result = self.evm.transact(tx_env).map_err(|err| {
             let hash = tx.tx().trie_hash();
