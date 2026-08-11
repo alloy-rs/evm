@@ -73,6 +73,16 @@ pub struct EthBlockExecutor<'a, Evm, Spec, R: ReceiptBuilder> {
     /// Blob gas used by the block.
     /// Before cancun activation, this is always 0.
     pub blob_gas_used: u64,
+
+    /// Skips the Amsterdam block state-gas capacity check
+    /// (execution-specs `check_block_gas_capacity`, state dimension).
+    ///
+    /// Chain variants without a block-level state-gas budget (e.g. chains that
+    /// admit transactions by execution gas only) can set this to admit
+    /// transactions whose full gas limit exceeds
+    /// `block_gas_limit - block_state_gas_used`. Has no effect before
+    /// Amsterdam. Defaults to `false` (check enforced).
+    pub skip_state_gas_capacity_check: bool,
 }
 
 /// The result of executing an Ethereum transaction.
@@ -123,7 +133,15 @@ where
             system_caller: SystemCaller::new(spec.clone()),
             spec,
             receipt_builder,
+            skip_state_gas_capacity_check: false,
         }
+    }
+
+    /// Configures whether the Amsterdam block state-gas capacity check is
+    /// skipped. See [`Self::skip_state_gas_capacity_check`].
+    pub fn with_skip_state_gas_capacity_check(mut self, skip: bool) -> Self {
+        self.skip_state_gas_capacity_check = skip;
+        self
     }
 
     /// Reserves capacity for at least `tx_count` additional receipts.
@@ -201,7 +219,7 @@ where
         // (execution-specs `check_block_gas_capacity`). Unlike the execution dimension,
         // the transaction's full gas limit counts against it — state gas is drawn from
         // the reservoir above `tx_gas_limit_cap`, so the cap does not bound it.
-        if self.evm.cfg_env().enable_amsterdam_eip8037 {
+        if self.evm.cfg_env().enable_amsterdam_eip8037 && !self.skip_state_gas_capacity_check {
             let state_gas_available = self.evm.block().gas_limit() - self.block_state_gas_used;
             if tx.tx().gas_limit() > state_gas_available {
                 return Err(BlockValidationError::TransactionGasLimitMoreThanAvailableBlockGas {
