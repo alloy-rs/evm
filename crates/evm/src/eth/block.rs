@@ -139,7 +139,7 @@ where
 
     /// Configures whether the Amsterdam block state-gas capacity check is
     /// skipped. See [`Self::skip_state_gas_capacity_check`].
-    pub fn with_skip_state_gas_capacity_check(mut self, skip: bool) -> Self {
+    pub const fn with_skip_state_gas_capacity_check(mut self, skip: bool) -> Self {
         self.skip_state_gas_capacity_check = skip;
         self
     }
