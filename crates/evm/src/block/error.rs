@@ -100,6 +100,14 @@ pub enum BlockValidationError {
         /// The error message.
         message: String,
     },
+    /// A required system contract has no code deployed [EIP-8282]
+    ///
+    /// [EIP-8282]: https://eips.ethereum.org/EIPS/eip-8282
+    #[error("system contract {address} has no code")]
+    SystemContractEmpty {
+        /// The system contract address.
+        address: alloy_primitives::Address,
+    },
     /// Error when decoding deposit requests from receipts [EIP-6110]
     ///
     /// [EIP-6110]: https://eips.ethereum.org/EIPS/eip-6110

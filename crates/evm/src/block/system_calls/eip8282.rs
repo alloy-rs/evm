@@ -20,7 +20,10 @@ use alloc::format;
 use alloy_eips::eip7002::SYSTEM_ADDRESS;
 use alloy_primitives::{address, Address, Bytes};
 use core::fmt::Debug;
-use revm::context_interface::result::{ExecutionResult, ResultAndState};
+use revm::{
+    context_interface::result::{ExecutionResult, ResultAndState},
+    Database as _,
+};
 
 /// The [EIP-7685](https://eips.ethereum.org/EIPS/eip-7685) request type for EIP-8282 builder
 /// deposit requests.
@@ -45,6 +48,9 @@ pub const BUILDER_EXIT_REQUEST_PREDEPLOY_ADDRESS: Address =
 pub(crate) fn transact_builder_deposit_requests_contract_call<Halt>(
     evm: &mut impl Evm<HaltReason = Halt>,
 ) -> Result<ResultAndState<Halt>, BlockExecutionError> {
+    // A block executed while the predeploy has no code is invalid.
+    ensure_contract_deployed(evm, BUILDER_DEPOSIT_REQUEST_PREDEPLOY_ADDRESS)?;
+
     // At the end of processing any execution block where Amsterdam is active, call the builder
     // deposit requests contract as `SYSTEM_ADDRESS` with empty calldata.
     match evm.transact_system_call(
@@ -60,6 +66,25 @@ pub(crate) fn transact_builder_deposit_requests_contract_call<Halt>(
     }
 }
 
+/// Returns an error if the system contract at `address` has no code.
+fn ensure_contract_deployed<Halt>(
+    evm: &mut impl Evm<HaltReason = Halt>,
+    address: Address,
+) -> Result<(), BlockExecutionError> {
+    let deployed = evm
+        .db_mut()
+        .basic(address)
+        .map_err(|e| BlockValidationError::BuilderDepositRequestsContractCall {
+            message: format!("database error: {e}"),
+        })?
+        .is_some_and(|account| !account.is_empty_code_hash());
+
+    if !deployed {
+        return Err(BlockValidationError::SystemContractEmpty { address }.into());
+    }
+    Ok(())
+}
+
 /// Applies the post-block call to the EIP-8282 builder exit requests contract.
 ///
 /// Note: this does not commit the state changes to the database, it only transacts the call.
@@ -67,6 +92,9 @@ pub(crate) fn transact_builder_deposit_requests_contract_call<Halt>(
 pub(crate) fn transact_builder_exit_requests_contract_call<Halt>(
     evm: &mut impl Evm<HaltReason = Halt>,
 ) -> Result<ResultAndState<Halt>, BlockExecutionError> {
+    // A block executed while the predeploy has no code is invalid.
+    ensure_contract_deployed(evm, BUILDER_EXIT_REQUEST_PREDEPLOY_ADDRESS)?;
+
     match evm.transact_system_call(
         SYSTEM_ADDRESS,
         BUILDER_EXIT_REQUEST_PREDEPLOY_ADDRESS,
