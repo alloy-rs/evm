@@ -22,7 +22,10 @@ use alloy_eips::{eip4895::Withdrawal, eip7685::Requests, Encodable2718};
 use alloy_hardforks::EthereumHardfork;
 use alloy_primitives::{Bytes, Log, B256};
 use revm::{
-    context::Block, context_interface::result::ResultAndState, database::DatabaseCommitExt,
+    context::Block,
+    context_interface::{result::ResultAndState, Cfg},
+    database::DatabaseCommitExt,
+    primitives::hardfork::SpecId,
     DatabaseCommit, Inspector,
 };
 
@@ -162,7 +165,11 @@ where
 
 impl<E, Spec, R> BlockExecutor for EthBlockExecutor<'_, E, Spec, R>
 where
-    E: Evm<DB: StateDB, Tx: FromRecoveredTx<R::Transaction> + FromTxWithEncoded<R::Transaction>>,
+    E: Evm<
+        DB: StateDB,
+        Spec: Into<SpecId> + Clone,
+        Tx: FromRecoveredTx<R::Transaction> + FromTxWithEncoded<R::Transaction>,
+    >,
     Spec: EthExecutorSpec,
     R: ReceiptBuilder<Transaction: Transaction + Encodable2718, Receipt: TxReceipt<Log = Log>>,
     <R::Transaction as TransactionEnvelope>::TxType: Send + 'static,
@@ -202,10 +209,7 @@ where
 
         // Use regular part of transaction gas limit to check if it fits inside available block
         // space.
-        let mut max_tx_gas_usage = tx.tx().gas_limit();
-        if let Some(tx_gas_limit_cap) = self.evm.cfg_env().tx_gas_limit_cap {
-            max_tx_gas_usage = min(max_tx_gas_usage, tx_gas_limit_cap);
-        }
+        let max_tx_gas_usage = min(tx.tx().gas_limit(), self.evm.cfg_env().tx_gas_limit_cap());
 
         if max_tx_gas_usage > block_available_gas {
             return Err(BlockValidationError::TransactionGasLimitMoreThanAvailableBlockGas {
@@ -404,7 +408,10 @@ impl<R, Spec, EvmF> BlockExecutorFactory for EthBlockExecutorFactory<R, Spec, Ev
 where
     R: ReceiptBuilder<Transaction: Transaction + Encodable2718, Receipt: TxReceipt<Log = Log>>,
     Spec: EthExecutorSpec,
-    EvmF: EvmFactory<Tx: FromRecoveredTx<R::Transaction> + FromTxWithEncoded<R::Transaction>>,
+    EvmF: EvmFactory<
+        Spec: Into<SpecId> + Clone,
+        Tx: FromRecoveredTx<R::Transaction> + FromTxWithEncoded<R::Transaction>,
+    >,
     <R::Transaction as TransactionEnvelope>::TxType: Send + 'static,
     Self: 'static,
 {
