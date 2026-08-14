@@ -24,6 +24,13 @@ pub(crate) fn transact_withdrawal_requests_contract_call<Halt>(
     // The requirement for the withdrawal requests contract call defined by
     // [EIP-7002](https://eips.ethereum.org/EIPS/eip-7002) is:
     //
+    // The predeploy must exist: if there is no code at the address, the block is invalid.
+    super::eip8282::ensure_contract_has_code(
+        evm,
+        WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS,
+        |message| BlockValidationError::WithdrawalRequestsContractCall { message }.into(),
+    )?;
+
     // At the end of processing any execution block where `block.timestamp >= FORK_TIMESTAMP` (i.e.
     // after processing all transactions and after performing the block body withdrawal requests
     // validations), call the contract as `SYSTEM_ADDRESS`.

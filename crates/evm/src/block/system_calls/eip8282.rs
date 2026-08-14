@@ -16,11 +16,14 @@ use crate::{
     block::{BlockExecutionError, BlockValidationError},
     Evm,
 };
-use alloc::format;
+use alloc::{format, string::ToString};
 use alloy_eips::eip7002::SYSTEM_ADDRESS;
 use alloy_primitives::{address, Address, Bytes};
 use core::fmt::Debug;
-use revm::context_interface::result::{ExecutionResult, ResultAndState};
+use revm::{
+    context_interface::result::{ExecutionResult, ResultAndState},
+    Database,
+};
 
 /// The [EIP-7685](https://eips.ethereum.org/EIPS/eip-7685) request type for EIP-8282 builder
 /// deposit requests.
@@ -45,6 +48,11 @@ pub const BUILDER_EXIT_REQUEST_PREDEPLOY_ADDRESS: Address =
 pub(crate) fn transact_builder_deposit_requests_contract_call<Halt>(
     evm: &mut impl Evm<HaltReason = Halt>,
 ) -> Result<ResultAndState<Halt>, BlockExecutionError> {
+    // The predeploy must exist: if there is no code at the address, the block is invalid.
+    ensure_contract_has_code(evm, BUILDER_DEPOSIT_REQUEST_PREDEPLOY_ADDRESS, |message| {
+        BlockValidationError::BuilderDepositRequestsContractCall { message }.into()
+    })?;
+
     // At the end of processing any execution block where Amsterdam is active, call the builder
     // deposit requests contract as `SYSTEM_ADDRESS` with empty calldata.
     match evm.transact_system_call(
@@ -67,6 +75,11 @@ pub(crate) fn transact_builder_deposit_requests_contract_call<Halt>(
 pub(crate) fn transact_builder_exit_requests_contract_call<Halt>(
     evm: &mut impl Evm<HaltReason = Halt>,
 ) -> Result<ResultAndState<Halt>, BlockExecutionError> {
+    // The predeploy must exist: if there is no code at the address, the block is invalid.
+    ensure_contract_has_code(evm, BUILDER_EXIT_REQUEST_PREDEPLOY_ADDRESS, |message| {
+        BlockValidationError::BuilderExitRequestsContractCall { message }.into()
+    })?;
+
     match evm.transact_system_call(
         SYSTEM_ADDRESS,
         BUILDER_EXIT_REQUEST_PREDEPLOY_ADDRESS,
@@ -120,6 +133,27 @@ pub(crate) fn exit_post_commit<Halt: Debug>(
                 message: format!("execution halted: {reason:?}"),
             }
             .into())
+        }
+    }
+}
+
+/// Returns an error built by `make_err` if the account at `address` has no code.
+///
+/// EIP-8282 follows the EIP-7002 deployment model: the system call is only defined for a
+/// deployed predeploy, and a block processed while the contract has no code is invalid.
+pub(crate) fn ensure_contract_has_code<Halt>(
+    evm: &mut impl Evm<HaltReason = Halt>,
+    address: Address,
+    make_err: impl FnOnce(alloc::string::String) -> BlockExecutionError,
+) -> Result<(), BlockExecutionError> {
+    match evm.db_mut().basic(address) {
+        Err(e) => Err(make_err(format!("database error: {e}"))),
+        Ok(account) => {
+            if account.is_some_and(|account| !account.is_empty_code_hash()) {
+                Ok(())
+            } else {
+                Err(make_err("contract has no code".to_string()))
+            }
         }
     }
 }
