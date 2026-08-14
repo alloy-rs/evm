@@ -20,6 +20,13 @@ use revm::context_interface::result::{ExecutionResult, ResultAndState};
 pub(crate) fn transact_consolidation_requests_contract_call<Halt>(
     evm: &mut impl Evm<HaltReason = Halt>,
 ) -> Result<ResultAndState<Halt>, BlockExecutionError> {
+    // The predeploy must exist: if there is no code at the address, the block is invalid.
+    super::eip8282::ensure_contract_has_code(
+        evm,
+        CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS,
+        |message| BlockValidationError::ConsolidationRequestsContractCall { message }.into(),
+    )?;
+
     // Execute EIP-7251 consolidation requests contract call.
     //
     // The requirement for the consolidation requests contract call defined by
