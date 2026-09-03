@@ -1,6 +1,6 @@
 //! Helpers for dealing with Precompiles.
 
-use crate::{env::BlockEnvironment, Database, EvmInternals};
+use crate::{env::BlockEnvironment, traits::EvmInternalsImpl, Database, EvmInternals};
 use alloc::{
     borrow::Cow,
     boxed::Box,
@@ -572,6 +572,8 @@ where
         };
 
         let (block, tx, cfg, journaled_state, _, local) = context.all_mut();
+        // Keep the journal adapter on the stack so no allocation is needed per precompile call.
+        let mut internals = EvmInternalsImpl(journaled_state);
 
         let precompile_output = {
             let _span =
@@ -584,7 +586,7 @@ where
                 caller: inputs.caller,
                 value: inputs.call_value(),
                 is_static: inputs.is_static,
-                internals: EvmInternals::new(journaled_state, block, cfg, tx),
+                internals: EvmInternals::borrowed(&mut internals, block, cfg, tx),
                 target_address: inputs.target_address,
                 bytecode_address: inputs.bytecode_address,
             })
@@ -988,6 +990,7 @@ mod tests {
     use alloy_primitives::{address, Bytes};
     use revm::{
         context::BlockEnv,
+        context_interface::journaled_state::JournalLoadError,
         database::EmptyDB,
         precompile::{PrecompileId, PrecompileOutput},
         primitives::hardfork::SpecId,
@@ -1077,6 +1080,31 @@ mod tests {
         let internals = EvmInternals::from_context(&mut ctx);
 
         assert!(internals.block_env_downcast_ref::<BlockEnv>().is_some());
+    }
+
+    #[test]
+    fn test_evm_internals_storage_ops_skip_cold_load() {
+        let mut ctx = EthEvmContext::new(EmptyDB::default(), Default::default());
+        let mut internals = EvmInternals::from_context(&mut ctx);
+        let account = address!("0x00000000000000000000000000000000000000AA");
+        let key = U256::from(7);
+
+        let stored = internals
+            .sstore_skip_cold_load(account, key, U256::from(42), false)
+            .expect("sstore succeeds");
+        assert!(stored.is_cold);
+
+        let loaded = internals.sload_skip_cold_load(account, key, false).expect("sload succeeds");
+        assert_eq!(loaded.data, U256::from(42));
+        assert!(!loaded.is_cold);
+
+        // A cold slot cannot be read when the cold load is skipped.
+        let cold_key = U256::from(8);
+        assert!(matches!(
+            internals.sload_skip_cold_load(account, cold_key, true),
+            Err(JournalLoadError::ColdLoadSkipped)
+        ));
+        assert_eq!(internals.sload(account, cold_key).expect("sload succeeds").data, U256::ZERO);
     }
 
     #[test]
