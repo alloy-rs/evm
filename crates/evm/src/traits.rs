@@ -323,17 +323,19 @@ pub(crate) trait EvmInternalsTr: Database<Error = ErasedError> + Debug {
         self.sload_skip_cold_load(address, key, false).map_err(JournalLoadError::unwrap_db_error)
     }
 
-    /// Loads a storage slot, optionally skipping the cold load.
+    /// Loads a storage slot, optionally skipping the slot's cold load.
     ///
-    /// Implementations should override this to talk to the journal directly, the default goes
-    /// through the boxed account handle.
+    /// The account is always loaded, `skip_cold_load` only applies to the slot, exactly like
+    /// `load_account_mut(address)?.sload(key, skip_cold_load)`. Implementations should override
+    /// this to talk to the journal directly, the default goes through the boxed account handle.
     fn sload_skip_cold_load(
         &mut self,
         address: Address,
         key: StorageKey,
         skip_cold_load: bool,
     ) -> Result<StateLoad<StorageValue>, JournalLoadError<EvmInternalsError>> {
-        self.load_account_mut_skip_cold_load(address, skip_cold_load)?
+        self.load_account_mut(address)
+            .map_err(JournalLoadError::DBError)?
             .sload(key, skip_cold_load)
             .map(|i| i.map(|i| i.present_value()))
             .map_err(|e| e.map(EvmInternalsError::database))
@@ -378,10 +380,12 @@ pub(crate) trait EvmInternalsTr: Database<Error = ErasedError> + Debug {
             .map_err(JournalLoadError::unwrap_db_error)
     }
 
-    /// Stores a storage value, optionally skipping the cold load.
+    /// Stores a storage value, optionally skipping the slot's cold load.
     ///
-    /// Implementations should override this to talk to the journal directly, the default goes
-    /// through the boxed account handle.
+    /// The account is always loaded, `skip_cold_load` only applies to the slot, exactly like
+    /// `load_account_mut(address)?.sstore(key, value, skip_cold_load)`. Implementations should
+    /// override this to talk to the journal directly, the default goes through the boxed account
+    /// handle.
     fn sstore_skip_cold_load(
         &mut self,
         address: Address,
@@ -389,7 +393,8 @@ pub(crate) trait EvmInternalsTr: Database<Error = ErasedError> + Debug {
         value: StorageValue,
         skip_cold_load: bool,
     ) -> Result<StateLoad<SStoreResult>, JournalLoadError<EvmInternalsError>> {
-        self.load_account_mut_skip_cold_load(address, skip_cold_load)?
+        self.load_account_mut(address)
+            .map_err(JournalLoadError::DBError)?
             .sstore(key, value, skip_cold_load)
             .map_err(|e| e.map(EvmInternalsError::database))
     }
@@ -471,8 +476,8 @@ where
         // Load through the concrete journaled account so no boxed handle is needed.
         let mut account = self
             .0
-            .load_account_mut_skip_cold_load(address, skip_cold_load)
-            .map_err(|e| e.map(EvmInternalsError::database))?;
+            .load_account_mut(address)
+            .map_err(|e| JournalLoadError::DBError(EvmInternalsError::database(e)))?;
         account
             .sload(key, skip_cold_load)
             .map(|i| i.map(|i| i.present_value()))
@@ -489,8 +494,8 @@ where
         // Load through the concrete journaled account so no boxed handle is needed.
         let mut account = self
             .0
-            .load_account_mut_skip_cold_load(address, skip_cold_load)
-            .map_err(|e| e.map(EvmInternalsError::database))?;
+            .load_account_mut(address)
+            .map_err(|e| JournalLoadError::DBError(EvmInternalsError::database(e)))?;
         account.sstore(key, value, skip_cold_load).map_err(|e| e.map(EvmInternalsError::database))
     }
 
@@ -764,7 +769,7 @@ impl<'a> EvmInternals<'a> {
         self.internals.sload(address, key)
     }
 
-    /// Loads a storage slot, optionally skipping the cold load.
+    /// Loads a storage slot, optionally skipping the slot's cold load; the account is always loaded.
     pub fn sload_skip_cold_load(
         &mut self,
         address: Address,
@@ -814,7 +819,7 @@ impl<'a> EvmInternals<'a> {
         self.internals.sstore(address, key, value)
     }
 
-    /// Stores a storage value, optionally skipping the cold load.
+    /// Stores a storage value, optionally skipping the slot's cold load; the account is always loaded.
     pub fn sstore_skip_cold_load(
         &mut self,
         address: Address,
