@@ -39,6 +39,8 @@ pub struct PrecompilesMap {
     precompiles: PrecompilesKind,
     /// An optional dynamic precompile loader that can lookup precompiles dynamically.
     lookup: Option<Box<dyn PrecompileLookup>>,
+    /// Memoized results of the dynamic lookup, see [`Self::enable_lookup_cache`].
+    lookup_cache: Option<AddressMap<DynPrecompile>>,
 }
 
 impl PrecompilesMap {
@@ -49,7 +51,11 @@ impl PrecompilesMap {
 
     /// Creates a new set of precompiles for a spec.
     pub fn new(precompiles: Cow<'static, Precompiles>) -> Self {
-        Self { precompiles: PrecompilesKind::Builtin(precompiles), lookup: None }
+        Self {
+            precompiles: PrecompilesKind::Builtin(precompiles),
+            lookup: None,
+            lookup_cache: None,
+        }
     }
 
     /// Maps a precompile at the given address using the provided function.
@@ -400,6 +406,34 @@ impl PrecompilesMap {
         L: PrecompileLookup + 'static,
     {
         self.lookup = Some(Box::new(lookup));
+        self.clear_lookup_cache();
+    }
+
+    /// Memoizes the precompiles returned by the dynamic lookup per address.
+    ///
+    /// Without the cache, the lookup function is invoked on every precompile execution for an
+    /// address it resolves, which makes lookups that construct a fresh [`DynPrecompile`] pay for
+    /// that construction on every call. With the cache enabled, the first execution of a
+    /// dynamically resolved precompile stores it in this map and later executions and
+    /// [`PrecompilesMap::get`] calls reuse it.
+    ///
+    /// Only enable this if the lookup returns equivalent precompiles for the same address for as
+    /// long as it is installed: the cache lives until the lookup is replaced through
+    /// [`Self::set_precompile_lookup`] or [`Self::map_precompile_lookup`].
+    ///
+    /// Cached precompiles are still treated as cold for gas accounting, exactly like uncached
+    /// lookup results, see [`PrecompileProvider::warm_addresses`].
+    pub fn enable_lookup_cache(&mut self) {
+        if self.lookup_cache.is_none() {
+            self.lookup_cache = Some(AddressMap::default());
+        }
+    }
+
+    /// Drops all memoized lookup results while keeping the cache enabled.
+    fn clear_lookup_cache(&mut self) {
+        if let Some(cache) = self.lookup_cache.as_mut() {
+            cache.clear();
+        }
     }
 
     /// Maps the dynamic precompile lookup function while preserving access to the previous lookup.
@@ -416,6 +450,7 @@ impl PrecompilesMap {
     {
         let previous = self.lookup.take();
         self.lookup = Some(Box::new(move |address: &Address| f(address, previous.as_deref())));
+        self.clear_lookup_cache();
     }
 
     /// Builder-style method to set a dynamic precompile lookup function.
@@ -523,9 +558,40 @@ impl PrecompilesMap {
             return Some(Either::Left(precompile));
         }
 
+        // Then reuse a memoized lookup result if the cache is enabled
+        if let Some(precompile) = self.lookup_cache.as_ref().and_then(|cache| cache.get(address)) {
+            return Some(Either::Left(Either::Right(precompile)));
+        }
+
         // Otherwise, try the lookup function if available
         let lookup = self.lookup.as_ref()?;
         lookup.lookup(address).map(Either::Right)
+    }
+
+    /// Returns whether the given address is a static precompile of this map.
+    fn contains_static(&self, address: &Address) -> bool {
+        match &self.precompiles {
+            PrecompilesKind::Builtin(precompiles) => precompiles.contains(address),
+            PrecompilesKind::Dynamic(dyn_precompiles) => {
+                dyn_precompiles.inner.contains_key(address)
+            }
+        }
+    }
+
+    /// Resolves the address through the dynamic lookup and memoizes the result if the cache is
+    /// enabled and the address is not a static precompile.
+    fn memoize_lookup(&mut self, address: &Address) {
+        if self.lookup_cache.is_none() || self.contains_static(address) {
+            return;
+        }
+        let Some(lookup) = self.lookup.as_ref() else { return };
+        let Some(cache) = self.lookup_cache.as_mut() else { return };
+        if cache.contains_key(address) {
+            return;
+        }
+        if let Some(precompile) = lookup.lookup(address) {
+            cache.insert(*address, precompile);
+        }
     }
 }
 
@@ -566,6 +632,8 @@ where
         context: &mut Context<BlockEnv, TxEnv, CfgEnv, DB, Journal<DB>, Chain>,
         inputs: &CallInputs,
     ) -> Result<Option<InterpreterResult>, String> {
+        self.memoize_lookup(&inputs.bytecode_address);
+
         // Get the precompile at the address
         let Some(precompile) = self.get(&inputs.bytecode_address) else {
             return Ok(None);
@@ -604,7 +672,9 @@ where
     }
 
     fn contains(&self, address: &Address) -> bool {
-        self.get(address).is_some()
+        self.contains_static(address)
+            || self.lookup_cache.as_ref().is_some_and(|cache| cache.contains_key(address))
+            || self.lookup.as_ref().is_some_and(|lookup| lookup.contains(address))
     }
 }
 
@@ -952,6 +1022,15 @@ pub trait PrecompileLookup {
     /// Returns `Some(precompile)` if a precompile exists at the address,
     /// or `None` if no precompile is found.
     fn lookup(&self, address: &Address) -> Option<DynPrecompile>;
+
+    /// Returns whether a precompile exists at the given address.
+    ///
+    /// The EVM asks this for every call target that is not a static precompile, so lookups that
+    /// construct a [`DynPrecompile`] should override this with a cheap check instead of relying on
+    /// the default, which resolves the precompile and discards it.
+    fn contains(&self, address: &Address) -> bool {
+        self.lookup(address).is_some()
+    }
 }
 
 /// Implement PrecompileLookup for closure types
@@ -1230,6 +1309,111 @@ mod tests {
         // Test non-matching address returns None
         let non_matching_address = address!("0x1234000000000000000000000000000000000001");
         assert!(spec_precompiles.get(&non_matching_address).is_none());
+    }
+
+    /// Lookup that counts how often it constructs a precompile and answers `contains` cheaply.
+    struct CountingLookup {
+        prefix: [u8; 2],
+        lookups: alloc::rc::Rc<core::cell::Cell<usize>>,
+    }
+
+    impl PrecompileLookup for CountingLookup {
+        fn lookup(&self, address: &Address) -> Option<DynPrecompile> {
+            if !self.contains(address) {
+                return None;
+            }
+            self.lookups.set(self.lookups.get() + 1);
+            Some(DynPrecompile::new(PrecompileId::Custom("dynamic".into()), |_input| {
+                Ok(PrecompileOutput::new(100, Bytes::from("dynamic precompile response"), 0))
+            }))
+        }
+
+        fn contains(&self, address: &Address) -> bool {
+            address.as_slice().starts_with(&self.prefix)
+        }
+    }
+
+    #[test]
+    fn test_precompile_lookup_contains_override() {
+        let mut spec_precompiles = PrecompilesMap::from(EthPrecompiles::new(SpecId::default()));
+        let lookups = alloc::rc::Rc::new(core::cell::Cell::new(0));
+        spec_precompiles.set_precompile_lookup(CountingLookup {
+            prefix: [0xDE, 0xAD],
+            lookups: lookups.clone(),
+        });
+
+        let dynamic_address = address!("0xDEAD000000000000000000000000000000000001");
+        let other_address = address!("0x1234000000000000000000000000000000000001");
+        let identity_address = address!("0x0000000000000000000000000000000000000004");
+
+        // `contains` uses the lookup's cheap check instead of constructing the precompile.
+        assert!(PrecompileProvider::<EthEvmContext<EmptyDB>>::contains(
+            &spec_precompiles,
+            &dynamic_address
+        ));
+        assert!(!PrecompileProvider::<EthEvmContext<EmptyDB>>::contains(
+            &spec_precompiles,
+            &other_address
+        ));
+        assert!(PrecompileProvider::<EthEvmContext<EmptyDB>>::contains(
+            &spec_precompiles,
+            &identity_address
+        ));
+        assert_eq!(lookups.get(), 0);
+
+        // `get` still resolves through the lookup.
+        assert!(spec_precompiles.get(&dynamic_address).is_some());
+        assert_eq!(lookups.get(), 1);
+    }
+
+    #[test]
+    fn test_lookup_cache_memoizes_dynamic_precompiles() {
+        let mut spec_precompiles = PrecompilesMap::from(EthPrecompiles::new(SpecId::default()));
+        let lookups = alloc::rc::Rc::new(core::cell::Cell::new(0));
+        spec_precompiles.set_precompile_lookup(CountingLookup {
+            prefix: [0xDE, 0xAD],
+            lookups: lookups.clone(),
+        });
+        spec_precompiles.enable_lookup_cache();
+
+        let dynamic_address = address!("0xDEAD000000000000000000000000000000000001");
+        let other_address = address!("0x1234000000000000000000000000000000000001");
+
+        // Without a memoized entry every `get` constructs the precompile again.
+        assert!(spec_precompiles.get(&dynamic_address).is_some());
+        assert!(spec_precompiles.get(&dynamic_address).is_some());
+        assert_eq!(lookups.get(), 2);
+
+        // Executing the precompile memoizes it, after which `get` and `contains` are free.
+        spec_precompiles.memoize_lookup(&dynamic_address);
+        assert_eq!(lookups.get(), 3);
+        spec_precompiles.memoize_lookup(&dynamic_address);
+        assert!(spec_precompiles.get(&dynamic_address).is_some());
+        assert!(spec_precompiles.get(&dynamic_address).is_some());
+        assert!(PrecompileProvider::<EthEvmContext<EmptyDB>>::contains(
+            &spec_precompiles,
+            &dynamic_address
+        ));
+        assert_eq!(lookups.get(), 3);
+
+        // Unknown addresses and static precompiles never enter the cache.
+        spec_precompiles.memoize_lookup(&other_address);
+        spec_precompiles.memoize_lookup(&address!("0x0000000000000000000000000000000000000004"));
+        assert!(spec_precompiles.get(&other_address).is_none());
+        assert_eq!(spec_precompiles.lookup_cache.as_ref().unwrap().len(), 1);
+
+        // Memoized precompiles stay cold for gas accounting.
+        assert!(!PrecompileProvider::<EthEvmContext<EmptyDB>>::warm_addresses(&spec_precompiles)
+            .contains(&dynamic_address));
+
+        // Replacing the lookup drops the memoized entries.
+        spec_precompiles.set_precompile_lookup(CountingLookup {
+            prefix: [0xDE, 0xAD],
+            lookups: lookups.clone(),
+        });
+        assert!(spec_precompiles.lookup_cache.as_ref().unwrap().is_empty());
+        assert!(spec_precompiles.get(&dynamic_address).is_some());
+        assert_eq!(lookups.get(), 4);
     }
 
     #[test]
