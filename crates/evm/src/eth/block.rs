@@ -11,8 +11,8 @@ use super::{
 use crate::{
     block::{
         state_changes::post_block_balance_increments, BlockExecutionError, BlockExecutionResult,
-        BlockExecutor, BlockExecutorFactory, BlockValidationError, ExecutableTx, GasOutput,
-        StateDB, SystemCaller, TxResult,
+        BlockExecutor, BlockExecutorFactory, BlockExecutorFactoryFor, BlockValidationError,
+        ExecutableTx, GasOutput, StateDB, SystemCaller, TxResult,
     },
     Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, RecoveredTx,
 };
@@ -423,22 +423,76 @@ where
         <EvmF as EvmFactory>::HaltReason,
         <R::Transaction as TransactionEnvelope>::TxType,
     >;
-    type Executor<'a, DB: StateDB, I: Inspector<EvmF::Context<DB>>> =
-        EthBlockExecutor<'a, EvmF::Evm<DB, I>, &'a Spec, &'a R>;
 
     fn evm_factory(&self) -> &Self::EvmFactory {
         &self.evm_factory
     }
+}
 
-    fn create_executor<'a, DB, I>(
+impl<DB, R, Spec, EvmF> BlockExecutorFactoryFor<DB> for EthBlockExecutorFactory<R, Spec, EvmF>
+where
+    DB: StateDB,
+    R: ReceiptBuilder<Transaction: Transaction + Encodable2718, Receipt: TxReceipt<Log = Log>>,
+    Spec: EthExecutorSpec,
+    EvmF: EvmFactory<Tx: FromRecoveredTx<R::Transaction> + FromTxWithEncoded<R::Transaction>>,
+    <R::Transaction as TransactionEnvelope>::TxType: Send + 'static,
+    Self: 'static,
+{
+    type Executor<'a, I: Inspector<EvmF::Context<DB>>> =
+        EthBlockExecutor<'a, EvmF::Evm<DB, I>, &'a Spec, &'a R>;
+
+    fn create_executor<'a, I>(
         &'a self,
         evm: EvmF::Evm<DB, I>,
         ctx: Self::ExecutionCtx<'a>,
-    ) -> Self::Executor<'a, DB, I>
+    ) -> Self::Executor<'a, I>
     where
-        DB: StateDB,
         I: Inspector<EvmF::Context<DB>>,
     {
         EthBlockExecutor::new(evm, ctx, &self.spec, &self.receipt_builder)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::EvmEnv;
+    use alloy_consensus::{transaction::Recovered, TxEnvelope};
+    use revm::{
+        database::{CacheDB, State},
+        database_interface::EmptyDB,
+    };
+
+    fn assert_factory_for<DB, F>()
+    where
+        DB: StateDB,
+        F: BlockExecutorFactoryFor<DB>,
+    {
+    }
+
+    #[test]
+    fn eth_factory_supports_any_state_db() {
+        assert_factory_for::<CacheDB<EmptyDB>, EthBlockExecutorFactory>();
+        assert_factory_for::<&mut State<CacheDB<EmptyDB>>, EthBlockExecutorFactory>();
+    }
+
+    #[test]
+    fn executes_empty_block_over_state() {
+        let factory =
+            EthBlockExecutorFactory::new(AlloyReceiptBuilder, EthSpec::mainnet(), EthEvmFactory);
+        let mut state = State::builder().with_database(CacheDB::new(EmptyDB::new())).build();
+        let evm = factory.evm_factory().create_evm(&mut state, EvmEnv::default());
+        let ctx = EthBlockExecutionCtx {
+            parent_hash: B256::ZERO,
+            parent_beacon_block_root: None,
+            ommers: &[],
+            withdrawals: None,
+            extra_data: Bytes::new(),
+            tx_count_hint: None,
+            slot_number: None,
+        };
+        let executor = factory.create_executor(evm, ctx);
+        let result = executor.execute_block(Vec::<Recovered<TxEnvelope>>::new()).unwrap();
+        assert_eq!(result, BlockExecutionResult::default());
     }
 }

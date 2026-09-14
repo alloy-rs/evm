@@ -1,7 +1,7 @@
 //! Block execution abstraction.
 
 use crate::{Evm, EvmFactory, FromRecoveredTx, FromTxWithEncoded, RecoveredTx, ToTxEnv};
-use alloc::vec::Vec;
+use alloc::{sync::Arc, vec::Vec};
 use alloy_consensus::transaction::Recovered;
 use alloy_eips::{eip2718::WithEncoded, eip7685::Requests};
 use revm::{
@@ -475,17 +475,22 @@ pub trait TxResult: Send + 'static {
     fn into_result(self) -> ResultAndState<Self::HaltReason>;
 }
 
-/// A helper trait encapsulating the constraints on [`BlockExecutor`] produced by the
-/// [`BlockExecutorFactory`] to avoid duplicating them in every implementation.
+/// A helper alias for the [`BlockExecutor`] produced by a [`BlockExecutorFactoryFor`] to avoid
+/// duplicating the projection in every implementation.
 pub type BlockExecutorFor<'a, F, DB, I = NoOpInspector> =
-    <F as BlockExecutorFactory>::Executor<'a, DB, I>;
+    <F as BlockExecutorFactoryFor<DB>>::Executor<'a, I>;
 
 /// A factory that can create [`BlockExecutor`]s.
 ///
-/// This trait serves as the main entry point for block execution, providing a way to construct
-/// [`BlockExecutor`] instances with the necessary context. It separates the concerns of:
+/// This trait declares the types shared by every executor the factory produces: the
+/// [`EvmFactory`], the consensus transaction and receipt types, the per-transaction execution
+/// result and the block execution context. Executor construction lives on
+/// [`BlockExecutorFactoryFor`], implemented per supported database type.
+///
+/// It separates the concerns of:
 /// - EVM configuration (handled by [`EvmFactory`])
 /// - Block-specific execution context (provided via [`ExecutionCtx`])
+/// - Database requirements (declared by [`BlockExecutorFactoryFor`] implementations)
 ///
 /// It allows for:
 /// - Reusable EVM configuration across multiple block executions
@@ -565,16 +570,32 @@ pub trait BlockExecutorFactory: 'static {
     /// Receipt type produced by the executor, see [`BlockExecutor::Receipt`].
     type Receipt;
 
-    /// The executor type this factory produces.
-    type Executor<'a, DB: StateDB, I: Inspector<<Self::EvmFactory as EvmFactory>::Context<DB>>>: BlockExecutor<
+    /// Reference to EVM factory used by the executor.
+    fn evm_factory(&self) -> &Self::EvmFactory;
+}
+
+/// A [`BlockExecutorFactory`] that can create [`BlockExecutor`]s operating on the database `DB`.
+///
+/// This trait serves as the main entry point for block execution, providing a way to construct
+/// [`BlockExecutor`] instances with the necessary context. It is parameterized by the database
+/// type so that every factory declares which databases its executors support.
+///
+/// # Implementations
+///
+/// - Factories whose executors rely only on the [`StateDB`] contract should implement this trait
+///   for all `DB: StateDB`, supporting any database (e.g.
+///   [`EthBlockExecutorFactory`](crate::eth::EthBlockExecutorFactory)).
+/// - Factories whose executors require database capabilities beyond [`StateDB`] — e.g. the
+///   [`State`](revm::database::State) transition layer or [`BalIndexedDatabase`] index tracking —
+///   should implement it only for databases providing them, such as `&mut State<D>`.
+pub trait BlockExecutorFactoryFor<DB: StateDB>: BlockExecutorFactory {
+    /// The executor type this factory produces for `DB`.
+    type Executor<'a, I: Inspector<<Self::EvmFactory as EvmFactory>::Context<DB>>>: BlockExecutor<
         Evm = <Self::EvmFactory as EvmFactory>::Evm<DB, I>,
         Transaction = Self::Transaction,
         Receipt = Self::Receipt,
         Result = Self::TxExecutionResult,
     >;
-
-    /// Reference to EVM factory used by the executor.
-    fn evm_factory(&self) -> &Self::EvmFactory;
 
     /// Creates an executor with given EVM and execution context.
     ///
@@ -615,12 +636,32 @@ pub trait BlockExecutorFactory: 'static {
     /// // 3. Apply post-execution changes (e.g., process withdrawals, apply rewards)
     /// let result = executor.execute_block(transactions)?;
     /// ```
-    fn create_executor<'a, DB, I>(
+    fn create_executor<'a, I>(
         &'a self,
         evm: <Self::EvmFactory as EvmFactory>::Evm<DB, I>,
         ctx: Self::ExecutionCtx<'a>,
-    ) -> Self::Executor<'a, DB, I>
+    ) -> Self::Executor<'a, I>
     where
-        DB: StateDB,
         I: Inspector<<Self::EvmFactory as EvmFactory>::Context<DB>>;
+}
+
+/// `auto_impl` is unable to reconcile associated types projected from the supertrait.
+impl<T, DB> BlockExecutorFactoryFor<DB> for Arc<T>
+where
+    T: BlockExecutorFactoryFor<DB>,
+    DB: StateDB,
+{
+    type Executor<'a, I: Inspector<<Self::EvmFactory as EvmFactory>::Context<DB>>> =
+        T::Executor<'a, I>;
+
+    fn create_executor<'a, I>(
+        &'a self,
+        evm: <Self::EvmFactory as EvmFactory>::Evm<DB, I>,
+        ctx: Self::ExecutionCtx<'a>,
+    ) -> Self::Executor<'a, I>
+    where
+        I: Inspector<<Self::EvmFactory as EvmFactory>::Context<DB>>,
+    {
+        (**self).create_executor(evm, ctx)
+    }
 }
