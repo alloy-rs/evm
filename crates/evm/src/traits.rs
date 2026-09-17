@@ -252,7 +252,7 @@ where
 ///
 /// This trait provides an abstraction over journal operations without exposing
 /// associated types, making it object-safe and suitable for dynamic dispatch.
-trait EvmInternalsTr: Database<Error = ErasedError> + Debug {
+pub(crate) trait EvmInternalsTr: Database<Error = ErasedError> + Debug {
     fn load_account(&mut self, address: Address) -> Result<StateLoad<&Account>, EvmInternalsError>;
 
     fn load_account_mut_skip_cold_load<'a>(
@@ -319,10 +319,26 @@ trait EvmInternalsTr: Database<Error = ErasedError> + Debug {
         address: Address,
         key: StorageKey,
     ) -> Result<StateLoad<StorageValue>, EvmInternalsError> {
-        self.load_account_mut(address)?
-            .sload(key, false)
+        // safe to unwrap as skip_cold_load is false.
+        self.sload_skip_cold_load(address, key, false).map_err(JournalLoadError::unwrap_db_error)
+    }
+
+    /// Loads a storage slot, optionally skipping the slot's cold load.
+    ///
+    /// The account is always loaded, `skip_cold_load` only applies to the slot, exactly like
+    /// `load_account_mut(address)?.sload(key, skip_cold_load)`. Implementations should override
+    /// this to talk to the journal directly, the default goes through the boxed account handle.
+    fn sload_skip_cold_load(
+        &mut self,
+        address: Address,
+        key: StorageKey,
+        skip_cold_load: bool,
+    ) -> Result<StateLoad<StorageValue>, JournalLoadError<EvmInternalsError>> {
+        self.load_account_mut(address)
+            .map_err(JournalLoadError::DBError)?
+            .sload(key, skip_cold_load)
             .map(|i| i.map(|i| i.present_value()))
-            .map_err(|e| EvmInternalsError::database(e.unwrap_db_error()))
+            .map_err(|e| e.map(EvmInternalsError::database))
     }
 
     fn touch_account(&mut self, address: Address) -> Result<(), EvmInternalsError> {
@@ -359,9 +375,28 @@ trait EvmInternalsTr: Database<Error = ErasedError> + Debug {
         key: StorageKey,
         value: StorageValue,
     ) -> Result<StateLoad<SStoreResult>, EvmInternalsError> {
-        self.load_account_mut(address)?
-            .sstore(key, value, false)
-            .map_err(|e| EvmInternalsError::database(e.unwrap_db_error()))
+        // safe to unwrap as skip_cold_load is false.
+        self.sstore_skip_cold_load(address, key, value, false)
+            .map_err(JournalLoadError::unwrap_db_error)
+    }
+
+    /// Stores a storage value, optionally skipping the slot's cold load.
+    ///
+    /// The account is always loaded, `skip_cold_load` only applies to the slot, exactly like
+    /// `load_account_mut(address)?.sstore(key, value, skip_cold_load)`. Implementations should
+    /// override this to talk to the journal directly, the default goes through the boxed account
+    /// handle.
+    fn sstore_skip_cold_load(
+        &mut self,
+        address: Address,
+        key: StorageKey,
+        value: StorageValue,
+        skip_cold_load: bool,
+    ) -> Result<StateLoad<SStoreResult>, JournalLoadError<EvmInternalsError>> {
+        self.load_account_mut(address)
+            .map_err(JournalLoadError::DBError)?
+            .sstore(key, value, skip_cold_load)
+            .map_err(|e| e.map(EvmInternalsError::database))
     }
 
     fn log(&mut self, log: Log);
@@ -379,7 +414,7 @@ trait EvmInternalsTr: Database<Error = ErasedError> + Debug {
 
 /// Helper internal struct for implementing [`EvmInternals`].
 #[derive(Debug)]
-struct EvmInternalsImpl<'a, T>(&'a mut T);
+pub(crate) struct EvmInternalsImpl<'a, T>(pub(crate) &'a mut T);
 
 impl<T> revm::Database for EvmInternalsImpl<'_, T>
 where
@@ -432,6 +467,38 @@ where
             .map_err(|e| e.map(EvmInternalsError::database))
     }
 
+    fn sload_skip_cold_load(
+        &mut self,
+        address: Address,
+        key: StorageKey,
+        skip_cold_load: bool,
+    ) -> Result<StateLoad<StorageValue>, JournalLoadError<EvmInternalsError>> {
+        // Load through the concrete journaled account so no boxed handle is needed.
+        let mut account = self
+            .0
+            .load_account_mut(address)
+            .map_err(|e| JournalLoadError::DBError(EvmInternalsError::database(e)))?;
+        account
+            .sload(key, skip_cold_load)
+            .map(|i| i.map(|i| i.present_value()))
+            .map_err(|e| e.map(EvmInternalsError::database))
+    }
+
+    fn sstore_skip_cold_load(
+        &mut self,
+        address: Address,
+        key: StorageKey,
+        value: StorageValue,
+        skip_cold_load: bool,
+    ) -> Result<StateLoad<SStoreResult>, JournalLoadError<EvmInternalsError>> {
+        // Load through the concrete journaled account so no boxed handle is needed.
+        let mut account = self
+            .0
+            .load_account_mut(address)
+            .map_err(|e| JournalLoadError::DBError(EvmInternalsError::database(e)))?;
+        account.sstore(key, value, skip_cold_load).map_err(|e| e.map(EvmInternalsError::database))
+    }
+
     fn transfer(
         &mut self,
         from: Address,
@@ -466,9 +533,61 @@ where
     }
 }
 
+/// The journal access of [`EvmInternals`], either owned or borrowed from the caller's stack.
+///
+/// The borrowed variant lets the precompile runner avoid a heap allocation per precompile call.
+enum InternalsRef<'a> {
+    Owned(Box<dyn EvmInternalsTr + 'a>),
+    /// An exclusive borrow of an adapter owned by the caller.
+    ///
+    /// Held as a raw pointer instead of `&'a mut (dyn EvmInternalsTr + 'a)` so that
+    /// [`EvmInternals<'a>`] stays covariant in `'a`, exactly like the boxed variant.
+    Borrowed(core::ptr::NonNull<dyn EvmInternalsTr + 'a>, core::marker::PhantomData<&'a mut ()>),
+}
+
+impl<'a> InternalsRef<'a> {
+    /// Wraps an exclusive borrow of an adapter.
+    #[inline]
+    fn borrowed(internals: &'a mut (dyn EvmInternalsTr + 'a)) -> Self {
+        Self::Borrowed(core::ptr::NonNull::from(internals), core::marker::PhantomData)
+    }
+}
+
+impl<'a> core::ops::Deref for InternalsRef<'a> {
+    type Target = dyn EvmInternalsTr + 'a;
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::Owned(internals) => &**internals,
+            // SAFETY: the pointer was created from a `&'a mut` borrow that this value holds
+            // exclusively for its whole lifetime, and it is only ever dereferenced through
+            // `&self`/`&mut self`, which mirrors the original borrow's access rules.
+            Self::Borrowed(internals, _) => unsafe { internals.as_ref() },
+        }
+    }
+}
+
+impl core::ops::DerefMut for InternalsRef<'_> {
+    #[inline]
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        match self {
+            Self::Owned(internals) => &mut **internals,
+            // SAFETY: see `Deref`, and `&mut self` guarantees no other reference exists.
+            Self::Borrowed(internals, _) => unsafe { internals.as_mut() },
+        }
+    }
+}
+
+impl Debug for InternalsRef<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        Debug::fmt(&**self, f)
+    }
+}
+
 /// Helper type exposing hooks into EVM and access to evm internal settings.
 pub struct EvmInternals<'a> {
-    internals: Box<dyn EvmInternalsTr + 'a>,
+    internals: InternalsRef<'a>,
     block_env: &'a dyn BlockEnvironment,
     chain_id: u64,
     tx_origin: Address,
@@ -487,7 +606,24 @@ impl<'a> EvmInternals<'a> {
         T: JournalTr<Database: Database> + Debug,
     {
         Self {
-            internals: Box::new(EvmInternalsImpl(journal)),
+            internals: InternalsRef::Owned(Box::new(EvmInternalsImpl(journal))),
+            block_env,
+            chain_id: cfg_env.chain_id(),
+            tx_origin: tx_env.caller(),
+            tx_env,
+        }
+    }
+
+    /// Creates a new [`EvmInternals`] instance that borrows an already constructed journal
+    /// adapter instead of boxing one.
+    pub(crate) fn borrowed(
+        internals: &'a mut (dyn EvmInternalsTr + 'a),
+        block_env: &'a dyn BlockEnvironment,
+        cfg_env: &'a impl Cfg,
+        tx_env: &'a dyn TransactionTr,
+    ) -> Self {
+        Self {
+            internals: InternalsRef::borrowed(internals),
             block_env,
             chain_id: cfg_env.chain_id(),
             tx_origin: tx_env.caller(),
@@ -639,6 +775,17 @@ impl<'a> EvmInternals<'a> {
         self.internals.sload(address, key)
     }
 
+    /// Loads a storage slot, optionally skipping the slot's cold load; the account is always
+    /// loaded.
+    pub fn sload_skip_cold_load(
+        &mut self,
+        address: Address,
+        key: StorageKey,
+        skip_cold_load: bool,
+    ) -> Result<StateLoad<StorageValue>, JournalLoadError<EvmInternalsError>> {
+        self.internals.sload_skip_cold_load(address, key, skip_cold_load)
+    }
+
     /// Touches the account.
     ///
     /// This will load the account and return an error if database error occurs.
@@ -677,6 +824,18 @@ impl<'a> EvmInternals<'a> {
         value: StorageValue,
     ) -> Result<StateLoad<SStoreResult>, EvmInternalsError> {
         self.internals.sstore(address, key, value)
+    }
+
+    /// Stores a storage value, optionally skipping the slot's cold load; the account is always
+    /// loaded.
+    pub fn sstore_skip_cold_load(
+        &mut self,
+        address: Address,
+        key: StorageKey,
+        value: StorageValue,
+        skip_cold_load: bool,
+    ) -> Result<StateLoad<SStoreResult>, JournalLoadError<EvmInternalsError>> {
+        self.internals.sstore_skip_cold_load(address, key, value, skip_cold_load)
     }
 
     /// Logs the log in Journal state.
