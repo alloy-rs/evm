@@ -343,11 +343,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Install zepter
-        uses: tempoxyz/gh-actions/vendor/taiki-e/install-action@25cce154e7fb10f99361a166468a6c56b9c31aa3
-        with:
-          tool: zepter@1.88.1
-          checksum: true
-          fallback: cargo-binstall
+        run: cargo install zepter --version 1.88.1 --locked
       - name: run zepter
         run: |
           zepter --version
