@@ -342,8 +342,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Install zepter
-        run: cargo install zepter --version 1.88.1 --locked
+      - uses: taiki-e/install-action@1ed6d7be6168f6c9046541087ff549b6bc581fdf # v2
+        with:
+          tool: zepter
       - name: run zepter
         run: |
           zepter --version
