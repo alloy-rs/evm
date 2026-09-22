@@ -36,10 +36,12 @@ pub(crate) fn transact_consolidation_requests_contract_call<Halt>(
     ) {
         Ok(res) => res,
         Err(e) => {
-            return Err(BlockValidationError::ConsolidationRequestsContractCall {
-                message: format!("execution failed: {e}"),
-            }
-            .into())
+            return Err(super::system_call_error(
+                BlockValidationError::ConsolidationRequestsContractCall {
+                    message: format!("execution failed: {e}"),
+                },
+                e,
+            ))
         }
     };
 
