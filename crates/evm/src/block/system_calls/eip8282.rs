@@ -53,10 +53,12 @@ pub(crate) fn transact_builder_deposit_requests_contract_call<Halt>(
         Bytes::new(),
     ) {
         Ok(res) => Ok(res),
-        Err(e) => Err(BlockValidationError::BuilderDepositRequestsContractCall {
-            message: format!("execution failed: {e}"),
-        }
-        .into()),
+        Err(e) => Err(super::system_call_error(
+            BlockValidationError::BuilderDepositRequestsContractCall {
+                message: format!("execution failed: {e}"),
+            },
+            e,
+        )),
     }
 }
 
@@ -73,10 +75,12 @@ pub(crate) fn transact_builder_exit_requests_contract_call<Halt>(
         Bytes::new(),
     ) {
         Ok(res) => Ok(res),
-        Err(e) => Err(BlockValidationError::BuilderExitRequestsContractCall {
-            message: format!("execution failed: {e}"),
-        }
-        .into()),
+        Err(e) => Err(super::system_call_error(
+            BlockValidationError::BuilderExitRequestsContractCall {
+                message: format!("execution failed: {e}"),
+            },
+            e,
+        )),
     }
 }
 
