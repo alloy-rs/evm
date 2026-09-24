@@ -12,6 +12,11 @@ The `alloy-op-evm` crate is being moved to [ethereum-optimism/optimism](https://
 
 `alloy-evm` is compatible with no_std and riscv targets.
 
+## Account extensions
+
+Enable the optional `account-ext` feature to use revm's opaque account payloads.
+It is disabled by default and forwards to `revm/account-ext`.
+
 #### License
 
 <sup>
