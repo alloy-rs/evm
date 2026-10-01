@@ -35,6 +35,8 @@ serde_json.workspace = true
 test-case.workspace = true
 
 [features]
+# Enables opaque account payloads in revm; disabled by default.
+account-ext = ["revm/account-ext"]
 default = ["std"]
 secp256k1 = [
     "std",
