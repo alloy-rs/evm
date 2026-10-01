@@ -180,9 +180,9 @@ where
     type Result = EthTxResult<E::HaltReason, <R::Transaction as TransactionEnvelope>::TxType>;
 
     fn apply_pre_execution_changes(&mut self) -> Result<(), BlockExecutionError> {
-        self.system_caller.apply_blockhashes_contract_call(self.ctx.parent_hash, &mut self.evm)?;
         self.system_caller
             .apply_beacon_root_contract_call(self.ctx.parent_beacon_block_root, &mut self.evm)?;
+        self.system_caller.apply_blockhashes_contract_call(self.ctx.parent_hash, &mut self.evm)?;
 
         Ok(())
     }
@@ -440,5 +440,104 @@ where
         I: Inspector<EvmF::Context<DB>>,
     {
         EthBlockExecutor::new(evm, ctx, &self.spec, &self.receipt_builder)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{block::SystemCaller, EthEvmFactory, Evm, EvmEnv, EvmFactory};
+    use alloc::vec;
+    use alloy_eips::{eip2935::HISTORY_STORAGE_ADDRESS, eip4788::BEACON_ROOTS_ADDRESS};
+    use alloy_primitives::{address, keccak256, Address, U256};
+    use revm::{
+        database::{CacheDB, EmptyDB},
+        inspector::NoOpInspector,
+        state::{AccountInfo, Bytecode},
+        Database,
+    };
+
+    /// Appends its calldata word to its storage: `n = SLOAD(0) + 1; SSTORE(n, data); SSTORE(0, n)`.
+    const LOGGER: Address = address!("0x000000000000000000000000000000000000106e");
+    const LOGGER_CODE: &[u8] = &[
+        0x60, 0x00, 0x35, //                  CALLDATALOAD(0)
+        0x60, 0x00, 0x54, 0x60, 0x01, 0x01, // SLOAD(0) + 1
+        0x55, //                              SSTORE
+        0x60, 0x00, 0x54, 0x60, 0x01, 0x01, // SLOAD(0) + 1
+        0x60, 0x00, 0x55, //                  SSTORE(0, ..)
+        0x00, //                              STOP
+    ];
+
+    /// Code that sends `id` to [`LOGGER`].
+    fn logs(id: u16) -> Vec<u8> {
+        let mut code = vec![0x61]; // PUSH2 id
+        code.extend_from_slice(&id.to_be_bytes());
+        code.extend_from_slice(&[0x60, 0x00, 0x52]); // MSTORE(0, id)
+        code.extend_from_slice(&[0x60, 0x00, 0x60, 0x00, 0x60, 0x20, 0x60, 0x00, 0x60, 0x00]); // CALL args
+        code.push(0x73); // PUSH20 LOGGER
+        code.extend_from_slice(LOGGER.as_slice());
+        code.extend_from_slice(&[0x5a, 0xf1, 0x50, 0x00]); // GAS, CALL, POP, STOP
+        code
+    }
+
+    /// A Prague EVM whose beacon roots and history contracts log their ids to [`LOGGER`].
+    fn logging_evm() -> <EthEvmFactory as EvmFactory>::Evm<CacheDB<EmptyDB>, NoOpInspector> {
+        let mut db = CacheDB::new(EmptyDB::new());
+        for (address, code) in [
+            (LOGGER, LOGGER_CODE.to_vec()),
+            (BEACON_ROOTS_ADDRESS, logs(0x4788)),
+            (HISTORY_STORAGE_ADDRESS, logs(0x2935)),
+        ] {
+            db.insert_account_info(
+                address,
+                AccountInfo {
+                    code_hash: keccak256(&code),
+                    code: Some(Bytecode::new_raw(code.into())),
+                    nonce: 1,
+                    ..Default::default()
+                },
+            );
+        }
+        let mut env = EvmEnv::<SpecId>::default();
+        env.cfg_env.spec = SpecId::PRAGUE;
+        env.block_env.number = U256::from(1);
+        env.block_env.timestamp = U256::from(1_750_000_000); // after Prague on mainnet
+        EthEvmFactory.create_evm(db, env)
+    }
+
+    fn logged(evm: &mut impl Evm<DB = CacheDB<EmptyDB>>) -> [U256; 2] {
+        [1, 2].map(|slot| evm.db_mut().storage(LOGGER, U256::from(slot)).unwrap())
+    }
+
+    /// The beacon roots call runs before the history call, as in the execution specs.
+    #[test]
+    fn pre_execution_calls_run_in_spec_order() {
+        let expected = [U256::from(0x4788), U256::from(0x2935)];
+        let parent_beacon_block_root = Some(B256::with_last_byte(1));
+
+        let mut evm = logging_evm();
+        let header = Header { number: 1, parent_beacon_block_root, ..Default::default() };
+        SystemCaller::new(EthSpec::mainnet())
+            .apply_pre_execution_changes(header, &mut evm)
+            .unwrap();
+        assert_eq!(logged(&mut evm), expected);
+
+        let ctx = EthBlockExecutionCtx {
+            parent_hash: B256::ZERO,
+            parent_beacon_block_root,
+            ommers: &[],
+            withdrawals: None,
+            extra_data: Bytes::new(),
+            tx_count_hint: None,
+            slot_number: None,
+        };
+        let mut executor = EthBlockExecutor::new(
+            logging_evm(),
+            ctx,
+            EthSpec::mainnet(),
+            AlloyReceiptBuilder::default(),
+        );
+        executor.apply_pre_execution_changes().unwrap();
+        assert_eq!(logged(executor.evm_mut()), expected);
     }
 }
