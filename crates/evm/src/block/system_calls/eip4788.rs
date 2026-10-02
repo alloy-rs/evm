@@ -51,11 +51,13 @@ pub(crate) fn transact_beacon_root_contract_call<Halt>(
     ) {
         Ok(res) => res,
         Err(e) => {
-            return Err(BlockValidationError::BeaconRootContractCall {
-                parent_beacon_block_root: Box::new(parent_beacon_block_root),
-                message: e.to_string(),
-            }
-            .into())
+            return Err(super::system_call_error(
+                BlockValidationError::BeaconRootContractCall {
+                    parent_beacon_block_root: Box::new(parent_beacon_block_root),
+                    message: e.to_string(),
+                },
+                e,
+            ))
         }
     };
 
