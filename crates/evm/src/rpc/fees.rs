@@ -1,18 +1,16 @@
 use alloy_primitives::{B256, U256};
-use core::cmp::min;
 use thiserror::Error;
 
 /// Helper type for representing the fees of a `TransactionRequest`
 #[derive(Debug)]
 pub struct CallFees {
-    /// EIP-1559 priority fee
+    /// EIP-1559 priority fee, `None` for a legacy gas price
     pub max_priority_fee_per_gas: Option<U256>,
     /// Unified gas price setting
     ///
-    /// Will be the configured `basefee` if unset in the request
-    ///
     /// `gasPrice` for legacy,
-    /// `maxFeePerGas` for EIP-1559
+    /// `maxFeePerGas` for EIP-1559, which the EVM combines with the priority fee into the
+    /// effective gas price and uses to check that the sender can fund the call
     pub gas_price: U256,
     /// Max Fee per Blob gas for EIP-4844 transactions
     pub max_fee_per_blob_gas: Option<U256>,
@@ -50,13 +48,12 @@ impl CallFees {
         max_fee_per_blob_gas: Option<U256>,
         block_blob_fee: Option<U256>,
     ) -> Result<Self, CallFeesError> {
-        /// Get the effective gas price of a transaction as specified in EIP-1559 with relevant
-        /// checks.
-        fn get_effective_gas_price(
+        /// Validates the EIP-1559 fee cap and priority fee and returns both.
+        fn get_dynamic_fees(
             max_fee_per_gas: Option<U256>,
             max_priority_fee_per_gas: Option<U256>,
             block_base_fee: U256,
-        ) -> Result<U256, CallFeesError> {
+        ) -> Result<(U256, U256), CallFeesError> {
             let max_fee = max_fee_per_gas.unwrap_or(U256::ZERO);
             let max_priority_fee_per_gas = max_priority_fee_per_gas.unwrap_or(U256::ZERO);
 
@@ -73,13 +70,11 @@ impl CallFees {
                 // `base_fee_per_gas` is greater than the `max_fee_per_gas`
                 return Err(CallFeesError::FeeCapTooLow);
             }
-            // ref <https://github.com/ethereum/go-ethereum/blob/0dd173a727dd2d2409b8e401b22e85d20c25b71f/internal/ethapi/transaction_args.go#L446-L446>
-            Ok(min(
-                max_fee,
-                block_base_fee
-                    .checked_add(max_priority_fee_per_gas)
-                    .ok_or(CallFeesError::TipVeryHigh)?,
-            ))
+            // the effective gas price is `min(max_fee, base_fee + tip)`, ref <https://github.com/ethereum/go-ethereum/blob/0dd173a727dd2d2409b8e401b22e85d20c25b71f/internal/ethapi/transaction_args.go#L446-L446>
+            block_base_fee
+                .checked_add(max_priority_fee_per_gas)
+                .ok_or(CallFeesError::TipVeryHigh)?;
+            Ok((max_fee, max_priority_fee_per_gas))
         }
 
         let has_blob_hashes =
@@ -98,26 +93,20 @@ impl CallFees {
             }
             (None, max_fee_per_gas, max_priority_fee_per_gas, None) => {
                 // request for eip-1559 transaction
-                let effective_gas_price = get_effective_gas_price(
-                    max_fee_per_gas,
-                    max_priority_fee_per_gas,
-                    block_base_fee,
-                )?;
+                let (max_fee_per_gas, max_priority_fee_per_gas) =
+                    get_dynamic_fees(max_fee_per_gas, max_priority_fee_per_gas, block_base_fee)?;
                 let max_fee_per_blob_gas = has_blob_hashes.then_some(block_blob_fee).flatten();
 
                 Ok(Self {
-                    gas_price: effective_gas_price,
-                    max_priority_fee_per_gas,
+                    gas_price: max_fee_per_gas,
+                    max_priority_fee_per_gas: Some(max_priority_fee_per_gas),
                     max_fee_per_blob_gas,
                 })
             }
             (None, max_fee_per_gas, max_priority_fee_per_gas, Some(max_fee_per_blob_gas)) => {
                 // request for eip-4844 transaction
-                let effective_gas_price = get_effective_gas_price(
-                    max_fee_per_gas,
-                    max_priority_fee_per_gas,
-                    block_base_fee,
-                )?;
+                let (max_fee_per_gas, max_priority_fee_per_gas) =
+                    get_dynamic_fees(max_fee_per_gas, max_priority_fee_per_gas, block_base_fee)?;
                 // Ensure blob_hashes are present
                 if !has_blob_hashes {
                     // Blob transaction but no blob hashes
@@ -125,8 +114,8 @@ impl CallFees {
                 }
 
                 Ok(Self {
-                    gas_price: effective_gas_price,
-                    max_priority_fee_per_gas,
+                    gas_price: max_fee_per_gas,
+                    max_priority_fee_per_gas: Some(max_priority_fee_per_gas),
                     max_fee_per_blob_gas: Some(max_fee_per_blob_gas),
                 })
             }
@@ -229,7 +218,8 @@ mod tests {
         .unwrap();
         assert_eq!(gas_price, U256::from(25 * GWEI_TO_WEI));
 
-        let CallFees { gas_price, .. } = CallFees::ensure_fees(
+        // The fee cap is kept, the EVM derives the effective price from it and the tip.
+        let CallFees { gas_price, max_priority_fee_per_gas, .. } = CallFees::ensure_fees(
             None,
             Some(U256::from(25 * GWEI_TO_WEI)),
             Some(U256::from(5 * GWEI_TO_WEI)),
@@ -239,7 +229,8 @@ mod tests {
             Some(U256::ZERO),
         )
         .unwrap();
-        assert_eq!(gas_price, U256::from(20 * GWEI_TO_WEI));
+        assert_eq!(gas_price, U256::from(25 * GWEI_TO_WEI));
+        assert_eq!(max_priority_fee_per_gas, Some(U256::from(5 * GWEI_TO_WEI)));
 
         let CallFees { gas_price, .. } = CallFees::ensure_fees(
             None,

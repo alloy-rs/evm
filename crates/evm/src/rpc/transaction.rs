@@ -121,3 +121,28 @@ impl<Spec, Block: BlockEnvironment> TryIntoTxEnv<TxEnv, Spec, Block> for Transac
         Ok(env)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use revm::context_interface::Transaction;
+
+    #[test]
+    fn dynamic_fee_request_funds_at_fee_cap() {
+        let mut evm_env = EvmEnv::<revm::primitives::hardfork::SpecId>::default();
+        evm_env.block_env.basefee = 15;
+
+        for (max_priority_fee_per_gas, effective_gas_price) in [(Some(5), 20), (None, 15)] {
+            let request = TransactionRequest {
+                gas: Some(100),
+                max_fee_per_gas: Some(30),
+                max_priority_fee_per_gas,
+                ..Default::default()
+            };
+            let tx_env = request.try_into_tx_env(&evm_env).unwrap();
+
+            assert_eq!(tx_env.effective_gas_price(15), effective_gas_price);
+            assert_eq!(tx_env.max_balance_spending().unwrap(), U256::from(100 * 30));
+        }
+    }
+}
