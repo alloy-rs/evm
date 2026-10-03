@@ -121,3 +121,65 @@ impl<Spec, Block: BlockEnvironment> TryIntoTxEnv<TxEnv, Spec, Block> for Transac
         Ok(env)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{eth::EthEvmFactory, Evm, EvmFactory};
+    use alloc::vec;
+    use alloy_consensus::{constants::GWEI_TO_WEI, TxType};
+    use alloy_primitives::{bytes, Address, B256};
+    use revm::{
+        bytecode::Bytecode,
+        database::{CacheDB, EmptyDB},
+        state::AccountInfo,
+    };
+
+    #[test]
+    fn legacy_gas_price_prices_blob_call() {
+        let mut evm_env = EvmEnv::<revm::primitives::hardfork::SpecId>::default();
+        evm_env.block_env.basefee = GWEI_TO_WEI;
+        let gas_price = 2 * GWEI_TO_WEI as u128;
+        let sender = Address::repeat_byte(0x11);
+        // returns GASPRICE
+        let contract = Address::repeat_byte(0x42);
+        let mut blob_hash = B256::with_last_byte(1);
+        blob_hash[0] = 1;
+        let request = TransactionRequest {
+            from: Some(sender),
+            to: Some(TxKind::Call(contract)),
+            gas: Some(100_000),
+            gas_price: Some(gas_price),
+            blob_versioned_hashes: Some(vec![blob_hash]),
+            max_fee_per_blob_gas: Some(5),
+            ..Default::default()
+        };
+
+        let tx_env: TxEnv = request.clone().try_into_tx_env(&evm_env).unwrap();
+        assert_eq!(tx_env.tx_type, TxType::Eip4844 as u8);
+        assert_eq!(tx_env.gas_price, gas_price);
+        assert_eq!(tx_env.gas_priority_fee, None);
+        assert_eq!(tx_env.blob_hashes, vec![blob_hash]);
+        assert_eq!(tx_env.max_fee_per_blob_gas, 5);
+
+        let mut db = CacheDB::new(EmptyDB::default());
+        db.insert_account_info(
+            sender,
+            AccountInfo::from_balance(U256::from(10).pow(U256::from(18))),
+        );
+        db.insert_account_info(
+            contract,
+            AccountInfo::from_bytecode(Bytecode::new_raw(bytes!("3a5f5260205ff3"))),
+        );
+        let mut evm = EthEvmFactory::default().create_evm(db, evm_env.clone());
+        let result = evm.transact(tx_env).unwrap().result;
+        assert!(result.is_success(), "{result:?}");
+        assert_eq!(U256::from_be_slice(result.output().unwrap()), U256::from(gas_price));
+
+        // a blob fee cap alone does not price execution gas
+        let request = TransactionRequest { gas_price: None, ..request };
+        let tx_env: TxEnv = request.try_into_tx_env(&evm_env).unwrap();
+        assert_eq!(tx_env.gas_price, 0);
+        assert_eq!(tx_env.max_fee_per_blob_gas, 5);
+    }
+}
