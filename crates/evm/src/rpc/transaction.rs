@@ -6,7 +6,7 @@ use crate::{
 use alloy_primitives::{TxKind, U256};
 use alloy_rpc_types_eth::request::{TransactionInputError, TransactionRequest};
 use core::fmt::Debug;
-use revm::{context::TxEnv, context_interface::either::Either};
+use revm::{context::TxEnv, context_interface::either::Either, primitives::hardfork::SpecId};
 use thiserror::Error;
 
 /// Converts `self` into `T`.
@@ -37,13 +37,22 @@ pub enum EthTxEnvError {
     Input(#[from] TransactionInputError),
 }
 
-impl<Spec, Block: BlockEnvironment> TryIntoTxEnv<TxEnv, Spec, Block> for TransactionRequest {
+impl<Spec: Into<SpecId> + Clone, Block: BlockEnvironment> TryIntoTxEnv<TxEnv, Spec, Block>
+    for TransactionRequest
+{
     type Err = EthTxEnvError;
 
     fn try_into_tx_env(self, evm_env: &EvmEnv<Spec, Block>) -> Result<TxEnv, Self::Err> {
         // Ensure that if versioned hashes are set, they're not empty
         if self.blob_versioned_hashes.as_ref().is_some_and(|hashes| hashes.is_empty()) {
             return Err(CallFeesError::BlobTransactionMissingBlobHashes.into());
+        }
+        // The EVM rejects blob hashes before Cancun through the tx type, but `maxFeePerBlobGas`
+        // without hashes does not make a blob tx, so check the fork here.
+        if self.max_fee_per_blob_gas.is_some()
+            && !evm_env.spec_id().clone().into().is_enabled_in(SpecId::CANCUN)
+        {
+            return Err(CallFeesError::BlobFeeBeforeCancun.into());
         }
 
         let tx_type = self.minimal_tx_type() as u8;
@@ -119,5 +128,43 @@ impl<Spec, Block: BlockEnvironment> TryIntoTxEnv<TxEnv, Spec, Block> for Transac
         };
 
         Ok(env)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use alloy_primitives::B256;
+    use revm::context::{BlockEnv, CfgEnv};
+
+    fn env(spec: SpecId) -> EvmEnv {
+        // `BlockEnv::default()` has a blob gas price at every spec, so the fork check must use
+        // the spec and not the blob gas price.
+        EvmEnv::new(CfgEnv::new_with_spec(spec), BlockEnv::default())
+    }
+
+    #[test]
+    fn test_blob_fee_without_blob_hashes() {
+        let req = TransactionRequest::default().max_fee_per_blob_gas(1);
+
+        let tx = req.clone().try_into_tx_env(&env(SpecId::CANCUN)).unwrap();
+        assert_eq!(tx.tx_type, 0);
+        assert_eq!(tx.max_fee_per_blob_gas, 0);
+
+        let err = req.try_into_tx_env(&env(SpecId::SHANGHAI)).unwrap_err();
+        assert!(matches!(err, EthTxEnvError::CallFees(CallFeesError::BlobFeeBeforeCancun)));
+    }
+
+    #[test]
+    fn test_blob_fee_with_blob_hashes() {
+        let mut req = TransactionRequest::default().max_fee_per_blob_gas(1);
+        req.blob_versioned_hashes = Some(vec![B256::with_last_byte(1)]);
+
+        let tx = req.clone().try_into_tx_env(&env(SpecId::CANCUN)).unwrap();
+        assert_eq!(tx.tx_type, 3);
+        assert_eq!(tx.max_fee_per_blob_gas, 1);
+
+        let err = req.try_into_tx_env(&env(SpecId::SHANGHAI)).unwrap_err();
+        assert!(matches!(err, EthTxEnvError::CallFees(CallFeesError::BlobFeeBeforeCancun)));
     }
 }

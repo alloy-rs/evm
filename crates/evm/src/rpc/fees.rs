@@ -24,8 +24,8 @@ impl CallFees {
     /// # EIP-4844 transactions
     ///
     /// Blob transactions have an additional fee parameter `maxFeePerBlobGas`.
-    /// If the `maxFeePerBlobGas` or `blobVersionedHashes` are set we treat it as an EIP-4844
-    /// transaction.
+    /// If `blobVersionedHashes` are set we treat it as an EIP-4844 transaction. Without them,
+    /// `maxFeePerBlobGas` is ignored.
     ///
     /// Note: Due to the `Default` impl of [`BlockEnv`] (Some(0)) this assumes the `block_blob_fee`
     /// is always `Some`
@@ -89,6 +89,8 @@ impl CallFees {
         let has_blob_hashes =
             blob_versioned_hashes.as_ref().map(|blobs| !blobs.is_empty()).unwrap_or(false);
 
+        let max_fee_per_blob_gas = max_fee_per_blob_gas.filter(|_| has_blob_hashes);
+
         match (call_gas_price, call_max_fee, call_priority_fee, max_fee_per_blob_gas) {
             (gas_price, None, None, None) => {
                 // either legacy transaction or no fee fields are specified
@@ -122,12 +124,6 @@ impl CallFees {
                     max_priority_fee_per_gas,
                     block_base_fee,
                 )?;
-                // Ensure blob_hashes are present
-                if !has_blob_hashes {
-                    // Blob transaction but no blob hashes
-                    return Err(CallFeesError::BlobTransactionMissingBlobHashes);
-                }
-
                 Ok(Self {
                     gas_price: effective_gas_price,
                     max_priority_fee_per_gas,
@@ -162,6 +158,9 @@ pub enum CallFeesError {
     /// Blob transaction has no versioned hashes
     #[error("blob transaction missing blob hashes")]
     BlobTransactionMissingBlobHashes,
+    /// `maxFeePerBlobGas` is set but EIP-4844 is not active
+    #[error("maxFeePerBlobGas is not supported before Cancun")]
+    BlobFeeBeforeCancun,
 }
 
 #[cfg(test)]
@@ -205,6 +204,35 @@ mod tests {
         .unwrap();
         assert!(gas_price.is_zero());
         assert_eq!(max_fee_per_blob_gas, Some(U256::from(99)));
+    }
+
+    #[test]
+    fn test_blob_fee_without_blob_hashes() {
+        let CallFees { gas_price, max_fee_per_blob_gas, .. } = CallFees::ensure_fees(
+            None,
+            None,
+            None,
+            U256::from(99),
+            None,
+            Some(U256::from(1)),
+            Some(U256::from(99)),
+        )
+        .unwrap();
+        assert!(gas_price.is_zero());
+        assert_eq!(max_fee_per_blob_gas, None);
+
+        let CallFees { gas_price, max_fee_per_blob_gas, .. } = CallFees::ensure_fees(
+            Some(U256::from(GWEI_TO_WEI)),
+            None,
+            None,
+            U256::from(99),
+            None,
+            Some(U256::ZERO),
+            Some(U256::from(99)),
+        )
+        .unwrap();
+        assert_eq!(gas_price, U256::from(GWEI_TO_WEI));
+        assert_eq!(max_fee_per_blob_gas, None);
     }
 
     #[test]
