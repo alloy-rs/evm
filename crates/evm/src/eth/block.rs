@@ -283,25 +283,8 @@ where
     fn finish(
         mut self,
     ) -> Result<(Self::Evm, BlockExecutionResult<R::Receipt>), BlockExecutionError> {
-        let requests = if self
-            .spec
-            .is_prague_active_at_timestamp(self.evm.block().timestamp().saturating_to())
-        {
-            // Collect all EIP-6110 deposits
-            let deposit_requests =
-                eip6110::parse_deposits_from_receipts(&self.spec, &self.receipts)?;
-
-            let mut requests = Requests::default();
-            if !deposit_requests.is_empty() {
-                requests.push_request_with_type(eip6110::DEPOSIT_REQUEST_TYPE, deposit_requests);
-            }
-
-            self.system_caller.append_post_execution_changes(&mut self.evm, &mut requests)?;
-            requests
-        } else {
-            Requests::default()
-        };
-
+        // Withdrawals are credited before the post-execution system calls, as in the execution
+        // specs' `apply_body`.
         let mut balance_increments = post_block_balance_increments(
             &self.spec,
             self.evm.block(),
@@ -333,6 +316,25 @@ where
             .db_mut()
             .increment_balances(balance_increments)
             .map_err(|_| BlockValidationError::IncrementBalanceFailed)?;
+
+        let requests = if self
+            .spec
+            .is_prague_active_at_timestamp(self.evm.block().timestamp().saturating_to())
+        {
+            // Collect all EIP-6110 deposits
+            let deposit_requests =
+                eip6110::parse_deposits_from_receipts(&self.spec, &self.receipts)?;
+
+            let mut requests = Requests::default();
+            if !deposit_requests.is_empty() {
+                requests.push_request_with_type(eip6110::DEPOSIT_REQUEST_TYPE, deposit_requests);
+            }
+
+            self.system_caller.append_post_execution_changes(&mut self.evm, &mut requests)?;
+            requests
+        } else {
+            Requests::default()
+        };
 
         // Pre-Amsterdam: use tx_gas_used (with refunds) for the block gas total.
         // Amsterdam+: use max(regular, state) gas without refunds (EIP-8037).
@@ -448,7 +450,11 @@ mod tests {
     use super::*;
     use crate::{block::SystemCaller, EthEvmFactory, Evm, EvmEnv, EvmFactory};
     use alloc::vec;
-    use alloy_eips::{eip2935::HISTORY_STORAGE_ADDRESS, eip4788::BEACON_ROOTS_ADDRESS};
+    use alloy_eips::{
+        eip2935::HISTORY_STORAGE_ADDRESS, eip4788::BEACON_ROOTS_ADDRESS,
+        eip7002::WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS,
+        eip7251::CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS,
+    };
     use alloy_primitives::{address, keccak256, Address, U256};
     use revm::{
         database::{CacheDB, EmptyDB},
@@ -539,5 +545,56 @@ mod tests {
         );
         executor.apply_pre_execution_changes().unwrap();
         assert_eq!(logged(executor.evm_mut()), expected);
+    }
+
+    /// A withdrawal to a request predeploy is credited before its system call, as in the
+    /// execution specs.
+    #[test]
+    fn withdrawals_credited_before_post_execution_calls() {
+        // SSTORE(0, SELFBALANCE)
+        let code = Bytes::from_static(&[0x47, 0x5f, 0x55, 0x00]);
+        let mut db = CacheDB::new(EmptyDB::new());
+        for address in
+            [WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS, CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS]
+        {
+            db.insert_account_info(
+                address,
+                AccountInfo {
+                    code_hash: keccak256(&code),
+                    code: Some(Bytecode::new_raw(code.clone())),
+                    nonce: 1,
+                    ..Default::default()
+                },
+            );
+        }
+        let mut env = EvmEnv::<SpecId>::default();
+        env.cfg_env.spec = SpecId::PRAGUE;
+        env.block_env.number = U256::from(1);
+        env.block_env.timestamp = U256::from(1_750_000_000); // after Prague on mainnet
+
+        let withdrawals = [Withdrawal {
+            address: WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS,
+            amount: 1,
+            ..Default::default()
+        }];
+        let ctx = EthBlockExecutionCtx {
+            parent_hash: B256::ZERO,
+            parent_beacon_block_root: None,
+            ommers: &[],
+            withdrawals: Some(Cow::Borrowed(&withdrawals)),
+            extra_data: Bytes::new(),
+            tx_count_hint: None,
+            slot_number: None,
+        };
+        let executor = EthBlockExecutor::new(
+            EthEvmFactory.create_evm(db, env),
+            ctx,
+            EthSpec::mainnet(),
+            AlloyReceiptBuilder::default(),
+        );
+        let (mut evm, _) = executor.finish().unwrap();
+        let stored =
+            evm.db_mut().storage(WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS, U256::ZERO).unwrap();
+        assert_eq!(stored, U256::from(1_000_000_000)); // 1 gwei
     }
 }
