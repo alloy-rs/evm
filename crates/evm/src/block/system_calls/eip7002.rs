@@ -34,10 +34,12 @@ pub(crate) fn transact_withdrawal_requests_contract_call<Halt>(
     ) {
         Ok(res) => res,
         Err(e) => {
-            return Err(BlockValidationError::WithdrawalRequestsContractCall {
-                message: format!("execution failed: {e}"),
-            }
-            .into())
+            return Err(super::system_call_error(
+                BlockValidationError::WithdrawalRequestsContractCall {
+                    message: format!("execution failed: {e}"),
+                },
+                e,
+            ))
         }
     };
 
