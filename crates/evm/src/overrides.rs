@@ -142,7 +142,14 @@ fn apply_account_override<DB>(
 where
     DB: Database + DatabaseCommit,
 {
-    let mut info = db.basic(account).map_err(StateOverrideError::Database)?.unwrap_or_default();
+    let existing = db.basic(account).map_err(StateOverrideError::Database)?;
+    let exists = existing.is_some();
+    let existing_is_empty = existing.as_ref().is_some_and(|info| info.is_empty());
+    let creates_account = !exists
+        && (account_override.nonce.is_some()
+            || account_override.code.is_some()
+            || account_override.balance.is_some());
+    let mut info = existing.unwrap_or_default();
 
     if let Some(nonce) = account_override.nonce {
         info.nonce = nonce;
@@ -167,12 +174,9 @@ where
         // its storage, and then we mark it is "NewlyCreated" to make sure that old storage won't be
         // used.
         (Some(state), None) => {
-            // Destroy the account to ensure that its storage is cleared
-            let mut destroyed = Account::default();
-            destroyed.status = AccountStatus::SelfDestructed | AccountStatus::Touched;
-            db.commit(HashMap::from_iter([(account, destroyed)]));
-            // Mark the account as created to ensure that old storage is not read
-            acc.mark_created();
+            // Destroy the account to ensure that its storage is cleared, and mark it as created
+            // to ensure that old storage is not read
+            recreate(db, account, &mut acc, true);
             Some(state)
         }
         (None, Some(state)) => {
@@ -183,11 +187,27 @@ where
             // dropped because the commit path sees an empty touched account and
             // treats it as a no-op state clear.
             if acc.info.is_empty() && !state.is_empty() {
-                acc.mark_created();
+                recreate(db, account, &mut acc, exists);
             }
             Some(state)
         }
     };
+
+    // An override leaves the account existing even when it is empty, as geth does. Committing
+    // an empty account as `Touched` lets `State::commit()` remove it via EIP-161 state clear
+    // unless the state keeps empty accounts. An unchanged account is therefore not committed,
+    // and an account the override creates is marked `Created`, which `State::commit()` keeps.
+    // An existing account the override empties stays on the `Touched` path: `Created` would
+    // drop its storage, so keeping it is left to the state.
+    if acc.info.is_empty() && !acc.is_created() {
+        let unchanged = existing_is_empty || !exists && !creates_account;
+        if unchanged && storage_diff.as_ref().is_none_or(HashMap::is_empty) {
+            return Ok(());
+        }
+        if creates_account {
+            acc.mark_created();
+        }
+    }
 
     if let Some(state) = storage_diff {
         for (slot, value) in state {
@@ -209,11 +229,22 @@ where
     Ok(())
 }
 
+/// Marks `acc` as created. An account that exists is destroyed first, so that the `Created`
+/// status also merges into an earlier bundle entry for it (`Destroyed`, then `DestroyedChanged`).
+fn recreate<DB: DatabaseCommit>(db: &mut DB, address: Address, acc: &mut Account, exists: bool) {
+    if exists {
+        let mut destroyed = Account::default();
+        destroyed.status = AccountStatus::SelfDestructed | AccountStatus::Touched;
+        db.commit(HashMap::from_iter([(address, destroyed)]));
+    }
+    acc.mark_created();
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use alloy_primitives::{address, bytes};
-    use revm::database::EmptyDB;
+    use alloy_primitives::{address, bytes, Bytes};
+    use revm::database::{states::bundle_state::BundleRetention, EmptyDB};
 
     #[test]
     fn test_block_override_blob_base_fee() {
@@ -352,6 +383,118 @@ mod tests {
 
         assert_eq!(storage1, U256::from(100), "stateDiff slot 1 lost in State<DB> commit");
         assert_eq!(storage2, U256::from(200), "stateDiff slot 2 lost in State<DB> commit");
+    }
+
+    /// An override that leaves a missing account empty still creates it, as geth does, so the
+    /// account exists in the pre-state and in the bundle state. See ethereum/execution-apis#915.
+    #[test]
+    fn test_empty_override_creates_account_state_db() {
+        let account = address!("0x1234567890123456789012345678901234567890");
+        let mut db = State::builder()
+            .with_database(CacheDB::new(EmptyDB::new()))
+            .with_bundle_update()
+            .build();
+
+        let acc_override = AccountOverride::default().with_code(Bytes::new());
+        apply_account_override(account, acc_override, &mut db).unwrap();
+
+        assert!(db.basic(account).unwrap().is_some(), "empty override did not create the account");
+
+        db.merge_transitions(BundleRetention::PlainState);
+        let bundle = db.take_bundle();
+        let info = bundle.account(&account).and_then(|acc| acc.info.as_ref());
+        assert!(
+            info.is_some_and(|info| info.is_empty()),
+            "empty account missing from the bundle state"
+        );
+    }
+
+    /// An override that leaves an existing empty account empty keeps it, as geth does, instead of
+    /// letting EIP-161 state clear remove it on commit.
+    #[test]
+    fn test_empty_override_keeps_existing_empty_account_state_db() {
+        let account = address!("0x1234567890123456789012345678901234567890");
+        let mut cache_db = CacheDB::new(EmptyDB::new());
+        cache_db.insert_account_info(account, revm::state::AccountInfo::default());
+        let mut db = State::builder().with_database(cache_db).build();
+        assert!(db.basic(account).unwrap().is_some());
+
+        let acc_override = AccountOverride::default().with_balance(U256::ZERO);
+        apply_account_override(account, acc_override, &mut db).unwrap();
+
+        assert!(
+            db.basic(account).unwrap().is_some(),
+            "override removed the existing empty account"
+        );
+    }
+
+    /// An override with no fields does not create a missing account, as geth applies no setter.
+    #[test]
+    fn test_override_without_fields_does_not_create_account() {
+        let account = address!("0x1234567890123456789012345678901234567890");
+        let mut state_db = State::builder().with_database(CacheDB::new(EmptyDB::new())).build();
+        let mut cache_db = CacheDB::new(EmptyDB::new());
+
+        for acc_override in [
+            AccountOverride::default(),
+            AccountOverride::default().with_state_diff(HashMap::<B256, B256>::default()),
+        ] {
+            apply_account_override(account, acc_override.clone(), &mut state_db).unwrap();
+            assert!(state_db.basic(account).unwrap().is_none());
+            apply_account_override(account, acc_override, &mut cache_db).unwrap();
+            assert!(cache_db.basic(account).unwrap().is_none());
+        }
+    }
+
+    /// A stateDiff on an account that the same override empties merges after an earlier block
+    /// changed the account.
+    #[test]
+    fn test_state_diff_on_emptied_account_merges_across_blocks_state_db() {
+        let account = address!("0x1234567890123456789012345678901234567890");
+        let mut cache_db = CacheDB::new(EmptyDB::new());
+        cache_db.insert_account_info(
+            account,
+            revm::state::AccountInfo { nonce: 5, ..Default::default() },
+        );
+        let mut db = State::builder().with_database(cache_db).with_bundle_update().build();
+
+        apply_account_override(account, AccountOverride::default(), &mut db).unwrap();
+        db.merge_transitions(BundleRetention::Reverts);
+
+        let mut storage = HashMap::<B256, B256>::default();
+        storage.insert(B256::from(U256::from(1)), B256::from(U256::from(1)));
+        let acc_override = AccountOverride::default()
+            .with_nonce(0)
+            .with_balance(U256::ZERO)
+            .with_state_diff(storage);
+        apply_account_override(account, acc_override, &mut db).unwrap();
+        db.merge_transitions(BundleRetention::Reverts);
+
+        assert!(db.basic(account).unwrap().is_some());
+        assert_eq!(db.storage(account, U256::from(1)).unwrap(), U256::from(1));
+    }
+
+    /// Removing a contract's code with an override keeps its storage in a `CacheDB`.
+    #[test]
+    fn test_code_removal_override_keeps_storage_cache_db() {
+        let account = address!("0x1234567890123456789012345678901234567890");
+        let mut db = CacheDB::new(EmptyDB::new());
+        db.insert_account_info(
+            account,
+            revm::state::AccountInfo {
+                nonce: 1,
+                code_hash: keccak256([0x00]),
+                code: Some(Bytecode::new_raw(bytes!("0x00"))),
+                ..Default::default()
+            },
+        );
+        db.insert_account_storage(account, U256::ZERO, U256::from(42)).unwrap();
+
+        let acc_override = AccountOverride::default().with_code(Bytes::new()).with_nonce(0);
+        apply_account_override(account, acc_override, &mut db).unwrap();
+
+        assert!(db.basic(account).unwrap().is_some_and(|info| info.is_empty()));
+        assert_eq!(db.storage(account, U256::ZERO).unwrap(), U256::from(42));
     }
 
     /// Regression test for reth issue #22622: `debug_traceCall` with `stateOverrides` produces
