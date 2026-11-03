@@ -31,6 +31,7 @@ pub use precompiles::MovePrecompileError;
 #[cfg(feature = "rpc")]
 pub mod rpc;
 pub mod tracing;
+pub use tracing::{BlockExecutorFactoryExt, BlockTracer, BlockTracerIter, BlockTracingError};
 
 mod either;
 
