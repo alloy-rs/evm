@@ -277,6 +277,10 @@ impl PrecompilesMap {
     /// - Otherwise, the precompile is removed from the source address and installed at the
     ///   destination address.
     ///
+    /// The [warm addresses](PrecompileProvider::warm_addresses) do not change: the source address
+    /// stays warm and the destination address is not warm. This matches `eth_simulateV1`, where
+    /// the warm set is the precompile addresses of the fork.
+    ///
     /// # Errors
     ///
     /// Returns [`MovePrecompileError::NotAPrecompile`] if any source address does not have a
@@ -309,25 +313,14 @@ impl PrecompilesMap {
             }
         }
 
-        // Extract precompiles from source addresses
-        let mut extracted: Vec<(Address, DynPrecompile)> = Vec::with_capacity(moves.len());
-
-        for (source, dest) in moves {
-            let mut found_precompile: Option<DynPrecompile> = None;
-            self.apply_precompile(&source, |existing| {
-                found_precompile = existing;
-                None
-            });
-
-            if let Some(precompile) = found_precompile {
-                extracted.push((dest, precompile));
-            }
-        }
-
-        // Install precompiles at destination addresses
-        for (dest, precompile) in extracted {
-            self.apply_precompile(&dest, |_| Some(precompile));
-        }
+        let dyn_precompiles = self.ensure_dynamic_precompiles();
+        let extracted: Vec<_> = moves
+            .into_iter()
+            .filter_map(|(source, dest)| {
+                dyn_precompiles.inner.remove(&source).map(|precompile| (dest, precompile))
+            })
+            .collect();
+        dyn_precompiles.inner.extend(extracted);
 
         Ok(())
     }
@@ -495,12 +488,15 @@ impl PrecompilesMap {
         }
     }
 
-    /// Returns an iterator over references to precompile addresses.
+    /// Returns an iterator over references to the addresses of the installed precompiles.
+    ///
+    /// After [`Self::move_precompiles`] this differs from the
+    /// [warm addresses](PrecompileProvider::warm_addresses).
     pub fn addresses(&self) -> impl Iterator<Item = &Address> {
         match &self.precompiles {
             PrecompilesKind::Builtin(precompiles) => Either::Left(precompiles.addresses()),
             PrecompilesKind::Dynamic(dyn_precompiles) => {
-                Either::Right(dyn_precompiles.addresses.iter())
+                Either::Right(dyn_precompiles.inner.keys())
             }
         }
     }
@@ -1398,5 +1394,25 @@ mod tests {
         // New addresses should have the precompiles
         assert!(spec_precompiles.get(&new_ecrecover).is_some());
         assert!(spec_precompiles.get(&new_sha256).is_some());
+    }
+
+    #[test]
+    fn test_move_precompiles_keeps_warm_addresses() {
+        let eth_precompiles = EthPrecompiles::new(SpecId::default());
+        let mut spec_precompiles = PrecompilesMap::from(eth_precompiles);
+
+        let ecrecover = address!("0x0000000000000000000000000000000000000001");
+        let new_ecrecover = address!("0x0000000000000000000000000000000000001001");
+        spec_precompiles.move_precompiles([(ecrecover, new_ecrecover)]).unwrap();
+
+        let warm = <PrecompilesMap as PrecompileProvider<EthEvmContext<EmptyDB>>>::warm_addresses(
+            &spec_precompiles,
+        );
+        assert!(warm.contains(&ecrecover));
+        assert!(!warm.contains(&new_ecrecover));
+
+        let addresses = spec_precompiles.addresses().collect::<Vec<_>>();
+        assert!(!addresses.contains(&&ecrecover));
+        assert!(addresses.contains(&&new_ecrecover));
     }
 }
