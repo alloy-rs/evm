@@ -94,6 +94,10 @@ impl CallFees {
                 // either legacy transaction or no fee fields are specified
                 // when no fields are specified, set gas price to zero
                 let gas_price = gas_price.unwrap_or(U256::ZERO);
+                // a legacy gas price is also the fee cap, so a nonzero one must cover the base fee
+                if !gas_price.is_zero() && gas_price < block_base_fee {
+                    return Err(CallFeesError::FeeCapTooLow);
+                }
                 Ok(Self {
                     gas_price,
                     max_priority_fee_per_gas: None,
@@ -182,6 +186,46 @@ mod tests {
         let CallFees { gas_price, .. } =
             CallFees::ensure_fees(None, Some(U256::ZERO), None, U256::from(99), None, None, None)
                 .unwrap();
+        assert!(gas_price.is_zero());
+    }
+
+    #[test]
+    fn test_legacy_fees() {
+        let base_fee = U256::from(15 * GWEI_TO_WEI);
+
+        let call_fees = CallFees::ensure_fees(
+            Some(base_fee - U256::from(1)),
+            None,
+            None,
+            base_fee,
+            None,
+            None,
+            Some(U256::ZERO),
+        );
+        assert!(matches!(call_fees, Err(CallFeesError::FeeCapTooLow)));
+
+        let CallFees { gas_price, .. } = CallFees::ensure_fees(
+            Some(base_fee),
+            None,
+            None,
+            base_fee,
+            None,
+            None,
+            Some(U256::ZERO),
+        )
+        .unwrap();
+        assert_eq!(gas_price, base_fee);
+
+        let CallFees { gas_price, .. } = CallFees::ensure_fees(
+            Some(U256::ZERO),
+            None,
+            None,
+            base_fee,
+            None,
+            None,
+            Some(U256::ZERO),
+        )
+        .unwrap();
         assert!(gas_price.is_zero());
     }
 
