@@ -1,12 +1,17 @@
 //! Helpers for tracing.
 
 use crate::{Evm, IntoTxEnv};
+use alloc::vec::Vec;
 use core::{fmt::Debug, iter::Peekable};
 use revm::{
     context::result::{ExecutionResult, ResultAndState},
     state::EvmState,
     DatabaseCommit,
 };
+
+/// Output of [`BlockTracer::trace_transaction`].
+pub type TraceTransactionOutput<E> =
+    Option<(usize, TraceOutput<<E as Evm>::HaltReason, <E as Evm>::Inspector>)>;
 
 /// A helper type for tracing transactions.
 #[derive(Debug, Clone)]
@@ -50,6 +55,11 @@ impl<E: Evm<Inspector: Clone, DB: DatabaseCommit>> TxTracer<E> {
 
     fn fuse_inspector(&mut self) -> E::Inspector {
         core::mem::replace(self.evm.inspector_mut(), self.fused_inspector.clone())
+    }
+
+    /// Returns a mutable reference to the inner EVM.
+    pub const fn evm_mut(&mut self) -> &mut E {
+        &mut self.evm
     }
 
     /// Executes a transaction, and returns its outcome along with the inspector state.
@@ -179,5 +189,179 @@ where
         }
 
         Some(output)
+    }
+}
+
+/// Traces a subset of a block's transactions, replaying earlier ones without tracing.
+///
+/// This type wraps [`TxTracer`] and adds skip-then-trace semantics: transactions before the
+/// target range are committed to state without invoking the inspector or any user hook,
+/// and only the target range is traced.
+#[derive(derive_more::Debug)]
+#[debug(bound(E::Inspector: core::fmt::Debug))]
+pub struct BlockTracer<E: Evm> {
+    tracer: TxTracer<E>,
+}
+
+impl<E: Evm<Inspector: Clone> + Clone> Clone for BlockTracer<E> {
+    fn clone(&self) -> Self {
+        Self { tracer: self.tracer.clone() }
+    }
+}
+
+impl<E: Evm<Inspector: Clone, DB: DatabaseCommit>> BlockTracer<E> {
+    /// Creates a new [`BlockTracer`].
+    ///
+    /// The caller is responsible for applying pre-execution changes (beacon root, DAO fork,
+    /// etc.) to the database before calling this.
+    pub fn new(evm: E) -> Self {
+        Self { tracer: TxTracer::new(evm) }
+    }
+
+    /// Replays `txs[0..skip)` without tracing (commits state), then traces
+    /// `txs[skip..skip+count)` — or all remaining if `count` is `None` — calling `f` for
+    /// each traced transaction.
+    ///
+    /// Returns a [`Vec`] of the outputs produced by `f`.
+    pub fn try_trace_block<Txs, T, F, O, Err>(
+        &mut self,
+        txs: Txs,
+        skip: usize,
+        count: Option<usize>,
+        f: F,
+    ) -> Result<Vec<O>, Err>
+    where
+        T: IntoTxEnv<E::Tx> + Clone,
+        Txs: IntoIterator<Item = T>,
+        F: FnMut(TracingCtx<'_, T, E>) -> Result<O, Err>,
+        Err: From<E::Error>,
+    {
+        let mut txs = txs.into_iter();
+
+        // Commit the first `skip` transactions without tracing.
+        for tx in txs.by_ref().take(skip) {
+            self.tracer.evm_mut().transact_commit(tx)?;
+        }
+
+        // Trace the remaining transactions, optionally limited by `count`.
+        let traced = txs.take(count.unwrap_or(usize::MAX));
+        self.tracer.try_trace_many(traced, f).collect()
+    }
+
+    /// Replays all transactions before the one matched by `target_tx` without tracing, then
+    /// traces that transaction alone.
+    ///
+    /// Returns `Some((index, output))` where `index` is the position of the matched
+    /// transaction in the iterator, or `None` if `target_tx` never matched.
+    pub fn trace_transaction<Txs, T>(
+        &mut self,
+        txs: Txs,
+        target_tx: impl Fn(&T) -> bool,
+    ) -> Result<TraceTransactionOutput<E>, E::Error>
+    where
+        T: IntoTxEnv<E::Tx> + Clone,
+        Txs: IntoIterator<Item = T>,
+    {
+        for (index, tx) in txs.into_iter().enumerate() {
+            if target_tx(&tx) {
+                let output = self.tracer.trace(tx)?;
+                return Ok(Some((index, output)));
+            }
+            self.tracer.evm_mut().transact_commit(tx)?;
+        }
+        Ok(None)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        eth::{EthEvm, EthEvmFactory},
+        precompiles::PrecompilesMap,
+        EvmEnv, EvmFactory,
+    };
+    use alloy_primitives::{Address, TxKind, U256};
+    use core::convert::Infallible;
+    use revm::{
+        context::{BlockEnv, CfgEnv, TxEnv},
+        context_interface::result::EVMError,
+        database::InMemoryDB,
+        inspector::NoOpInspector,
+        primitives::hardfork::SpecId,
+        state::AccountInfo,
+        Database,
+    };
+
+    type TestEvm = EthEvm<InMemoryDB, NoOpInspector, PrecompilesMap>;
+
+    fn make_env() -> EvmEnv {
+        let mut cfg = CfgEnv::<SpecId>::default();
+        cfg.disable_nonce_check = true;
+        cfg.tx_chain_id_check = false;
+        EvmEnv::new(cfg, BlockEnv::default())
+    }
+
+    /// Skipped transactions must commit their state so that traced transactions see
+    /// the accumulated result. Here 2 txs are skipped, each transferring 1 wei to
+    /// `recipient`; the single traced tx observes a recipient balance of 2.
+    #[test]
+    fn test_skip_commits_state() {
+        let sender = Address::from([1u8; 20]);
+        let recipient = Address::from([2u8; 20]);
+
+        let mut db = InMemoryDB::default();
+        db.insert_account_info(sender, AccountInfo { balance: U256::MAX, ..Default::default() });
+
+        let mut tracer: BlockTracer<TestEvm> =
+            BlockTracer::new(EthEvmFactory.create_evm(db, make_env()));
+
+        let txs: Vec<TxEnv> = (0..3)
+            .map(|nonce| TxEnv {
+                nonce,
+                caller: sender,
+                gas_limit: 21_000,
+                kind: TxKind::Call(recipient),
+                value: U256::from(1),
+                ..Default::default()
+            })
+            .collect();
+
+        // Skip 2, trace 1. The hook should see recipient balance = 2 from the skipped txs.
+        let results = tracer
+            .try_trace_block(txs, 2, None, |ctx| {
+                let balance = ctx.db.basic(recipient).unwrap().map_or(U256::ZERO, |a| a.balance);
+                Ok::<_, EVMError<Infallible>>(balance)
+            })
+            .unwrap();
+
+        assert_eq!(results, [U256::from(2)]);
+    }
+
+    /// trace_transaction commits all prior txs and returns the correct index.
+    #[test]
+    fn test_trace_transaction_index() {
+        let sender = Address::from([1u8; 20]);
+
+        let mut db = InMemoryDB::default();
+        db.insert_account_info(sender, AccountInfo { balance: U256::MAX, ..Default::default() });
+
+        let mut tracer: BlockTracer<TestEvm> =
+            BlockTracer::new(EthEvmFactory.create_evm(db, make_env()));
+
+        let txs: Vec<TxEnv> = (0u64..5)
+            .map(|nonce| TxEnv {
+                nonce,
+                caller: sender,
+                gas_limit: 21_000,
+                kind: TxKind::Call(Address::ZERO),
+                ..Default::default()
+            })
+            .collect();
+
+        let (idx, output) = tracer.trace_transaction(txs, |t| t.nonce == 3).unwrap().unwrap();
+
+        assert_eq!(idx, 3);
+        assert!(output.result.is_success());
     }
 }
