@@ -96,6 +96,7 @@ impl<E: Evm<Inspector: Clone, DB: DatabaseCommit>> TxTracer<E> {
             hook,
             skip_last_commit: true,
             fuse: true,
+            stopped: false,
         }
     }
 }
@@ -118,6 +119,8 @@ pub struct TracerIter<'a, E: Evm, Txs: Iterator, F> {
     hook: F,
     skip_last_commit: bool,
     fuse: bool,
+    /// Set once a transaction fails to execute, so no transaction after it runs.
+    stopped: bool,
 }
 
 impl<E: Evm, Txs: Iterator, F> TracerIter<'_, E, Txs, F> {
@@ -148,15 +151,28 @@ where
     type Item = Result<O, Err>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        if self.stopped {
+            return None;
+        }
+
         let tx = self.txs.next()?;
-        let result = self.inner.evm.transact(tx.clone());
+        let ResultAndState { result, state } = match self.inner.evm.transact(tx.clone()) {
+            Ok(result) => result,
+            Err(err) => {
+                // Yield the error and stop: the transactions after this one would run on a state
+                // that is missing it, and dropping the error would make a truncated trace look
+                // complete.
+                self.stopped = true;
+                if self.fuse {
+                    self.inner.fuse_inspector();
+                }
+                return Some(Err(err.into()));
+            }
+        };
 
         let TxTracer { evm, fused_inspector } = self.inner;
         let (db, inspector, _) = evm.components_mut();
 
-        let Ok(ResultAndState { result, state }) = result else {
-            return None;
-        };
         let mut was_fused = false;
         let output = (self.hook)(TracingCtx {
             tx,
@@ -179,5 +195,93 @@ where
         }
 
         Some(output)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{evm::EvmFactoryExt, EthEvmFactory, EvmEnv};
+    use alloc::{vec, vec::Vec};
+    use core::convert::Infallible;
+    use revm::{
+        context::{
+            result::{EVMError, InvalidTransaction},
+            TxEnv,
+        },
+        database::{CacheDB, EmptyDB},
+        inspector::NoOpInspector,
+        primitives::{address, Address, TxKind},
+    };
+
+    const CALLER: Address = address!("0x1000000000000000000000000000000000000001");
+
+    fn tx(nonce: u64) -> TxEnv {
+        TxEnv {
+            caller: CALLER,
+            nonce,
+            gas_limit: 21_000,
+            kind: TxKind::Call(CALLER),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn try_trace_many_yields_transact_error() {
+        let mut tracer = EthEvmFactory::default().create_tracer(
+            CacheDB::new(EmptyDB::default()),
+            EvmEnv::default(),
+            NoOpInspector,
+        );
+
+        // tx(5) fails validation with `NonceTooHigh`. The error must reach the caller, and
+        // tx(1) must not run after it.
+        let results: Vec<_> = tracer
+            .try_trace_many([tx(0), tx(5), tx(1)], |ctx| {
+                Ok::<_, EVMError<Infallible>>(ctx.result.is_success())
+            })
+            .collect();
+
+        assert_eq!(
+            results,
+            vec![
+                Ok(true),
+                Err(EVMError::Transaction(InvalidTransaction::NonceTooHigh { tx: 5, state: 1 })),
+            ]
+        );
+    }
+
+    #[test]
+    fn try_trace_many_collect_returns_transact_error() {
+        let mut tracer = EthEvmFactory::default().create_tracer(
+            CacheDB::new(EmptyDB::default()),
+            EvmEnv::default(),
+            NoOpInspector,
+        );
+
+        let collected = tracer
+            .try_trace_many([tx(0), tx(5), tx(1)], |ctx| {
+                Ok::<_, EVMError<Infallible>>(ctx.result.is_success())
+            })
+            .collect::<Result<Vec<_>, _>>();
+
+        assert_eq!(
+            collected,
+            Err(EVMError::Transaction(InvalidTransaction::NonceTooHigh { tx: 5, state: 1 }))
+        );
+    }
+
+    #[test]
+    fn trace_many_runs_all_transactions_without_errors() {
+        let mut tracer = EthEvmFactory::default().create_tracer(
+            CacheDB::new(EmptyDB::default()),
+            EvmEnv::default(),
+            NoOpInspector,
+        );
+
+        let collected = tracer
+            .trace_many([tx(0), tx(1), tx(2)], |ctx| ctx.result.is_success())
+            .collect::<Result<Vec<_>, _>>();
+
+        assert_eq!(collected, Ok(vec![true, true, true]));
     }
 }
