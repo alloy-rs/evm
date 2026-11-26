@@ -4,7 +4,7 @@ use super::spec::EthExecutorSpec;
 use crate::block::BlockValidationError;
 use alloc::{string::ToString, vec::Vec};
 use alloy_consensus::TxReceipt;
-use alloy_primitives::{Address, Bytes, Log};
+use alloy_primitives::{Address, Bytes, Log, U256};
 use alloy_sol_types::{sol, SolEvent};
 
 pub use alloy_eips::eip6110::*;
@@ -14,6 +14,13 @@ pub use alloy_eips::eip6110::*;
 /// pubkey, 32-byte withdrawal credentials, 8-byte amount, 96-byte signature,
 /// and 8-byte index.
 const DEPOSIT_BYTES_SIZE: usize = 48 + 32 + 8 + 96 + 8;
+
+/// The length of the [`DepositEvent`] data emitted by the deposit contract.
+const DEPOSIT_EVENT_DATA_LENGTH: usize = 576;
+
+/// The offset and size of each [`DepositEvent`] field in the event data.
+const DEPOSIT_EVENT_FIELDS: [(usize, usize); 5] =
+    [(160, 48), (256, 32), (320, 8), (384, 96), (512, 8)];
 
 sol! {
     #[allow(missing_docs)]
@@ -51,8 +58,7 @@ pub fn accumulate_deposits_from_logs<'a>(
             log.topics().first() == Some(&DepositEvent::SIGNATURE_HASH)
         })
         .try_for_each(|log| {
-            // We assume that the log is valid because it was emitted by the
-            // deposit contract.
+            validate_deposit_event_data(&log.data.data)?;
             let decoded_log =
                 DepositEvent::decode_log(log).map_err(|err: alloy_sol_types::Error| {
                     BlockValidationError::DepositRequestDecode(err.to_string())
@@ -60,6 +66,25 @@ pub fn accumulate_deposits_from_logs<'a>(
             accumulate_deposit_from_log(&decoded_log, out);
             Ok(())
         })
+}
+
+/// Checks that the [`DepositEvent`] data has the layout of the deposit contract. EIP-6110 makes
+/// a block with any other layout invalid.
+fn validate_deposit_event_data(data: &[u8]) -> Result<(), BlockValidationError> {
+    if data.len() != DEPOSIT_EVENT_DATA_LENGTH {
+        return Err(BlockValidationError::DepositRequestDecode(
+            "invalid deposit event data length".to_string(),
+        ));
+    }
+    let word = |at: usize| U256::from_be_slice(&data[at..at + 32]);
+    for (i, (offset, size)) in DEPOSIT_EVENT_FIELDS.into_iter().enumerate() {
+        if word(i * 32) != U256::from(offset) || word(offset) != U256::from(size) {
+            return Err(BlockValidationError::DepositRequestDecode(
+                "invalid deposit event data layout".to_string(),
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// Accumulate deposits from a receipt. Iterates over the logs in the receipt
@@ -199,5 +224,35 @@ mod tests {
                 "998c8086669bf65e24581cda47d8537966e9f5066fc6ffdcba910a1bfb91eae7a4873fcce166a1c4ea217e6b1afd396201000000000000000000000001c340fb72ed14d4eaa71f7633ee9e33b88d4f39004059730700000098ddbffd700c1aac324cfdf0492ff289223661eb26718ce3651ba2469b22f480d56efab432ed91af05a006bde0c1ea68134e0acd8cacca0c13ad1f716db874b44abfcc966368019753174753bca3af2ea84bc569c46f76592a91e97f311eddece474160000000000a1a2ba870a90e889aa594a0cc1c6feffb94c2d8f65646c937f1f456a315ef649533e25a4614d8f4f66ebdb06481b90af0100000000000000000000000a0f04a231efbc29e1db7d086300ff550211c2f60040597307000000ad416d590e1a7f52baff770a12835b68904efad22cc9f8ba531e50cbbd26f32b9c7373cf6538a0577f501e4d3e3e63e208767bcccaae94e1e3720bfb734a286f9c017d17af46536545ccb7ca94d71f295e71f6d25bf978c09ada6f8d3f7ba039e374160000000000"
             )
         );
+    }
+
+    #[test]
+    fn reject_non_canonical_deposit_event_data() {
+        let event = DepositEvent {
+            pubkey: Bytes::from([1; 48]),
+            withdrawal_credentials: Bytes::from([2; 32]),
+            amount: Bytes::from([3; 8]),
+            signature: Bytes::from([4; 96]),
+            index: Bytes::from([5; 8]),
+        };
+        let log = Log { address: MAINNET_DEPOSIT_CONTRACT_ADDRESS, data: event.encode_log_data() };
+        let parse = |log: &Log| {
+            let mut out = Vec::new();
+            accumulate_deposits_from_logs(MAINNET_DEPOSIT_CONTRACT_ADDRESS, [log], &mut out)
+                .map(|_| out)
+        };
+        assert_eq!(parse(&log).unwrap().len(), DEPOSIT_BYTES_SIZE);
+
+        // An extra word after the event data.
+        let mut long = log.clone();
+        long.data.data = [log.data.data.as_ref(), &[0; 32]].concat().into();
+        assert!(parse(&long).is_err());
+
+        // A 47-byte pubkey in an event of the right length.
+        let mut short_pubkey = log.clone();
+        let mut data = log.data.data.to_vec();
+        data[160 + 31] = 47;
+        short_pubkey.data.data = data.into();
+        assert!(parse(&short_pubkey).is_err());
     }
 }
